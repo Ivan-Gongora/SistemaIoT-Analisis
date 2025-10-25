@@ -1,43 +1,19 @@
 
+# Verificar tener instalado node.js 
+# crear una virtual env donde vas a clonar el repositorio
+# Clonar del repositorio el proyecto
+ https://github.com/Ivan-Gongora/SistemaIoT-Analisis.git
 
+# ya teniendo el proyecto deberas entrar a la carpeta de:
+ /vue/frontend-vue/
 
-
--dentro de la carpeta de vue/frontend-vue ejecutar
-npm installa
-
-# 1. Ejecuta primero un 'npm install' solo para asegurar que 
-# todas las dependencias listadas en 'package.json' se instalen
+# ejecutaras el siguiente comando 
+# (todas las dependenciase estan en 'package.json' se instalaran en automatico)
 npm install
 
-
-y corre 
+# Luego ejecutaras el siguiente para probar que se instalara correctamente 
 npm run dev 
 
 
 
-
-
-# 2. Instala todas las nuevas librerías de producción en una sola línea:
-npm install qrcode @fortawesome/fontawesome-svg-core @fortawesome/free-solid-svg-icons @fortawesome/vue-fontawesome@latest bootstrap-icons leaflet leaflet-control-geocoder leaflet.locatecontrol chart.js vue-chartjs
-
-luego ejeuctara este
-npm install qrcode @fortawesome/fontawesome-svg-core @fortawesome/free-solid-svg-icons @fortawesome/vue-fontawesome@latest bootstrap-icons leaflet leaflet-control-geocoder leaflet.locatecontrol chart.js vue-chartjs
-
-para que instale todas estas dependencias 
-
-npm install qrcode --save
-npm install --save @fortawesome/fontawesome-svg-core
-npm install --save @fortawesome/free-solid-svg-icons
-npm install --save @fortawesome/vue-fontawesome@latest
-npm install qrcode --save
-npm install bootstrap-icons
-npm install leaflet       "libreria para mapas"
-npm install leaflet-control-geocoder   "libreria para mapas"
-# Instalar el plugin de geolocalización
-npm install leaflet.locatecontrol
-# 1. Instala Chart.js (la librería principal)
-npm install chart.js
-
-# 2. Instala el conector de Vue para Chart.js
-npm install vue-chartjs
 
