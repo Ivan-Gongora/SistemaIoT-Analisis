@@ -15,6 +15,7 @@ source venv/bin/activate
 # Instalar todas las dependencias desde requirements.txt
 # Nota: verificar que estes en la carpeta donde esta el requirements.txt para que funcione la instalacion de los requerimientos
 pip install -r requirements.txt
+pip install -r requerimients2.txt
 
 # Acceder a la carpeta y en la misma altura de las carpetas de app,vue,web
 # Ejecutar lo siguiente para levantar el fastapi

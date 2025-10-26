@@ -21,6 +21,11 @@ from app.api.rutas.usuarios.usuarios import router_usuario as router_usuario
 from app.api.rutas.unidades_medida import router_unidades as router_unidades
 from app.api.rutas.campos_sensor.campos_sensor import router_campos as router_campos
 from app.api.rutas.recepcion.recepcion import router_recepcion as router_recepcion
+
+from app.api.rutas.energetico.analisis import router as energetico_analisis_router
+from app.api.rutas.energetico.proyecciones import router as energetico_proyecciones_router
+
+
 aplicacion = FastAPI()
 
 aplicacion.add_middleware(
@@ -54,6 +59,10 @@ aplicacion.include_router(router_usuario, prefix="/api")
 aplicacion.include_router(router_unidades, prefix="/api", tags=["Unidades de Medida"])
 aplicacion.include_router(router_campos, prefix="/api", tags=["Campos de Sensor"])
 aplicacion.include_router(router_recepcion, prefix="/api", tags=["Recepción de Datos"])
+
+aplicacion.include_router(energetico_analisis_router, prefix="/api/v1")
+aplicacion.include_router(energetico_proyecciones_router, prefix="/api/v1")
+
 
 @aplicacion.get("/", response_class=HTMLResponse)
 async def read_root():
