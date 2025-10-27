@@ -3,13 +3,13 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List
 import json
-from app.configuracion import ConfigEnergetico
+
 
 class AnalizadorHistorico:
     def __init__(self):
-        self.ruta_datos = ConfigEnergetico.RUTA_RECIBOS
-        self.df = None
-        self._cargar_datos()
+        self.df: pd.DataFrame | None = None
+        # self.df = None
+        # self._cargar_datos()
     
     def _cargar_datos(self):
         """Cargar y preparar los datos del CSV"""

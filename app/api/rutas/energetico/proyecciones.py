@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query,Body
+from fastapi import APIRouter, HTTPException, Query,Body, Depends
 from typing import Dict, Any
 
 from app.servicios.energetico.analizador_historico import AnalizadorHistorico
 from app.servicios.energetico.predictor_consumo import PredictorConsumo
 
+from app.servicios.energetico.dependencias import get_analizador
 router = APIRouter(prefix="/energetico", tags=["Predicciones Energéticas"])
 
 @router.get("/optimizacion/recomendaciones")
@@ -26,14 +27,15 @@ async def obtener_recomendaciones_optimizacion():
 
 @router.get("/proyecciones/mejorada")
 async def proyeccion_mejorada(
-    meses: int = Query(6, description="Meses a predecir", ge=1, le=24)
+    meses: int = Query(6, description="Meses a predecir", ge=1, le=24),
+    analizador: AnalizadorHistorico = Depends(get_analizador) # 3. Inyectar el analizador
 ):
     """Proyección mejorada que usa el mejor modelo disponible"""
     try:
-        analizador = AnalizadorHistorico()
+        # analizador = AnalizadorHistorico() # 4. Eliminar
         if not analizador._datos_cargados():
             raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")
-        
+               
         predictor = PredictorConsumo()
         
         # Si tenemos pocos datos, usar tendencia lineal (más preciso)
@@ -65,15 +67,14 @@ async def proyeccion_mejorada(
     
 @router.get("/proyecciones/consumo")
 async def proyeccion_consumo(
-    meses: int = Query(12, description="Meses a predecir", ge=1, le=36)
+    meses: int = Query(12, description="Meses a predecir", ge=1, le=36),
+    analizador: AnalizadorHistorico = Depends(get_analizador) # 3. Inyectar
 ):
     """Proyección de consumo energético para los próximos meses"""
     try:
-        # Obtener datos históricos
-        analizador = AnalizadorHistorico()
+        # analizador = AnalizadorHistorico() # 4. Eliminar
         if not analizador._datos_cargados():
-            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")
-        
+            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")        
         # Entrenar modelo y predecir
         predictor = PredictorConsumo()
         entrenado = await predictor.entrenar_modelo_prophet(analizador.df)
@@ -94,15 +95,14 @@ async def proyeccion_consumo(
 
 @router.get("/proyecciones/costo")
 async def proyeccion_costo(
-    meses: int = Query(12, description="Meses a predecir", ge=1, le=36)
+    meses: int = Query(12, description="Meses a predecir", ge=1, le=36),
+    analizador: AnalizadorHistorico = Depends(get_analizador) # 3. Inyectar
 ):
     """Proyección de costos energéticos para los próximos meses"""
     try:
-        # Obtener datos históricos
-        analizador = AnalizadorHistorico()
+        # analizador = AnalizadorHistorico() # 4. Eliminar
         if not analizador._datos_cargados():
-            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")
-        
+            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")      
         # Entrenar modelo y predecir costos
         predictor = PredictorConsumo()
         entrenado = await predictor.entrenar_modelo_prophet(analizador.df)
@@ -123,14 +123,14 @@ async def proyeccion_costo(
 
 @router.get("/proyecciones/completa")
 async def proyeccion_completa(
-    meses: int = Query(12, description="Meses a predecir", ge=1, le=36)
+    meses: int = Query(12, description="Meses a predecir", ge=1, le=36),
+    analizador: AnalizadorHistorico = Depends(get_analizador) # 3. Inyectar
 ):
     """Proyección completa (consumo + costo) para los próximos meses"""
     try:
-        analizador = AnalizadorHistorico()
+        # analizador = AnalizadorHistorico() # 4. Eliminar
         if not analizador._datos_cargados():
-            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")
-        
+            raise HTTPException(status_code=400, detail="No hay datos históricos disponibles")        
         predictor = PredictorConsumo()
         entrenado = await predictor.entrenar_modelo_prophet(analizador.df)
         
@@ -163,16 +163,15 @@ async def proyeccion_completa(
 
 
 @router.get("/ia/analisis-automatico")
-async def analisis_automatico_ia():
+async def analisis_automatico_ia(analizador: AnalizadorHistorico = Depends(get_analizador)):
     """Análisis automático con OpenRouter (múltiples modelos gratis)"""
     try:
         from app.servicios.ia.openrouter_client import OpenRouterClient
         from app.servicios.energetico.analizador_historico import AnalizadorHistorico
         
-        analizador = AnalizadorHistorico()
+        # analizador = AnalizadorHistorico() # 4. Eliminar
         if not analizador._datos_cargados():
-            raise HTTPException(status_code=400, detail="No hay datos disponibles")
-        
+            raise HTTPException(status_code=400, detail="No hay datos disponibles")        
         # Preparar datos
         stats = await analizador.obtener_analisis_basico()
         estadisticas = stats.get("estadisticas_basicas", {})
