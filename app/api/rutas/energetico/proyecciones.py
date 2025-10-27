@@ -10,7 +10,7 @@ router = APIRouter(prefix="/energetico", tags=["Predicciones Energéticas"])
 async def obtener_recomendaciones_optimizacion():
     """Obtener recomendaciones de optimización energética personalizadas"""
     try:
-        from app.servicios.energetico.recomendador_optimizacion import RecomendadorOptimizacion
+        from servicios.energetico.recomendador_optimizacion import RecomendadorOptimizacion
         
         recomendador = RecomendadorOptimizacion()
         resultado = await recomendador.generar_recomendaciones_completas()
@@ -158,85 +158,49 @@ async def proyeccion_completa(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en proyección completa: {str(e)}")
 
-# Asegúrate de que estén registrados estos endpoints
-@router.post("/ia/analisis-avanzado")
-async def analisis_avanzado_ia(pregunta: str = Body(..., description="Pregunta específica para análisis IA")):
-    """Análisis avanzado con IA de los datos energéticos"""
-    try:
-        from app.servicios.ia.deepseek_client import DeepSeekClient
-        from app.servicios.energetico.analizador_historico import AnalizadorHistorico
-        
-        analizador = AnalizadorHistorico()
-        if not analizador._datos_cargados():
-            raise HTTPException(status_code=400, detail="No hay datos disponibles")
-        
-        # Preparar contexto con datos reales
-        stats = await analizador.obtener_analisis_basico()
-        estadisticas = stats.get("estadisticas_basicas", {})
-        
-        contexto = f"""
-        RESUMEN ENERGÉTICO INSTITUCIONAL:
-        - Período: {estadisticas.get('rango_fechas', {}).get('inicio', '')} a {estadisticas.get('rango_fechas', {}).get('fin', '')}
-        - Consumo promedio: {estadisticas.get('consumo_promedio_kwh', 0):,.0f} kWh/mes
-        - Costo promedio: ${estadisticas.get('costo_promedio_mxn', 0):,.0f} MXN/mes
-        - Demanda máxima: {estadisticas.get('demanda_maxima_promedio_kw', 0):,.0f} kW
-        - Total registros: {estadisticas.get('total_registros', 0)} meses
-        - Tarifa: GDMTH
-        """
-        
-        cliente_ia = DeepSeekClient()
-        respuesta = await cliente_ia.consultar_ia(pregunta, contexto)
-        
-        return {
-            "status": "success",
-            "data": {
-                "pregunta": pregunta,
-                "respuesta_ia": respuesta,
-                "contexto_usado": contexto.strip()
-            },
-            "message": "Análisis IA generado correctamente"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en análisis IA: {str(e)}")
+
+### IA ANALYSIS ENDPOINT ###
+
 
 @router.get("/ia/analisis-automatico")
 async def analisis_automatico_ia():
-    """Análisis automático de los datos energéticos por IA"""
+    """Análisis automático con OpenRouter (múltiples modelos gratis)"""
     try:
-        from app.servicios.ia.deepseek_client import DeepSeekClient
+        from app.servicios.ia.openrouter_client import OpenRouterClient
         from app.servicios.energetico.analizador_historico import AnalizadorHistorico
         
         analizador = AnalizadorHistorico()
         if not analizador._datos_cargados():
             raise HTTPException(status_code=400, detail="No hay datos disponibles")
         
-        # Preparar resumen detallado
+        # Preparar datos
         stats = await analizador.obtener_analisis_basico()
         estadisticas = stats.get("estadisticas_basicas", {})
         
         df_summary = f"""
-        DATOS ENERGÉTICOS DETALLADOS:
+        DATOS ENERGÉTICOS INSTITUCIONALES - TARIFA GDMTH:
         - Período: {estadisticas.get('rango_fechas', {}).get('inicio', '')} a {estadisticas.get('rango_fechas', {}).get('fin', '')}
         - Consumo promedio: {estadisticas.get('consumo_promedio_kwh', 0):,.0f} kWh/mes
         - Costo promedio: ${estadisticas.get('costo_promedio_mxn', 0):,.0f} MXN/mes
         - Demanda máxima: {estadisticas.get('demanda_maxima_promedio_kw', 0):,.0f} kW
-        - Consumo máximo: {estadisticas.get('consumo_max_kwh', 0):,.0f} kWh
-        - Consumo mínimo: {estadisticas.get('consumo_min_kwh', 0):,.0f} kWh
-        - Total acumulado: ${estadisticas.get('costo_total_acumulado', 0):,.0f} MXN
+        - Crecimiento anual: +55%
+        - Factor potencia: {estadisticas.get('factor_potencia_promedio', 'N/A')}%
         """
         
-        cliente_ia = DeepSeekClient()
+        # 🔄 USAR OPENROTER CON MÚLTIPLES MODELOS GRATIS
+        cliente_ia = OpenRouterClient()
         respuesta = await cliente_ia.analizar_datos_energeticos(df_summary)
         
         return {
             "status": "success",
             "data": {
                 "analisis_automatico": respuesta,
-                "resumen_datos": estadisticas
+                "resumen_datos": estadisticas,
+                "fuente_analisis": "openrouter_multi_model",
+                "modelos_disponibles": cliente_ia.obtener_modelos_disponibles()
             },
-            "message": "Análisis automático IA generado correctamente"
+            "message": "Análisis automático generado correctamente"
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en análisis automático IA: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error en análisis automático: {str(e)}")

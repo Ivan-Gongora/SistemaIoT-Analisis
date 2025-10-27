@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # 🚨 Cargar variables de entorno una vez
 load_dotenv() 
 
-from app.configuracion import configuracion
+from app.configuracion import ConfiguracionSimulacion
 
 # Importación de Routers
 from app.api.rutas.valores.valores import router as valores_router
