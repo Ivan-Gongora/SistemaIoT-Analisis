@@ -114,16 +114,16 @@ $SUCCESS-COLOR: #1ABC9C;
 $GRADIENT-SUCCESS: linear-gradient(to right, #00C853, #1ABC9C);
 $PURPLE-GRADIENT: linear-gradient(to right, #6F00FF, #A300FF);
 
-// COLORES BASE
-$WHITE-SOFT: #F7F9FC;     // Fondo Claro
-$BLUE-MIDNIGHT: #1A1A2E;  // Fondo Oscuro
-$DARK-TEXT: #333333;      // Texto Claro (Modo Light)
-$LIGHT-TEXT: #E4E6EB;     // Texto Oscuro (Modo Dark)
-$SUBTLE-BG-DARK: #2B2B40; // Fondo de tarjeta en Modo Oscuro (como en tu imagen)
-$SUBTLE-BG-LIGHT: #FFFFFF; // Fondo de tarjeta en Modo Claro
-$GRAY-COLD: #99A2AD;      // Subtítulos
-$DARK-BG-CONTRAST: #131322; // Fondo para que las tarjetas oscuras resalten más
-$DARK-DETAILS: rgba($LIGHT-TEXT, 0.4); // Detalles sutiles en modo oscuro
+// // COLORES BASE
+// $WHITE-SOFT: #F7F9FC;     // Fondo Claro
+// $BLUE-MIDNIGHT: #1A1A2E;  // Fondo Oscuro
+// $DARK-TEXT: #333333;      // Texto Claro (Modo Light)
+// $LIGHT-TEXT: #E4E6EB;     // Texto Oscuro (Modo Dark)
+// $SUBTLE-BG-DARK: #2B2B40; // Fondo de tarjeta en Modo Oscuro (como en tu imagen)
+// $SUBTLE-BG-LIGHT: #FFFFFF; // Fondo de tarjeta en Modo Claro
+// $GRAY-COLD: #99A2AD;      // Subtítulos
+// $DARK-BG-CONTRAST: #131322; // Fondo para que las tarjetas oscuras resalten más
+// $DARK-DETAILS: rgba($LIGHT-TEXT, 0.4); // Detalles sutiles en modo oscuro
 
 // ----------------------------------------
 // ESTRUCTURA GENERAL

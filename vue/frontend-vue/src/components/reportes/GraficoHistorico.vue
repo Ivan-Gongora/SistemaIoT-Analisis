@@ -147,14 +147,14 @@ export default {
 // ----------------------------------------
 // VARIABLES DE PALETA (Copiadas de tu Tarjeta)
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$GRAY-COLD: #99A2AD;
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-DARK: #2B2B40;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$DARK-BG-CONTRAST: #1A1A2E; 
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $GRAY-COLD: #99A2AD;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-DARK: #2B2B40;
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $DARK-BG-CONTRAST: #1A1A2E; 
 
 .chart-card {
     border-radius: 12px;

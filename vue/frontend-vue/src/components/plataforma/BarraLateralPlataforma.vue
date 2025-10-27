@@ -158,23 +158,23 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA "IoT SPECTRUM"
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2; // Azul Violeta
-$ACCENT-COLOR: #7B1FA2;  // Morado para iconos y acentos sutiles
+// $PRIMARY-PURPLE: #8A2BE2; // Azul Violeta
+// $ACCENT-COLOR: #7B1FA2;  // Morado para iconos y acentos sutiles
 
-// GRADIENTE PRINCIPAL (Panel de Control)
-$GRADIENT: linear-gradient(to right, #6F00FF, #A300FF);
+// // GRADIENTE PRINCIPAL (Panel de Control)
+// $GRADIENT: linear-gradient(to right, #6F00FF, #A300FF);
 
-// COLORES BASE
-$WHITE-SOFT: #F7F9FC;  // Fondo Claro
-$BLUE-MIDNIGHT: #1A1A2E; // Fondo Oscuro de la barra
-$DARK-TEXT: #333333; // Texto en Modo Claro
-$LIGHT-TEXT: #E4E6EB;  // Texto en Modo Oscuro
-$SUBTLE-BG-DARK: #2B2B40; // Fondo sutil para Modo Oscuro (tarjeta de perfil)
-$SUBTLE-BG-LIGHT: #FFFFFF; // Fondo sutil para Modo Claro (tarjeta de perfil)
-$GRAY-COLD: #99A2AD; // Subtítulos y divisores en modo oscuro
-$GRAY-DIVIDER-LIGHT: #ddd; // Divisores en modo claro
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; // Ancho para modo colapsado
+// // COLORES BASE
+// $WHITE-SOFT: #F7F9FC;  // Fondo Claro
+// $BLUE-MIDNIGHT: #1A1A2E; // Fondo Oscuro de la barra
+// $DARK-TEXT: #333333; // Texto en Modo Claro
+// $LIGHT-TEXT: #E4E6EB;  // Texto en Modo Oscuro
+// $SUBTLE-BG-DARK: #2B2B40; // Fondo sutil para Modo Oscuro (tarjeta de perfil)
+// $SUBTLE-BG-LIGHT: #FFFFFF; // Fondo sutil para Modo Claro (tarjeta de perfil)
+// $GRAY-COLD: #99A2AD; // Subtítulos y divisores en modo oscuro
+// $GRAY-DIVIDER-LIGHT: #ddd; // Divisores en modo claro
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px; // Ancho para modo colapsado
 
 // ----------------------------------------
 // ESTRUCTURA BASE

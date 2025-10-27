@@ -86,11 +86,13 @@ export default {
         proyecto: {
             type: Object,
             required: true
-        }
+        },
+        isDark: {
+            type: Boolean,
+            required: true}
     },
     data() {
         return {
-            isDark: false,
             // 🚨 NUEVOS DATOS: Usaremos valores nulos para simular que la API no los tiene aún
             dispositivos_count: null, 
             sensores_count: null,
@@ -116,9 +118,9 @@ export default {
     },
     mounted() {
         // ... (lógica de detección de tema) ...
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            this.isDark = true;
-        }
+        // if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        //     this.isDark = true;
+        // }
         
         // 🚨 Si la API tuviera los datos, los asignarías aquí:
         // this.dispositivos_count = this.proyecto.dispositivos_count;
@@ -155,19 +157,19 @@ export default {
 // ----------------------------------------
 // VARIABLES DE ESTILO PROFESIONAL (PALETA DE DISPOSITIVO)
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;   // Azul Violeta (Acento Principal)
-$SUCCESS-COLOR: #1ABC9C;    // Verde de Éxito
-$BLUE-MIDNIGHT: #1A1A2E;    // Fondo Oscuro de Contraste (Métricas)
-$DARK-TEXT: #333333;        // Texto en Modo Claro
-$LIGHT-TEXT: #E4E6EB;       // Texto en Modo Oscuro
-$SUBTLE-BG-DARK: #2B2B40;   // Fondo de Tarjeta en Modo Oscuro
-$SUBTLE-BG-LIGHT: #FFFFFF;  // Fondo de Tarjeta en Modo Claro
-$WHITE-SOFT: #F7F9FC;       // Fondo de Página en Modo Claro
-$GRAY-COLD: #99A2AD;        // Subtítulos y Divisores
-$DANGER-COLOR: #e74c3c;     // Rojo para Eliminar
-$WARNING-COLOR: #FFC107;    // Amarillo/Naranja para Pausar
-$LIGHT-BG-CARD: #F0F2F5;    // Fondo Claro de Tarjeta
-$SUBTLE-BG-CARD: #FAFAFA;   // Fondo Muy Sutil de Tarjeta
+// $PRIMARY-PURPLE: #8A2BE2;   // Azul Violeta (Acento Principal)
+// $SUCCESS-COLOR: #1ABC9C;    // Verde de Éxito
+// $BLUE-MIDNIGHT: #1A1A2E;    // Fondo Oscuro de Contraste (Métricas)
+// $DARK-TEXT: #333333;        // Texto en Modo Claro
+// $LIGHT-TEXT: #E4E6EB;       // Texto en Modo Oscuro
+// $SUBTLE-BG-DARK: #2B2B40;   // Fondo de Tarjeta en Modo Oscuro
+// $SUBTLE-BG-LIGHT: #FFFFFF;  // Fondo de Tarjeta en Modo Claro
+// $WHITE-SOFT: #F7F9FC;       // Fondo de Página en Modo Claro
+// $GRAY-COLD: #99A2AD;        // Subtítulos y Divisores
+// $DANGER-COLOR: #e74c3c;     // Rojo para Eliminar
+// $WARNING-COLOR: #FFC107;    // Amarillo/Naranja para Pausar
+// $LIGHT-BG-CARD: #F0F2F5;    // Fondo Claro de Tarjeta
+// $SUBTLE-BG-CARD: #FAFAFA;   // Fondo Muy Sutil de Tarjeta
 // ----------------------------------------
 // ESTILOS BASE DE LA TARJETA
 // ----------------------------------------

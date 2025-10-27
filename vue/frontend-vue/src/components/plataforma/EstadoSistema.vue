@@ -55,15 +55,15 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$GRAY-COLD: #99A2AD;
-$BLUE-MIDNIGHT: #1A1A2E; 
-$SUBTLE-BG-DARK: #2B2B40; 
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$ACCENT-COLOR: #FFC107; 
-$SUBTLE-BG-LIGHT: #FFFFFF;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $GRAY-COLD: #99A2AD;
+// $BLUE-MIDNIGHT: #1A1A2E; 
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $ACCENT-COLOR: #FFC107; 
+// $SUBTLE-BG-LIGHT: #FFFFFF;
 
 // ----------------------------------------
 // ESTILOS PRINCIPALES DEL MÓDULO

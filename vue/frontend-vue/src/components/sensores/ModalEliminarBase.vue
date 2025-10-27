@@ -51,18 +51,18 @@ export default {
 <style scoped lang="scss">
 @use 'sass:color'; // Importar el módulo de color
 
-// ----------------------------------------
-// VARIABLES DE LA PALETA
-// ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$DANGER-COLOR: #E74C3C; 
-$WHITE-SOFT: #F7F9FC;
-$BLUE-MIDNIGHT: #1A1A2E;
-$DARK-TEXT: #333333;
-$LIGHT-TEXT: #E4E6EB;
-$SUBTLE-BG-DARK: #2B2B40;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$GRAY-COLD: #99A2AD;
+// // ----------------------------------------
+// // VARIABLES DE LA PALETA
+// // ----------------------------------------
+// $PRIMARY-PURPLE: #8A2BE2;
+// $DANGER-COLOR: #E74C3C; 
+// $WHITE-SOFT: #F7F9FC;
+// $BLUE-MIDNIGHT: #1A1A2E;
+// $DARK-TEXT: #333333;
+// $LIGHT-TEXT: #E4E6EB;
+// $SUBTLE-BG-DARK: #2B2B40;
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $GRAY-COLD: #99A2AD;
 
 
 // ----------------------------------------
@@ -138,7 +138,7 @@ position: fixed; top: 0; left: 0; width: 100%; height: 100%;
 
 .btn-confirmar-accion {
  background-color: $DANGER-COLOR;
- color: #fff;
+ color: $WHITE-SOFT;
  border: none;
  padding: 10px 15px;
  border-radius: 8px;
@@ -146,7 +146,9 @@ position: fixed; top: 0; left: 0; width: 100%; height: 100%;
  font-weight: 600;
  transition: background-color 0.2s;
  
- &:hover { background-color: color.adjust($DANGER-COLOR, $lightness: -10%); }
+ &:hover { 
+    background-color: color.adjust($DANGER-COLOR, $lightness: -10%); 
+  }
 }
 
 

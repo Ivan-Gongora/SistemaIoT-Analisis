@@ -272,41 +272,8 @@ handleSensorUpdated(data) {
 };
 </script>
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES DE LA PALETA "IoT SPECTRUM"
-// ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; 
-$WHITE-SOFT: #F7F9FC; 
-$DARK-BG-CONTRAST: #1E1E30; 
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$GRAY-COLD: #99A2AD;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$DANGER-COLOR: #FF5733;
 
-// ----------------------------------------
-// LAYOUT PRINCIPAL Y CONTENIDO
-// ----------------------------------------
-.plataforma-layout {
-    display: flex;
-    min-height: 100vh;
-    transition: background-color 0.3s;
-}
 
-.plataforma-contenido {
-    position: relative;
-    margin-left: $WIDTH-CLOSED;
-    flex-grow: 1;
-    padding: 0; 
-    transition: margin-left 0.3s ease-in-out;
-    
-    &.shifted {
-        margin-left: $WIDTH-SIDEBAR;
-    }
-}
 
 .detalle-dispositivo-contenido {
     padding: 20px 40px 40px 40px; /* Padding debajo del encabezado */

@@ -39,9 +39,19 @@ const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'ModalProyecto',
+    props: {
+        proyecto: {
+            type: Object,
+            required: true
+        },
+        // 1. AÑADIR ESTA PROP (igual que en TarjetaDispositivo)
+        isDark: {
+            type: Boolean,
+            required: true
+        }
+    },
     data() {
         return {
-            isDark: false,
             nombre: '',
             descripcion: '',
             loading: false,
@@ -112,15 +122,15 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$BLUE-MIDNIGHT: #1A1A2E;
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-DARK: #2B2B40; 
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$LIGHT-TEXT: #E4E6EB;     // También es necesaria
-$WHITE-SOFT: #F7F9FC;     // 🚨 Esta es la variable que faltaba
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $BLUE-MIDNIGHT: #1A1A2E;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $LIGHT-TEXT: #E4E6EB;     // También es necesaria
+// $WHITE-SOFT: #F7F9FC;     // 🚨 Esta es la variable que faltaba
 
 // ----------------------------------------
 // BASE DEL MODAL

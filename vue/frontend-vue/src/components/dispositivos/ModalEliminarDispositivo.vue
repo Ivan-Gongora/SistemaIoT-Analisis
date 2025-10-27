@@ -65,18 +65,18 @@ export default {
 <style scoped lang="scss">
 @use 'sass:color'; // 🚨 CRÍTICO: Importar el módulo de color para usar color.adjust()
 
-// ----------------------------------------
-// VARIABLES DE LA PALETA
-// ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2; 
-$ERROR-COLOR: #FF5733; 
-$WHITE-SOFT: #F7F9FC;
-$BLUE-MIDNIGHT: #1A1A2E;
-$DARK-TEXT: #333333;
-$LIGHT-TEXT: #E4E6EB;
-$SUBTLE-BG-DARK: #2B2B40;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$GRAY-COLD: #99A2AD;
+// // ----------------------------------------
+// // VARIABLES DE LA PALETA
+// // ----------------------------------------
+// $PRIMARY-PURPLE: #8A2BE2; 
+// $ERROR-COLOR: #FF5733; 
+// $WHITE-SOFT: #F7F9FC;
+// $BLUE-MIDNIGHT: #1A1A2E;
+// $DARK-TEXT: #333333;
+// $LIGHT-TEXT: #E4E6EB;
+// $SUBTLE-BG-DARK: #2B2B40;
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $GRAY-COLD: #99A2AD;
 
 
 // ----------------------------------------
@@ -157,7 +157,9 @@ line-height: 1.4;
  cursor: pointer;
  transition: background-color 0.2s;
  // 🚨 CORRECCIÓN CLAVE: Reemplazo de darken()
- &:hover { background-color: color.adjust($ERROR-COLOR, $lightness: -10%); } 
+ &:hover { 
+    background-color: color.adjust($DANGER-COLOR, $lightness: -10%);
+ }
 }
 
 

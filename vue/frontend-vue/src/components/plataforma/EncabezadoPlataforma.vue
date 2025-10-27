@@ -85,15 +85,15 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA "IoT SPECTRUM"
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2; // Azul Violeta
-$SUCCESS-COLOR: #1ABC9C;  // Verde Menta (para el botón de status)
-$GRADIENT-SUCCESS: linear-gradient(to right, #00C853, #1ABC9C); // Gradiente del botón
-$WHITE-SOFT: #F7F9FC;     // Fondo Claro
-$BLUE-MIDNIGHT: #1A1A2E;  // Fondo Oscuro
-$DARK-TEXT: #333333;      // Texto Claro (Modo Light)
-$LIGHT-TEXT: #E4E6EB;     // Texto Oscuro (Modo Dark)
-$GRAY-COLD: #99A2AD;      // Subtítulos
-$HEADER-BG-DARK: #2B2B40; // Fondo de encabezado en modo oscuro
+// $PRIMARY-PURPLE: #8A2BE2; // Azul Violeta
+// $SUCCESS-COLOR: #1ABC9C;  // Verde Menta (para el botón de status)
+// $GRADIENT-SUCCESS: linear-gradient(to right, #00C853, #1ABC9C); // Gradiente del botón
+// $WHITE-SOFT: #F7F9FC;     // Fondo Claro
+// $BLUE-MIDNIGHT: #1A1A2E;  // Fondo Oscuro
+// $DARK-TEXT: #333333;      // Texto Claro (Modo Light)
+// $LIGHT-TEXT: #E4E6EB;     // Texto Oscuro (Modo Dark)
+// $GRAY-COLD: #99A2AD;      // Subtítulos
+// $HEADER-BG-DARK: #2B2B40; // Fondo de encabezado en modo oscuro
 
 // ----------------------------------------
 // ESTRUCTURA BASE

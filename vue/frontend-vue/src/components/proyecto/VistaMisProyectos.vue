@@ -13,7 +13,7 @@
       />
       
       <div class="vista-proyectos-contenido">
-        <MisProyectos /> 
+        <MisProyectos :is-dark="isDark"/> 
       </div>
       
     </div>
@@ -72,30 +72,30 @@ export default {
 // ----------------------------------------
 // VARIABLES DEL LAYOUT
 // ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px;
-$WHITE-SOFT: #F7F9FC; 
-$DARK-BG-CONTRAST: #1E1E30; 
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px;
+// $WHITE-SOFT: #F7F9FC; 
+// $DARK-BG-CONTRAST: #1E1E30; 
 
-// ----------------------------------------
-// LAYOUT PRINCIPAL
-// ----------------------------------------
-.plataforma-layout {
-  display: flex;
-  min-height: 100vh;
-  transition: background-color 0.3s;
-}
+// // ----------------------------------------
+// // LAYOUT PRINCIPAL
+// // ----------------------------------------
+// .plataforma-layout {
+//   display: flex;
+//   min-height: 100vh;
+//   transition: background-color 0.3s;
+// }
 
-.plataforma-contenido {
-  margin-left: $WIDTH-CLOSED;
-  flex-grow: 1;
-  padding: 0;
-  transition: margin-left 0.3s ease-in-out;
+// .plataforma-contenido {
+//   margin-left: $WIDTH-CLOSED;
+//   flex-grow: 1;
+//   padding: 0;
+//   transition: margin-left 0.3s ease-in-out;
   
-  &.shifted {
-    margin-left: $WIDTH-SIDEBAR;
-  }
-}
+//   &.shifted {
+//     margin-left: $WIDTH-SIDEBAR;
+//   }
+// }
 
 .vista-proyectos-contenido {
     padding: 0 40px 40px 40px; 

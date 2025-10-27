@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from '@/router'
+import '@/assets/scss/base-styles.scss'
 // 🗺️ Estilos de Leaflet y controles
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-control-geocoder/dist/Control.Geocoder.css'

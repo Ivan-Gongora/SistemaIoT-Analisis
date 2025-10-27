@@ -79,14 +79,14 @@ export default {
 // ----------------------------------------
 // VARIABLES DEL LAYOUT
 // ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; // Ancho del sidebar colapsado
-$WHITE-SOFT: #F7F9FC; 
-$DARK-BG-CONTRAST: #1E1E30; 
-$BLUE-MIDNIGHT: #1A1A2E; 
-$DARK-TEXT: #333333;      
-$LIGHT-TEXT: #E4E6EB;     
-$GRAY-COLD: #99A2AD;
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px; // Ancho del sidebar colapsado
+// $WHITE-SOFT: #F7F9FC; 
+// $DARK-BG-CONTRAST: #1E1E30; 
+// $BLUE-MIDNIGHT: #1A1A2E; 
+// $DARK-TEXT: #333333;      
+// $LIGHT-TEXT: #E4E6EB;     
+// $GRAY-COLD: #99A2AD;
 
 
 // ----------------------------------------
@@ -101,18 +101,18 @@ $GRAY-COLD: #99A2AD;
   background-color: $WHITE-SOFT; 
 }
 
-.plataforma-contenido {
-  // 🚨 CRÍTICO: Margen base (estado cerrado)
-  margin-left: $WIDTH-CLOSED;
-  flex-grow: 1;
-  padding: 0; 
-  transition: margin-left 0.3s ease-in-out; // 🚨 Transición suave
+// .plataforma-contenido {
+//   // // 🚨 CRÍTICO: Margen base (estado cerrado)
+//   // margin-left: $WIDTH-CLOSED;
+//   // flex-grow: 1;
+//   // padding: 0; 
+//   // transition: margin-left 0.3s ease-in-out; // 🚨 Transición suave
   
-  // 🚨 CRÍTICO: Clase para el estado ABIERTO
-  &.shifted {
-    margin-left: $WIDTH-SIDEBAR;
-  }
-}
+//   // // 🚨 CRÍTICO: Clase para el estado ABIERTO
+//   &.shifted {
+//     margin-left: $WIDTH-SIDEBAR;
+//   }
+// }
 
 // ----------------------------------------
 // DASHBOARD GRID (Distribución de Tarjetas y Módulos)

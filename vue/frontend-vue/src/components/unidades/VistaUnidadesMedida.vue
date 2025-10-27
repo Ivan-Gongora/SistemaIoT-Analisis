@@ -233,36 +233,36 @@ export default {
 // ----------------------------------------
 // VARIABLES SCSS (Mínimas para el Layout)
 // ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; 
-$WHITE-SOFT: #F7F9FC; 
-$DARK-BG-CONTRAST: #1E1E30; 
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-DARK: #2B2B40; 
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$GRAY-COLD: #99A2AD;
-$BLUE-MIDNIGHT: #1A1A2E; 
-$SUBTLE-BG-LIGHT: #FFFFFF;
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px; 
+// $WHITE-SOFT: #F7F9FC; 
+// $DARK-BG-CONTRAST: #1E1E30; 
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $GRAY-COLD: #99A2AD;
+// $BLUE-MIDNIGHT: #1A1A2E; 
+// $SUBTLE-BG-LIGHT: #FFFFFF;
 
-// ----------------------------------------
-// LAYOUT Y POSICIONAMIENTO
-// ----------------------------------------
-.plataforma-layout {
-    display: flex;
-    min-height: 100vh;
-    transition: background-color 0.3s;
-    background-color: $WHITE-SOFT; 
-}
+// // ----------------------------------------
+// // LAYOUT Y POSICIONAMIENTO
+// // ----------------------------------------
+// .plataforma-layout {
+//     display: flex;
+//     min-height: 100vh;
+//     transition: background-color 0.3s;
+//     background-color: $WHITE-SOFT; 
+// }
 
-.plataforma-contenido {
-    margin-left: $WIDTH-CLOSED;
-    flex-grow: 1;
-    padding: 0; 
-    transition: margin-left 0.3s ease-in-out;
-    &.shifted { margin-left: $WIDTH-SIDEBAR; }
-}
+// .plataforma-contenido {
+//     margin-left: $WIDTH-CLOSED;
+//     flex-grow: 1;
+//     padding: 0; 
+//     transition: margin-left 0.3s ease-in-out;
+//     &.shifted { margin-left: $WIDTH-SIDEBAR; }
+// }
 
 .unidades-contenido {
     padding: 20px 40px 40px 40px;

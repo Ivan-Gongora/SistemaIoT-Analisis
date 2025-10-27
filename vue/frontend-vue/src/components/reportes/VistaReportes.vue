@@ -312,40 +312,40 @@ export default {
 // ----------------------------------------
 // VARIABLES DE PALETA (Copiadas de tu Tarjeta)
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$GRAY-COLD: #99A2AD;
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-DARK: #2B2B40; // Fondo de Tarjeta Oscura
-$BLUE-MIDNIGHT: #1A1A2E; // Fondo de Inputs Oscuros
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$WHITE-SOFT: #F7F9FC; 
-$DANGER-COLOR: #e74c3c;
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px;
-$DARK-BG-CONTRAST: #1E1E30; 
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $GRAY-COLD: #99A2AD;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-DARK: #2B2B40; // Fondo de Tarjeta Oscura
+// $BLUE-MIDNIGHT: #1A1A2E; // Fondo de Inputs Oscuros
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $WHITE-SOFT: #F7F9FC; 
+// $DANGER-COLOR: #e74c3c;
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px;
+// $DARK-BG-CONTRAST: #1E1E30; 
 
 
-// ----------------------------------------
-// LAYOUT PRINCIPAL (CORRECCIÓN CRÍTICA DE FONDO)
-// ----------------------------------------
-.plataforma-layout {
-    display: flex;
-    min-height: 100vh;
-    transition: background-color 0.3s;
-}
+// // ----------------------------------------
+// // LAYOUT PRINCIPAL (CORRECCIÓN CRÍTICA DE FONDO)
+// // ----------------------------------------
+// .plataforma-layout {
+//     display: flex;
+//     min-height: 100vh;
+//     transition: background-color 0.3s;
+// }
 
-.plataforma-contenido {
-    margin-left: $WIDTH-CLOSED;
-    flex-grow: 1;
-    padding: 0;
-    transition: margin-left 0.3s ease-in-out;
+// .plataforma-contenido {
+//     margin-left: $WIDTH-CLOSED;
+//     flex-grow: 1;
+//     padding: 0;
+//     transition: margin-left 0.3s ease-in-out;
     
-    &.shifted {
-        margin-left: $WIDTH-SIDEBAR;
-    }
-}
+//     &.shifted {
+//         margin-left: $WIDTH-SIDEBAR;
+//     }
+// }
 
 .reportes-contenido {
     /* Mantiene el espaciado lateral de 40px */

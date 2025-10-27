@@ -22,6 +22,7 @@
                 v-for="proyecto in proyectos" 
                 :key="proyecto.id" 
                 :proyecto="proyecto" 
+                :is-dark="isDark"
                 @toggle-activo="simularCambioEstado"
                 @open-share-modal="openShareModal" 
                 @edit-project="handleEditClick" 
@@ -74,6 +75,12 @@ export default {
         ModalEliminarProyecto,
         ModalCompartir,
         ModalEditarProyecto
+    },
+    props: {
+        isDark: {
+            type: Boolean,
+            required: true
+        }
     },
     data() {
         return {
@@ -264,10 +271,10 @@ export default {
 // ----------------------------------------
 // VARIABLES SCSS 
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2; 
-$SUCCESS-COLOR: #1ABC9C; 
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
+// $PRIMARY-PURPLE: #8A2BE2; 
+// $SUCCESS-COLOR: #1ABC9C; 
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
 
 .mis-proyectos {
     padding-top: 20px;

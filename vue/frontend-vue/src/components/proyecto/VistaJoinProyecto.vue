@@ -104,15 +104,15 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2; 
-$SUCCESS-COLOR: #1ABC9C;  
-$ERROR-COLOR: #FF5733;    
-$WHITE-SOFT: #F7F9FC;     
-$BLUE-MIDNIGHT: #1A1A2E;  
-$SUBTLE-BG-DARK: #2B2B40; 
-$DARK-TEXT: #333333;
-// 🚨 CRÍTICO: Esta variable faltaba en el ámbito del componente
-$LIGHT-TEXT: #E4E6EB;  
+// $PRIMARY-PURPLE: #8A2BE2; 
+// $SUCCESS-COLOR: #1ABC9C;  
+// $ERROR-COLOR: #FF5733;    
+// $WHITE-SOFT: #F7F9FC;     
+// $BLUE-MIDNIGHT: #1A1A2E;  
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $DARK-TEXT: #333333;
+//  CRÍTICO: Esta variable faltaba en el ámbito del componente
+// $LIGHT-TEXT: #E4E6EB;  
 .join-project-view {
     display: flex;
     justify-content: center;

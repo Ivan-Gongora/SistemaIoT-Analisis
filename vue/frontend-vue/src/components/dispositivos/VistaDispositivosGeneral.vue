@@ -284,37 +284,7 @@ export default {
 
 
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES SCSS (Mínimas para el Layout)
-// ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; 
-$WHITE-SOFT: #F7F9FC; 
-$DARK-BG-CONTRAST: #1E1E30; 
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-// 🚨 CRÍTICO: Asegurarse de que esta variable existe y no está comentada.
-$GRAY-COLD: #99A2AD; 
 
-// ----------------------------------------
-// LAYOUT Y POSICIONAMIENTO
-// ----------------------------------------
-.plataforma-layout {
-    display: flex;
-    min-height: 100vh;
-    transition: background-color 0.3s;
-}
-
-.plataforma-contenido {
-    margin-left: $WIDTH-CLOSED; /* Margen base cerrado */
-    flex-grow: 1;
-    padding: 0; 
-    transition: margin-left 0.3s ease-in-out;
-    
-    &.shifted {
-        margin-left: $WIDTH-SIDEBAR; /* Margen para sidebar abierto */
-    }
-}
 
 .dispositivos-general-contenido {
     padding: 0 40px 40px 40px; 

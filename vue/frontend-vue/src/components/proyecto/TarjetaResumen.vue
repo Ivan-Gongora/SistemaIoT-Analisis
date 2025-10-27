@@ -55,15 +55,15 @@ export default {
 // ----------------------------------------
 // VARIABLES SCSS (Definidas en el componente)
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$MAINTENANCE-COLOR: #FFC107;
-$ERROR-COLOR: #FF5733;
-$GRAY-COLD: #99A2AD;
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$BLUE-MIDNIGHT: #1A1A2E; 
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $MAINTENANCE-COLOR: #FFC107;
+// $ERROR-COLOR: #FF5733;
+// $GRAY-COLD: #99A2AD;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $BLUE-MIDNIGHT: #1A1A2E; 
 
 // ----------------------------------------
 // ESTILOS DE LA TARJETA

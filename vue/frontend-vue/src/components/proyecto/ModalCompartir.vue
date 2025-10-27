@@ -254,15 +254,15 @@ async removeMember(userId) {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$BLUE-MIDNIGHT: #1A1A2E;
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$SUBTLE-BG-DARK: #2B2B40; 
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$LIGHT-TEXT: #E4E6EB;     // También es necesaria
-$WHITE-SOFT: #F7F9FC;     // 🚨 Esta es la variable que faltaba
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $BLUE-MIDNIGHT: #1A1A2E;
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $LIGHT-TEXT: #E4E6EB;     // También es necesaria
+// $WHITE-SOFT: #F7F9FC;     // 🚨 Esta es la variable que faltaba
 
 // ----------------------------------------
 // BASE DEL MODAL

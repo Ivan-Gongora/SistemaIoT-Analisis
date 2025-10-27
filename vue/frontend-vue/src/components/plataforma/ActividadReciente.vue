@@ -66,16 +66,16 @@ methods: {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$GRAY-COLD: #99A2AD;
-$SUCCESS-COLOR: #1ABC9C;
-$ALERT-COLOR: #c69a13; 
-$ERROR-COLOR: #E74C3C;
-$INFO-COLOR: #8A2BE2;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$BLUE-MIDNIGHT: #1A1A2E; 
-$BG-CARD-DARK: #2B2B40; // Fondo de la tarjeta en modo oscuro
+// $LIGHT-TEXT: #E4E6EB;
+// $DARK-TEXT: #333333;
+// $GRAY-COLD: #99A2AD;
+// $SUCCESS-COLOR: #1ABC9C;
+// $ALERT-COLOR: #c69a13; 
+// $ERROR-COLOR: #E74C3C;
+// $INFO-COLOR: #8A2BE2;
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $BLUE-MIDNIGHT: #1A1A2E; 
+// $BG-CARD-DARK: #2B2B40; // Fondo de la tarjeta en modo oscuro
 
 // ----------------------------------------
 // ESTILOS PRINCIPALES DEL MÓDULO

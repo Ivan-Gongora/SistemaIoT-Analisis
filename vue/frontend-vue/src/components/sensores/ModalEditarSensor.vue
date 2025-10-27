@@ -226,14 +226,14 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA
 // ----------------------------------------
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$BLUE-MIDNIGHT: #1A1A2E; 
-$DARK-TEXT: #333333;
-$LIGHT-TEXT: #E4E6EB;
-$SUBTLE-BG-DARK: #2B2B40; 
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$GRAY-COLD: #99A2AD;
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $BLUE-MIDNIGHT: #1A1A2E; 
+// $DARK-TEXT: #333333;
+// $LIGHT-TEXT: #E4E6EB;
+// $SUBTLE-BG-DARK: #2B2B40; 
+// $SUBTLE-BG-LIGHT: #FFFFFF;
+// $GRAY-COLD: #99A2AD;
 
 // ----------------------------------------
 // ESTILOS DEL MODAL (Copiado de Modales Anteriores)

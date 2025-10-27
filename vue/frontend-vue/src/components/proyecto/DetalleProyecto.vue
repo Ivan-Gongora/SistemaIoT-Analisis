@@ -355,40 +355,40 @@ export default {
 // ----------------------------------------
 // VARIABLES DE LA PALETA "IoT SPECTRUM"
 // ----------------------------------------
-$WIDTH-SIDEBAR: 280px; 
-$WIDTH-CLOSED: 80px; 
-$WHITE-SOFT: #F7F9FC; 
-$BLUE-MIDNIGHT: #1A1A2E;
-$DARK-BG-CONTRAST: #1E1E30; // Fondo general oscuro
-$DARK-TEXT: #333333;
-$LIGHT-TEXT: #E4E6EB;
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$MAINTENANCE-COLOR: #FFC107; // Amarillo
-$GRAY-COLD: #99A2AD;
-$SUBTLE-BG-LIGHT: #FFFFFF; // <-- DEBE ESTAR AQUÍ
+// $WIDTH-SIDEBAR: 280px; 
+// $WIDTH-CLOSED: 80px; 
+// $WHITE-SOFT: #F7F9FC; 
+// $BLUE-MIDNIGHT: #1A1A2E;
+// $DARK-BG-CONTRAST: #1E1E30; // Fondo general oscuro
+// $DARK-TEXT: #333333;
+// $LIGHT-TEXT: #E4E6EB;
+// $PRIMARY-PURPLE: #8A2BE2;
+// $SUCCESS-COLOR: #1ABC9C;
+// $MAINTENANCE-COLOR: #FFC107; // Amarillo
+// $GRAY-COLD: #99A2AD;
+// $SUBTLE-BG-LIGHT: #FFFFFF; // <-- DEBE ESTAR AQUÍ
 
 
 // ----------------------------------------
 // LAYOUT PRINCIPAL Y CONTENIDO
 // ----------------------------------------
-.plataforma-layout {
-    display: flex;
-    min-height: 100vh;
-    transition: background-color 0.3s;
-}
+// .plataforma-layout {
+//     display: flex;
+//     min-height: 100vh;
+//     transition: background-color 0.3s;
+// }
 
-.plataforma-contenido {
-    position: relative; /* Necesario para que el contenido de los hijos se posicione */
-    margin-left: $WIDTH-CLOSED;
-    flex-grow: 1;
-    padding: 0; 
-    transition: margin-left 0.3s ease-in-out;
+// .plataforma-contenido {
+//     position: relative; /* Necesario para que el contenido de los hijos se posicione */
+//     margin-left: $WIDTH-CLOSED;
+//     flex-grow: 1;
+//     padding: 0; 
+//     transition: margin-left 0.3s ease-in-out;
     
-    &.shifted {
-        margin-left: $WIDTH-SIDEBAR;
-    }
-}
+//     &.shifted {
+//         margin-left: $WIDTH-SIDEBAR;
+//     }
+// }
 
 .proyecto-detalle-contenido {
     padding: 20px 40px 40px 40px; 
