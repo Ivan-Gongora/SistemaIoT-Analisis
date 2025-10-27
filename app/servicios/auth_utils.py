@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from typing import List, Dict, Any, Optional
 # Importación ajustada desde el directorio superior 'app'
-from ..configuracion import configuracion 
+from app.configuracion import configuracion 
 
 from app.servicios.servicio_simulacion import get_db_connection
 from fastapi import Security # Importación necesaria
