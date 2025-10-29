@@ -141,3 +141,12 @@ CREATE TABLE rol_permisos (
     FOREIGN KEY (permiso_id) REFERENCES permisos(id)
 );
 
+-- Crear el usuario con su contraseña
+CREATE USER 'sistemaiot'@'localhost' IDENTIFIED BY 'raspberry';
+
+-- Conceder todos los privilegios sobre la base de datos 'sistemaiota_db'
+GRANT ALL PRIVILEGES ON sistemaiotA_db.* TO 'sistemaiot'@'localhost';
+
+-- Aplicar los cambios de privilegios
+FLUSH PRIVILEGES;
+
