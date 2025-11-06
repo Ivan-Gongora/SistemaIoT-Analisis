@@ -68,19 +68,16 @@ async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
                 WHERE v.campo_id = cs.id 
                 ORDER BY v.fecha_hora_lectura DESC 
                 LIMIT 1
-            ) AS ultimo_valor
+            ) AS ultimo_valor  -- ✅ MANTENER como Decimal, el modelo lo maneja
         FROM campos_sensores cs
         LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
         WHERE cs.sensor_id = %s;
         """
         cursor.execute(sql, (sensor_id,))
         
-        # 🚨 CORRECCIÓN: Devolver los resultados planos directamente.
-        # Los alias SQL (simbolo_unidad, magnitud_tipo) coinciden con el modelo Pydantic.
         return cursor.fetchall()
         
     except Exception as e:
-        # El endpoint manejará esta HTTPException si ocurre.
         raise HTTPException(status_code=500, detail=f"DB Error al obtener campos: {str(e)}")
     finally:
         if conn: conn.close()

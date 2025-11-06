@@ -11,7 +11,7 @@ from app.configuracion import configuracion
 from app.servicios.servicio_simulacion import get_db_connection, simular_datos_json
 from app.api.modelos.simulacionJson import DatosSimulacionJson
 
-from app.api.modelos.valores import Valor, ValorCrear, ValorActualizar
+from app.api.modelos.valores import Valor
 
 from app.api.modelos.simulacion import DatosSimulacion
 
@@ -221,9 +221,7 @@ async def get_valores_historicos(
 # ----------------------------------------------------------------------
 # FUNCIONES DE SERVICIO DE BASE DE DATOS
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# FUNCIONES DE SERVICIO DE BASE DE DATOS (CORREGIDO)
-# ----------------------------------------------------------------------
+
 async def obtener_valores_por_campo_db(
     campo_id: int, 
     fecha_inicio: Optional[datetime] = None, 
@@ -235,21 +233,21 @@ async def obtener_valores_por_campo_db(
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 🚨 CONSULTA CORREGIDA: Usando el nombre de tabla 'campos_sensores'
+        # ✅ CONSULTA CORREGIDA: Usando fecha_hora_registro en lugar de fecha_dispositivo
         sql = """
         SELECT
             v.id,
             v.valor,
             v.fecha_hora_lectura,
-            v.fecha_dispositivo,
+            v.fecha_hora_registro,  -- ✅ CORREGIDO: fecha_hora_registro existe
             v.campo_id,
             um.magnitud_tipo  
         FROM
             valores v
         JOIN
-            campos_sensores cs ON v.campo_id = cs.id  -- 👈 CORRECCIÓN AQUÍ
+            campos_sensores cs ON v.campo_id = cs.id
         LEFT JOIN
-            unidades_medida um ON cs.unidad_medida_id = um.id -- 👈 Y AQUÍ: usando cs.unidad_medida_id
+            unidades_medida um ON cs.unidad_medida_id = um.id
         WHERE
             v.campo_id = %s
         """
@@ -268,7 +266,56 @@ async def obtener_valores_por_campo_db(
         return cursor.fetchall()
         
     except Exception as e:
-        # Esto capturará el error de MySQL y lo devolverá como 500
-        raise HTTPException(status_code=500, detail=f"DB Error al obtener valores (Verifique la sintaxis SQL): {str(e)}")
+        raise HTTPException(status_code=500, detail=f"DB Error al obtener valores: {str(e)}")
     finally:
         if conn: conn.close()
+
+
+# async def obtener_valores_por_campo_db(
+#     campo_id: int, 
+#     fecha_inicio: Optional[datetime] = None, 
+#     fecha_fin: Optional[datetime] = None
+# ) -> List[Dict[str, Any]]:
+    
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 🚨 CONSULTA CORREGIDA: Usando el nombre de tabla 'campos_sensores'
+#         sql = """
+#         SELECT
+#             v.id,
+#             v.valor,
+#             v.fecha_hora_lectura,
+#             v.fecha_dispositivo,
+#             v.campo_id,
+#             um.magnitud_tipo  
+#         FROM
+#             valores v
+#         JOIN
+#             campos_sensores cs ON v.campo_id = cs.id  -- 👈 CORRECCIÓN AQUÍ
+#         LEFT JOIN
+#             unidades_medida um ON cs.unidad_medida_id = um.id -- 👈 Y AQUÍ: usando cs.unidad_medida_id
+#         WHERE
+#             v.campo_id = %s
+#         """
+#         params = [campo_id]
+        
+#         if fecha_inicio:
+#             sql += " AND v.fecha_hora_lectura >= %s"
+#             params.append(fecha_inicio)
+#         if fecha_fin:
+#             sql += " AND v.fecha_hora_lectura <= %s"
+#             params.append(fecha_fin)
+            
+#         sql += " ORDER BY v.fecha_hora_lectura ASC;"
+        
+#         cursor.execute(sql, params)
+#         return cursor.fetchall()
+        
+#     except Exception as e:
+#         # Esto capturará el error de MySQL y lo devolverá como 500
+#         raise HTTPException(status_code=500, detail=f"DB Error al obtener valores (Verifique la sintaxis SQL): {str(e)}")
+#     finally:
+#         if conn: conn.close()

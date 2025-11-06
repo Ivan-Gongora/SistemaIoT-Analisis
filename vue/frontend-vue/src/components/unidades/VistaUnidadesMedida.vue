@@ -102,7 +102,7 @@ import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 import ModalUnidadMedida from './ModalUnidadMedida.vue'; 
 // 🚨 NOTA: Si usas un modal de eliminación, impórtalo aquí.
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'VistaUnidadesMedida',

@@ -57,7 +57,7 @@ import imagenAnalisis1 from '@/assets/inicio/analisis.png';
 import imagenEstadistica1 from '@/assets/inicio/estadistica.jpg';
 import imagenGrafica1 from '@/assets/inicio/grafico-diagramas.jpg';
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 // const API_BASE_URL = 'http://172.21.235.58:8001';
 
 export default {

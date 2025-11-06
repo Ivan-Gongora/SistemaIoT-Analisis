@@ -65,7 +65,7 @@ import ModalCompartir from './ModalCompartir.vue';
 import ModalEditarProyecto from './ModalEditarProyecto.vue'; 
 
 
-const API_BASE_URL = 'http://127.0.0.1:8001'; 
+// const API_BASE_URL = 'http://127.0.0.1:8001'; 
 
 export default {
     name: 'MisProyectos',

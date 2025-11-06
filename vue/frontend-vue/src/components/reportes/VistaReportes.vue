@@ -82,7 +82,7 @@ import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 // Componente hijo
 import GraficoHistorico from './GraficoHistorico.vue';
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'VistaReportes',

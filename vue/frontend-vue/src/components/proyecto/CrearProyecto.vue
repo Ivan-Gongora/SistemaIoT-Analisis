@@ -45,7 +45,7 @@
 
 <script>
 // 🚨 URL LOCAL ASEGURADA
-const API_BASE_URL = 'http://127.0.0.1:8001'; 
+// const API_BASE_URL = 'http://127.0.0.1:8001'; 
 
 export default {
     name: 'ModalProyecto', // Se usará este nombre ya que ModalProyecto.vue te manda a llamar a este.

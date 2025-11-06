@@ -9,6 +9,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
+    optimizeDeps: {
+    exclude: ['vue-plotly'] // Evita prebundling de vue-plotly
+  },
   server: {
     port: 8081,              // 👈 mismo puerto que usabas con Vue CLI
     host: 'localhost',       // accesible desde localhost

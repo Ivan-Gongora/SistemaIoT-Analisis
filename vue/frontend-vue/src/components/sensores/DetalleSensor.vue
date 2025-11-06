@@ -84,7 +84,7 @@ import ModalCampoSensor from './ModalCampoSensor.vue';
 // 🚨 CORRECCIÓN CRÍTICA: Importar el componente de la tarjeta de CAMPO
 import TarjetaCampoSensor from './TarjetaCampoSensor.vue';
 import ModalEliminarBase from './ModalEliminarBase.vue';
-const API_BASE_URL = 'http://127.0.0.1:8001';
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'DetalleSensor',

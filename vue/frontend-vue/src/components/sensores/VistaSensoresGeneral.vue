@@ -110,7 +110,7 @@ import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 // Importamos los modales si los vamos a usar aquí
 import ModalEditarSensor from './ModalEditarSensor.vue'; 
 import ModalEliminarSensor from './ModalEliminarSensor.vue';
-const API_BASE_URL = 'http://127.0.0.1:8001';
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'VistaSensoresGeneral',

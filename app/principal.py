@@ -60,8 +60,8 @@ aplicacion.include_router(router_unidades, prefix="/api", tags=["Unidades de Med
 aplicacion.include_router(router_campos, prefix="/api", tags=["Campos de Sensor"])
 aplicacion.include_router(router_recepcion, prefix="/api", tags=["Recepción de Datos"])
 
-aplicacion.include_router(energetico_analisis_router, prefix="/api/v1")
-aplicacion.include_router(energetico_proyecciones_router, prefix="/api/v1")
+aplicacion.include_router(energetico_analisis_router, prefix="/api")
+aplicacion.include_router(energetico_proyecciones_router, prefix="/api")
 
 
 @aplicacion.get("/", response_class=HTMLResponse)

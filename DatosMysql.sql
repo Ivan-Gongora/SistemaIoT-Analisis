@@ -1,5 +1,5 @@
 -- ------------------------------------------------------------
--- SCRIPT DE INSERCIÓN DE DATOS DE PRUEBA INICIALES
+-- SCRIPT DE INSERCIÓN DE DATOS DE PRUEBA INICIALES - CORREGIDO
 -- ------------------------------------------------------------
 
 -- PASO 0: DESHABILITAR VERIFICACIÓN DE CLAVES FORÁNEAS
@@ -16,6 +16,7 @@ ALTER TABLE roles AUTO_INCREMENT = 1;
 ALTER TABLE unidades_medida AUTO_INCREMENT = 1;
 ALTER TABLE permisos AUTO_INCREMENT = 1;
 ALTER TABLE proyecto_usuarios AUTO_INCREMENT = 1;
+ALTER TABLE recibos_energia AUTO_INCREMENT = 1;
 
 -- ************************************************************
 -- INSERCIÓN DE DATOS BASE (ROLES, PERMISOS Y UNIDADES)
@@ -119,17 +120,39 @@ INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VA
 ('Humedad Relativa', 'Float', 1, 2),
 ('Temperatura Suelo', 'Float', 2, 1);
 
--- DATOS DE VALORES DE PRUEBA (opcional - para demostración)
-INSERT INTO valores (valor, fecha_medicion, campo_sensor_id) VALUES
-(25.5, NOW() - INTERVAL 1 HOUR, 1),
-(65.2, NOW() - INTERVAL 1 HOUR, 2),
-(22.8, NOW() - INTERVAL 1 HOUR, 3),
-(26.1, NOW(), 1),
-(63.8, NOW(), 2),
-(23.2, NOW(), 3);
+-- DATOS DE VALORES DE PRUEBA (CORREGIDO - usa los nombres de columna correctos)
+INSERT INTO valores (valor, fecha_hora_lectura, fecha_hora_registro, campo_id) VALUES
+(25.500000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 1),
+(65.200000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 2),
+(22.800000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 3),
+(26.100000, NOW(), NOW(), 1),
+(63.800000, NOW(), NOW(), 2),
+(23.200000, NOW(), NOW(), 3);
+
+-- ************************************************************
+-- INSERCIÓN DE DATOS REALES DE RECIBOS DE ENERGÍA
+-- ************************************************************
+
+-- DATOS REALES DE RECIBOS DE ENERGÍA (usuario_id = 1, lote_nombre = 'historico_2021')
+INSERT INTO recibos_energia (usuario_id, periodo, consumo_total_kwh, demanda_maxima_kw, factor_potencia, costo_total, dias_facturados, tarifa, kwh_punta, lote_nombre) VALUES
+(1, '2021-01-31', 29561, 70, 82.88, 83382, 31, 'GDMTH', 4116, 'historico_2021'),
+(1, '2021-02-28', 27960, 73, 82.68, 84520, 28, 'GDMTH', 3860, 'historico_2021'),
+(1, '2021-03-31', 33493, 79, 84.18, 97037, 31, 'GDMTH', 4469, 'historico_2021'),
+(1, '2021-04-30', 33051, 126, NULL, 95215, 30, 'GDMTH', 2271, 'historico_2021'),
+(1, '2021-05-31', 36575, 149, 87.39, 99451, 31, 'GDMTH', 1858, 'historico_2021'),
+(1, '2021-06-30', 38639, 176, 87.35, 105063, 30, 'GDMTH', 2022, 'historico_2021'),
+(1, '2021-07-31', 36969, 150, 87.69, 100381, 31, 'GDMTH', 2057, 'historico_2021'),
+(1, '2021-08-31', 40672, 245, 89.45, 110017, 31, 'GDMTH', 2029, 'historico_2021'),
+(1, '2021-09-30', 49000, 284, 90.96, 136097, 30, 'GDMTH', 1996, 'historico_2021'),
+(1, '2021-10-31', 48804, 272, NULL, 135002, 31, 'GDMTH', 2283, 'historico_2021'),
+(1, '2021-11-30', 45743, 220, 88.75, 143294, 30, 'GDMTH', 5684, 'historico_2021'),
+(1, '2021-12-31', 46339, 213, 89.91, 142688, 31, 'GDMTH', 6548, 'historico_2021');
 
 -- PASO FINAL: HABILITAR VERIFICACIÓN DE CLAVES FORÁNEAS
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- CONFIRMACIÓN DE INSERCIÓN
 SELECT 'Datos de prueba insertados exitosamente' AS Estado;
+SELECT COUNT(*) as total_usuarios FROM usuarios;
+SELECT COUNT(*) as total_recibos FROM recibos_energia;
+SELECT COUNT(*) as total_valores FROM valores;
