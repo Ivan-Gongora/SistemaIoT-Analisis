@@ -24,6 +24,74 @@ from app.api.rutas.recepcion.recepcion import router_recepcion as router_recepci
 
 from app.api.rutas.energetico.analisis import router as energetico_analisis_router
 from app.api.rutas.energetico.proyecciones import router as energetico_proyecciones_router
+# Se importa el treading para doble ejecución de servicios sin detener uno
+import threading, socket, time
+from cryptography.fernet import Fernet
+
+# ===========================================================
+# CONFIGURACIÓN DE SEGURIDAD
+# ===========================================================
+PUERTO_DISCOVERY = 37020 
+FERNET_KEY = b"g5967SRvdflzMRzDxV5BwRE5YfTMF-8PASNQ4RGPFL0="  # <--- clave Fernet generada
+# COORDINADOR_IP = "192.168.1.75"  # IP fija del coordinador (opcional)
+RATE_LIMIT_INTERVAL = 1.0  # segundos entre solicitudes válidas
+
+fernet = Fernet(FERNET_KEY)
+ultimo_tiempo = 0
+
+
+def obtener_ip_local():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip_local = s.getsockname()[0]
+    finally:
+        s.close()
+    return ip_local
+
+
+def udp_discovery():
+    global ultimo_tiempo
+
+    mensaje_respuesta = obtener_ip_local().encode()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("", PUERTO_DISCOVERY))
+    print(f"Esperando broadcast UDP cifrado en el puerto {PUERTO_DISCOVERY}")
+
+    while True:
+        data, addr = sock.recvfrom(1024)
+        ip_remota = addr[0]
+
+        #Filtro de IP dispositivo
+        #if COORDINADOR_IP and ip_remota != COORDINADOR_IP:
+        #   print(f"Petición rechazada de IP no autorizada: {ip_remota}")
+        #  continue
+
+        # Rate limit 
+        tiempo_actual = time.time()
+        if tiempo_actual - ultimo_tiempo < RATE_LIMIT_INTERVAL:
+            print("Demasiadas solicitudes, ignorando...")
+            continue
+        ultimo_tiempo = tiempo_actual
+
+        try:
+            # Desifrado del mensaje
+            mensaje = fernet.decrypt(data).decode()
+        except Exception:
+            print(f"Mensaje no válido o no cifrado desde la ip remota: {ip_remota}")
+            continue
+
+        if mensaje != "DISCOVER_SERVER":
+            print(f"Mensaje inesperado: {mensaje}")
+            continue
+
+        print(f"Solicitud válida y autenticada de ip remota: {ip_remota}")
+        sock.sendto(mensaje_respuesta, addr)
+        print(f"IP del servidor enviada: {mensaje_respuesta.decode()}")
+
+
+# Lanzar hilo paralelo para escuchar broadcast
+threading.Thread(target=udp_discovery, daemon=True).start()
 
 
 aplicacion = FastAPI()
