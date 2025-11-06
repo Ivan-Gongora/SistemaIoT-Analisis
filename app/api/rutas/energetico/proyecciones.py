@@ -1,11 +1,85 @@
-from fastapi import APIRouter, HTTPException, Query,Body, Depends
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Query,Body, Depends, logger
+from typing import Dict, Any,List, Optional
 
 from app.servicios.energetico.analizador_historico import AnalizadorHistorico
 from app.servicios.energetico.predictor_consumo import PredictorConsumo
+from app.servicios.energetico.generador_escenarios import GeneradorEscenarios
 
+from app.api.modelos.energetico.energetico import EscenarioPayload
+
+from app.servicios.energetico.dependencias import get_generador_escenarios
 from app.servicios.energetico.dependencias import get_analizador
+from app.servicios.auth_utils import get_current_user_id 
+from app.db.crud.recibos_crud import get_nombres_lotes_by_user_id 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/energetico", tags=["Predicciones Energéticas"])
+
+@router.get("/lotes_disponibles", 
+            response_model=List[str], # El endpoint devolverá una lista de strings
+            summary="Obtiene la lista de nombres de lotes de recibos disponibles para el usuario actual")
+async def obtener_lotes_disponibles(
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Retorna una lista con los nombres únicos de los lotes de recibos de energía
+    que el usuario actual ha cargado o tiene asociados en el sistema.
+    """
+    logger.info(f"[{user_id}] Solicitud para obtener lotes disponibles.")
+    try:
+        nombres_lotes = get_nombres_lotes_by_user_id(user_id)
+        if not nombres_lotes:
+            logger.warning(f"[{user_id}] No se encontraron lotes para el usuario.")
+            return [] # Devuelve una lista vacía si no hay lotes
+        
+        logger.info(f"[{user_id}] Lotes encontrados: {nombres_lotes}")
+        return nombres_lotes
+    except Exception as e:
+        logger.error(f"[{user_id}] Error al obtener lotes disponibles: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al obtener lotes disponibles: {str(e)}")
+
+@router.post("/simular/escenario_personalizado",
+             response_model=Dict[str, Any],
+             summary="Ejecuta simulación de costos y consumo futuro con lotes seleccionados")
+async def simular_escenario_con_lotes_o_todos(
+    payload: EscenarioPayload = Body(..., description="Parámetros de inflación, crecimiento y eficiencia, incluyendo lotes y horizonte"),
+    generador_escenarios: GeneradorEscenarios = Depends(get_generador_escenarios), # ✅ Correcto, ahora se importa desde dependencias
+    user_id: int = Depends(get_current_user_id) 
+):
+    """
+    Ejecuta una simulación personalizada aplicando tasas de crecimiento, eficiencia e inflación,
+    utilizando los datos históricos de los lotes energéticos especificados.
+    """
+    logger.info(f"[{user_id}] Solicitud de simulación con {payload.meses_a_predecir} meses y lotes: {payload.lotes_seleccionados}")
+
+    if not payload.lotes_seleccionados:
+        raise HTTPException(status_code=400, detail="Debes seleccionar al menos un lote de datos para la simulación.")
+
+    try:
+        resultados = await generador_escenarios.simular_escenario_personalizado(payload)
+        
+        if 'error' in resultados:
+            logger.error(f"[{user_id}] Error en simulación (servicio): {resultados['error']}")
+            raise HTTPException(status_code=500, detail=resultados['error'])
+
+        return {
+            "status": "success",
+            "data": resultados,
+            "message": "Simulación de escenario generada correctamente"
+        }
+        
+    except HTTPException as e:
+        logger.error(f"[{user_id}] HTTPException en simular_escenario: {e.detail}")
+        raise e
+    except Exception as e:
+        import traceback
+        logger.error(f"[{user_id}] Error inesperado en el endpoint simular_escenario: {traceback.format_exc()}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fatal en la simulación: {str(e)}")
+
+
+
+
 
 @router.get("/optimizacion/recomendaciones")
 async def obtener_recomendaciones_optimizacion():
