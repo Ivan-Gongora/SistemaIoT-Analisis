@@ -19,7 +19,10 @@ import VistaGeneralUnidades from '@/components/unidades/VistaUnidadesMedida.vue'
 import DetalleSensor from '@/components/sensores/DetalleSensor.vue';
 import GeneralSensores from '@/components/sensores/VistaSensoresGeneral.vue';
 import VistaReportes from '@/components/reportes/VistaReportes.vue';
-
+import MenuGestionDatosEnergeticos from '@/components/reportes/VistaGestionDatosEnergeticos.vue';
+// import VistaSimuladorEnergetico from '@/components/reportes/VistaSimuladorEnergetico.vue';
+import VistaResumenEstadistico from '@/components/reportes/VistaResumenEstadistico.vue';
+// ----------------------------------------------------------------
 // ... el resto de tu código de rutas y router
 
 const routes = [
@@ -103,11 +106,29 @@ const routes = [
         path: '/sensores',
         name: 'GeneralSensores',
         component: GeneralSensores
-    },{
+    },
+    {
         path: '/reportes', // Ruta principal de reportes
         name: 'VistaReportes',
         component: VistaReportes
     },
+    {
+      path: '/menu-gestion-datos-energeticos',
+      name: 'MenuGestionDatosEnergeticos',
+      component: MenuGestionDatosEnergeticos
+    },
+    // {
+    //   path: '/simulador-energetico',
+    //   name: 'VistaSimuladorEnergetico',
+    //   component: VistaSimuladorEnergetico
+    // },
+    {
+      path: '/resumen-estadistico',
+      name: 'VistaResumenEstadistico',
+      component: VistaResumenEstadistico
+    }
+    
+    
     
 ];
 
@@ -139,7 +160,10 @@ const protectedRoutes = [
     'MenuGestion',
     'DetalleSensor',
     'GeneralSensores',
-    'VistaReportes'
+    'VistaReportes',
+    'MenuGestionDatosEnergeticos',
+    // 'VistaSimuladorEnergetico',
+    'VistaResumenEstadistico'
 
 ];
 

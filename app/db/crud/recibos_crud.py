@@ -1,7 +1,7 @@
 # app/db/crud/recibos_crud.py
 
 import pymysql
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional,Tuple
 import logging
 
 # Asumo que esta función existe en tu proyecto
@@ -78,3 +78,34 @@ def get_all_recibos_by_lotes(user_id: int, lotes: Optional[List[str]] = None) ->
     finally:
         if conn:
             conn.close()
+            
+            
+def insertar_multiples_recibos(
+    conn: pymysql.connections.Connection, 
+    registros: List[Tuple]
+) -> int:
+    """
+    Inserta una lista de tuplas de datos de recibos de energía en la base de datos.
+    
+    Args:
+        conn: Objeto de conexión a la base de datos PyMySQL.
+        registros: Lista de tuplas, donde cada tupla contiene los valores
+                   para una fila de recibo en el orden correcto de las columnas.
+                   (usuario_id, periodo, consumo_total_kwh, demanda_maxima_kw, 
+                    costo_total, dias_facturados, factor_potencia, tarifa, 
+                    kwh_punta, fecha_carga, lote_nombre)
+    Returns:
+        El número de filas insertadas.
+    """
+    cursor = conn.cursor()
+    columnas_db = [
+        'usuario_id', 'periodo', 'consumo_total_kwh', 'demanda_maxima_kw', 
+        'costo_total', 'dias_facturados', 'factor_potencia', 'tarifa', 
+        'kwh_punta', 'fecha_carga', 'lote_nombre'
+    ]
+    placeholders = ', '.join(['%s'] * len(columnas_db))
+    query = f"INSERT INTO recibos_energia ({', '.join(columnas_db)}) VALUES ({placeholders})"
+    
+    num_inserted = cursor.executemany(query, registros)
+    cursor.close()
+    return num_inserted

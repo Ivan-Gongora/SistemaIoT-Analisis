@@ -97,6 +97,8 @@ export default {
                 // Grupo 2: Análisis y Reportes
                 // Datos Históricos (Tu vista actual de reportes)
                 { path: '/reportes', label: 'Datos Históricos', icon: 'bi bi-bar-chart-line-fill' }, 
+
+                {path: '/menu-gestion-datos-energeticos', label: 'Gestión de Datos Energéticos', icon: 'bi bi-lightning-fill' },
                  
                 // Análisis Avanzado
                 { path: '/analisis', label: 'Análisis Avanzado', icon: 'bi bi-funnel-fill' }, 

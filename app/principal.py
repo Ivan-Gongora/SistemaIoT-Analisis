@@ -24,8 +24,7 @@ from app.api.rutas.recepcion.recepcion import router_recepcion as router_recepci
 
 from app.api.rutas.energetico.analisis import router as energetico_analisis_router
 from app.api.rutas.energetico.proyecciones import router as energetico_proyecciones_router
-
-
+from app.api.rutas.energetico.gestion_datos import router as energetico_gestion_datos_router # <-- ¡CORREGIDO!
 aplicacion = FastAPI()
 
 aplicacion.add_middleware(
@@ -62,6 +61,7 @@ aplicacion.include_router(router_recepcion, prefix="/api", tags=["Recepción de 
 
 aplicacion.include_router(energetico_analisis_router, prefix="/api")
 aplicacion.include_router(energetico_proyecciones_router, prefix="/api")
+aplicacion.include_router(energetico_gestion_datos_router, prefix="/api")
 
 
 @aplicacion.get("/", response_class=HTMLResponse)
