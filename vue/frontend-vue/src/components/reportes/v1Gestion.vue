@@ -83,25 +83,21 @@
               
               <div v-else class="lista-lotes">
                 <p class="ayuda-texto">Selecciona uno o más lotes para habilitar las herramientas:</p>
-                
                 <div
-                  v-for="loteNombre in lotesDisponibles"
-                  :key="loteNombre"
+                  v-for="lote in lotesDisponibles"
+                  :key="lote"
                   class="checkbox-lote"
-                  @click="toggleLote(loteNombre)"
-                  :class="{ 'seleccionado': lotesSeleccionados.includes(loteNombre) }"
+                  @click="toggleLote(lote)"
+                  :class="{ 'seleccionado': lotesSeleccionados.includes(lote) }"
                 >
-                  <i :class="lotesSeleccionados.includes(loteNombre) ? 'bi bi-check-circle-fill' : 'bi bi-circle'"></i>
-                  
-                  <label :for="`lote-${loteNombre}`">{{ loteNombre }}</label>
-                  
+                  <i :class="lotesSeleccionados.includes(lote) ? 'bi bi-check-circle-fill' : 'bi bi-circle'"></i>
+                  <label :for="`lote-${lote}`">{{ lote }}</label>
                   <input
-                    type="checkbox"
-                    :value="loteNombre"
-                    v-model="lotesSeleccionados"
-                    :id="`lote-${loteNombre}`"
-                    hidden
-                  />
+            type="checkbox"
+            :value="lote.nombre"
+            v-model="lotesSeleccionadosNombres"
+            :id="'lote-' + lote.id"
+          />
                 </div>
               </div>
               <div v-if="lotesError" class="mensaje-error">
@@ -132,24 +128,25 @@
                     Ir a Simulación de Escenario
                   </button>
                 </router-link>
-
+<!-- VistaResumenEstadistico -->
                 <router-link :to="{ name: 'VistaResumenEstadistico', query: { lotes: lotesSeleccionados } }" custom v-slot="{ navigate }">
                   <button @click="navigate" :disabled="!lotesSeleccionados.length" class="boton-herramienta boton-secundario">
                     <i class="bi bi-clipboard-data-fill"></i>
                     Ver Análisis Descriptivo
                   </button>
                 </router-link>
+                
               </div>
             </div>
           </div> 
         </div> 
       </div> 
     </div>
+   
   </div>
 </template>
 
 <script>
-// --- Imports ---
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 
@@ -178,8 +175,8 @@ export default {
       loteNombreVacio: false,
 
       // Estado para la selección de lotes
-      lotesDisponibles: [], // Array de STRINGS (e.g., ["historico_2021", "Deepseek2024"])
-      lotesSeleccionados: [], // Array de STRINGS seleccionados
+      lotesDisponibles: [], 
+      lotesSeleccionados: [], 
       isLoadingLotes: false,
       lotesError: null,
     };
@@ -269,7 +266,7 @@ export default {
         if (response.ok) {
           this.mensajeCarga = resultado.message || "Datos cargados exitosamente.";
           this.tipoMensajeCarga = 'success';
-          await this.obtenerLotesUsuario(); // 🎯 Refrescar la lista de lotes (y recargar la selección)
+          await this.obtenerLotesUsuario(); // Refrescar la lista de lotes
           this.archivoSeleccionado = null;
           this.nombreArchivo = '';
           this.inputLoteNombre = '';
@@ -303,7 +300,7 @@ export default {
       const token = localStorage.getItem('accessToken');
       if (!token) { this.lotesError = "No autenticado."; this.isLoadingLotes = false; return; }
 
-      const API_URL = `${API_BASE_URL}/api/energetico/lotes_disponibles`; 
+      const API_URL = `${API_BASE_URL}/api/energetico/lotes_disponibles`; // 🎯 Endpoint de lotes disponibles
 
       try {
         const response = await fetch(API_URL, {
@@ -312,9 +309,9 @@ export default {
         });
 
         if (response.ok) {
-          const data = await response.json(); 
-          this.lotesDisponibles = data; // 🎯 Asigna el ARRAY DE STRINGS
-          this.cargarSeleccionLotesDesdeLocalStorage();
+          const data = await response.json(); // Data es directamente el array de strings
+          this.lotesDisponibles = data; 
+          this.cargarSeleccionLotesDesdeLocalStorage(); // Intenta restaurar selección previa
         } else if (response.status === 401 || response.status === 403) {
           localStorage.removeItem('accessToken'); this.$router.push('/'); this.lotesError = "Sesión expirada.";
         } else {
@@ -329,12 +326,12 @@ export default {
       }
     },
 
-    toggleLote(loteNombre) { // 🎯 Este método maneja el clic en el DIV
-      const index = this.lotesSeleccionados.indexOf(loteNombre);
+    toggleLote(lote) {
+      const index = this.lotesSeleccionados.indexOf(lote);
       if (index > -1) {
         this.lotesSeleccionados.splice(index, 1); // Quitar
       } else {
-        this.lotesSeleccionados.push(loteNombre); // Añadir
+        this.lotesSeleccionados.push(lote); // Añadir
       }
     },
 

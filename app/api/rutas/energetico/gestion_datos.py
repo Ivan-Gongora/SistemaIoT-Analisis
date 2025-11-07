@@ -7,6 +7,8 @@ import logging
 from app.servicios.auth_utils import get_current_user_id 
 # 🎯 Importar la nueva función de servicio
 from app.servicios.energetico.gestion_datos_servicio import procesar_y_guardar_csv_recibos
+# 🚨 Importar la función de invalidación de caché
+from app.servicios.energetico.dependencias import invalidate_user_dataframe_cache 
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,10 @@ async def cargar_datos_csv(
             lote_nombre=lote_nombre,
             user_id=current_user_id
         )
-
+        
+        # --- ¡AQUÍ ES DONDE INVALIDAMOS LA CACHÉ! ---
+        invalidate_user_dataframe_cache(current_user_id)
+        
         return {"message": f"Datos cargados exitosamente al lote '{lote_nombre}': {num_registros} registros insertados."}
 
     except ValueError as ve:
