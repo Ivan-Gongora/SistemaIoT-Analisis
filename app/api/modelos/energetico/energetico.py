@@ -106,7 +106,7 @@ class AnalisisPayload(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "lotes_seleccionados": ["default", "Recibos 2025 IA"]
+                "lotes_seleccionados": ["default"]
             }
         }
 

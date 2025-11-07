@@ -263,7 +263,7 @@ class AnalizadorHistorico:
             logger.error(f"Error detallado en estadísticas: {str(e)}", exc_info=True)
             return {"error": f"Error en estadísticas detalladas: {str(e)}"}
     
-    async def obtener_muestra_datos(self, limite: int = 10, df_para_analizar: Optional[pd.DataFrame] = None) -> List[Dict]:
+    async def obtener_muestra_datos(self, limite: int = 12, df_para_analizar: Optional[pd.DataFrame] = None) -> List[Dict]:
         """Obtener muestra de datos para verificación."""
         df_target = df_para_analizar if df_para_analizar is not None else self._df_completo
 
