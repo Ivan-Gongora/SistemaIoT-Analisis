@@ -7,7 +7,6 @@
         subtitulo="Proyección de escenarios de consumo y costos energéticos institucionales."
         @toggle-sidebar="toggleSidebar"
         :is-sidebar-open="isSidebarOpen"
-        :is-dark="isDark"
       />
 
       <div class="simulador-principal-contenido">
@@ -68,43 +67,32 @@
             
             <div class="resumen-costos-grid">
               
-              <div class="tarjeta-resumen tarjeta-base" 
-                   title="Costo total proyectado de la energía si no se realizan cambios ni optimizaciones en el consumo o tarifas. Es el punto de referencia para comparar con el escenario simulado.">
+              <div class="tarjeta-resumen tarjeta-base" title="Costo total proyectado sin aplicar ningún cambio de escenario. Representa el valor base de comparación.">
                 <span class="titulo-resumen">Costo Base ({{ meses }} m)</span>
                 <p class="valor-grande">{{ formatCurrency(simulacionResultado.total_costo_base_mxn) }}</p>
               </div>
 
-              <div class="tarjeta-resumen tarjeta-simulado" 
-                   title="Costo total proyectado de la energía considerando la inflación, el crecimiento del consumo y las mejoras de eficiencia que has configurado en los parámetros.">
+              <div class="tarjeta-resumen tarjeta-simulado" title="Costo total proyectado aplicando los parámetros del escenario actual (inflación, crecimiento, eficiencia).">
                 <span class="titulo-resumen">Costo Simulado ({{ meses }} m)</span>
                 <p class="valor-grande">{{ formatCurrency(simulacionResultado.total_costo_simulado_mxn) }}</p>
               </div>
 
               <div class="tarjeta-resumen tarjeta-variacion" 
                    :class="simulacionResultado.variacion_costo_total_mxn <= 0 ? 'variacion-negativa' : 'variacion-positiva'"
-                   :title="simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro total estimado al comparar el costo simulado con el costo base. Un valor negativo es un ahorro, uno positivo es un gasto adicional.' : 'Gasto extra total estimado al comparar el costo simulado con el costo base. Un valor positivo es un gasto adicional, uno negativo es un ahorro.'">
+                   :title="simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro total estimado al comparar el costo simulado con el costo base.' : 'Gasto extra estimado al comparar el costo simulado con el costo base.'">
                 <span class="titulo-resumen">Variación vs. Base</span>
                 <p class="valor-grande">
                     {{ formatCurrency(simulacionResultado.variacion_costo_total_mxn) }}
                 </p>
                 <span class="leyenda-variacion">
-                    ({{ simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro' : 'Gasto Extra' }})
+                   ({{ simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro' : 'Gasto Extra' }})
                 </span>
               </div>
             </div>
             
             <div class="grafica-simulador-contenedor">
-              <h3 class="panel-titulo">
-                  Proyección de Costos: Escenario Base vs. Simulado
-                  
-                  <i class="bi bi-info-circle-fill info-icon"
-                     data-bs-toggle="popover"
-                     data-bs-trigger="hover focus" data-bs-html="true" data-bs-placement="top" data-bs-title="Análisis de Proyección" data-bs-content="&lt;p&gt;Esta gráfica ilustra la evolución mensual de tus costos energéticos.&lt;/p&gt;&lt;p&gt;La línea &lt;strong&gt;&quot;Costo Base (Sin cambios)&quot;&lt;/strong&gt; (generalmente punteada) muestra lo que pagarías si no aplicaras ninguna estrategia de optimización o ajuste a los parámetros.&lt;/p&gt;&lt;p&gt;La línea &lt;strong&gt;&quot;Costo Simulado&quot;&lt;/strong&gt; (generalmente sólida) te presenta tus costos esperados al aplicar los parámetros de simulación (inflación, crecimiento de consumo, reducción por eficiencia) que has configurado.&lt;/p&gt;&lt;p&gt;Observa la diferencia entre ambas líneas: un espacio por debajo de la línea base indica ahorro, mientras que un espacio por encima muestra un gasto adicional proyectado.&lt;/p&gt;">
-                  </i>
-              </h3>
-              
               <GraficoSimulacionECharts
-                v-if="chartData && chartData.labels && chartData.labels.length > 0"
+                v-if="chartData.labels.length > 0"
                 :chart-data="chartData"
                 :is-dark="isDark"
               />
@@ -129,7 +117,7 @@
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 import GraficoSimulacionECharts from '../graficos/GraficoSimulacionECharts.vue';
-import * as bootstrap from 'bootstrap';
+
 // // 🎯 Asumimos que API_BASE_URL se inyecta globalmente o se importa desde config
 // import { API_BASE_URL } from '@/config/apiConfig'; 
 
@@ -170,7 +158,6 @@ export default {
     };
   },
   mounted() {
-    this.initPopovers();
     this.detectarTemaSistema();
     this.cargarLotesDesdeUrl(); // Solo carga los lotes, no ejecuta la simulación
     if (window.matchMedia) {
@@ -185,19 +172,6 @@ export default {
   },
   methods: {
     // --- Métodos de Layout y Carga Inicial ---
-    initPopovers() {
-        // Selecciona todos los elementos que tienen data-bs-toggle="popover"
-        const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-        
-        // Itera sobre ellos y crea una nueva instancia de Popover para cada uno
-        [...popoverTriggerList].map(popoverTriggerEl => {
-            // Asegúrate de destruir cualquier instancia anterior para evitar duplicados si el componente se remonta
-            if (bootstrap.Popover.getInstance(popoverTriggerEl)) {
-                bootstrap.Popover.getInstance(popoverTriggerEl).dispose();
-            }
-            return new bootstrap.Popover(popoverTriggerEl);
-        });
-    },
     toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
     handleThemeChange(event) { 
       this.isDark = event.matches; // <-- Actualiza isDark cuando cambia el tema del sistema
@@ -651,21 +625,6 @@ export default {
   border-radius: $border-radius;
   box-shadow: $box-shadow-sm;
   padding: 1.5rem;
-    .panel-titulo {
-        color: var(--text-color-primary); /* Usa la variable de tema */
-        font-size: 1.2rem;
-        font-weight: 600;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    
-        .info-icon {
-        color: $PRIMARY-PURPLE;
-        font-size: 1.3rem;
-        cursor: pointer;
-        }
-    }
 }
 
 .mensaje-placeholder {

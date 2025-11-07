@@ -1,7 +1,7 @@
 <template>
   <div class="chart-card" :class="{ 'theme-dark': isDark }">
     <div class="card-body">
-      <h5 class="card-title">Proyección de Costos: Escenario Base vs. Simulado</h5>
+  
       <v-chart class="chart" :option="chartOption" autoresize />
     </div>
   </div>
