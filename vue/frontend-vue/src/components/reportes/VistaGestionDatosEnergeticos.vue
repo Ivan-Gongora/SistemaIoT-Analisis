@@ -126,7 +126,7 @@
 
               <div class="botones-herramientas">
                 <!-- VistaSimuladorEnergetico -->
-                <router-link :to="{ name: '', query: { lotes: lotesSeleccionados } }" custom v-slot="{ navigate }">
+                <router-link :to="{ name: 'VistaSimuladorEnergetico', query: { lotes: lotesSeleccionados } }" custom v-slot="{ navigate }">
                   <button @click="navigate" :disabled="!lotesSeleccionados.length" class="boton-herramienta boton-primario">
                     <i class="bi bi-graph-up"></i>
                     Ir a Simulación de Escenario

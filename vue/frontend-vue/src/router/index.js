@@ -20,7 +20,7 @@ import DetalleSensor from '@/components/sensores/DetalleSensor.vue';
 import GeneralSensores from '@/components/sensores/VistaSensoresGeneral.vue';
 import VistaReportes from '@/components/reportes/VistaReportes.vue';
 import MenuGestionDatosEnergeticos from '@/components/reportes/VistaGestionDatosEnergeticos.vue';
-// import VistaSimuladorEnergetico from '@/components/reportes/VistaSimuladorEnergetico.vue';
+import VistaSimuladorEnergetico from '@/components/reportes/VistaSimuladorEnergetico.vue';
 import VistaResumenEstadistico from '@/components/reportes/VistaResumenEstadistico.vue';
 // ----------------------------------------------------------------
 // ... el resto de tu código de rutas y router
@@ -117,11 +117,11 @@ const routes = [
       name: 'MenuGestionDatosEnergeticos',
       component: MenuGestionDatosEnergeticos
     },
-    // {
-    //   path: '/simulador-energetico',
-    //   name: 'VistaSimuladorEnergetico',
-    //   component: VistaSimuladorEnergetico
-    // },
+    {
+      path: '/simulador-energetico',
+      name: 'VistaSimuladorEnergetico',
+      component: VistaSimuladorEnergetico
+    },
     {
       path: '/resumen-estadistico',
       name: 'VistaResumenEstadistico',
@@ -162,7 +162,7 @@ const protectedRoutes = [
     'GeneralSensores',
     'VistaReportes',
     'MenuGestionDatosEnergeticos',
-    // 'VistaSimuladorEnergetico',
+    'VistaSimuladorEnergetico',
     'VistaResumenEstadistico'
 
 ];
