@@ -37,39 +37,57 @@ def ejecutar_agregacion(conn):
     # 5. ON DUPLICATE KEY UPDATE: Si el script se ejecuta de nuevo,
     #    actualiza los registros en lugar de fallar.
     
+    # 
     sql_aggregate = """
     INSERT INTO valores_agregados 
-        (campo_id, fecha, hora, valor_min, valor_max, valor_avg, total_registros)
+        (campo_id, fecha, hora, valor_min, valor_max, valor_avg, valor_sum, total_registros)
     SELECT
-        campo_id,
-        DATE(fecha_hora_lectura) AS fecha,
-        HOUR(fecha_hora_lectura) AS hora,
-        MIN(valor) AS valor_min,
-        MAX(valor) AS valor_max,
-        AVG(valor) AS valor_avg,
+        v.campo_id,
+        DATE(v.fecha_hora_lectura) AS fecha,
+        HOUR(v.fecha_hora_lectura) AS hora,
+        
+        -- Min y Max se calculan para todos
+        MIN(v.valor) AS valor_min,
+        MAX(v.valor) AS valor_max,
+        
+        -- 🚨 Lógica Condicional:
+        -- Si el nombre es 'Movimiento', AVG es NULL.
+        CASE 
+            WHEN cs.nombre = 'Movimiento' THEN NULL
+            ELSE AVG(v.valor)
+        END AS valor_avg,
+        
+        -- Si el nombre es 'Movimiento', calculamos SUM().
+        CASE
+            WHEN cs.nombre = 'Movimiento' THEN SUM(v.valor)
+            ELSE NULL
+        END AS valor_sum,
+        
         COUNT(*) AS total_registros
     FROM
-        valores
+        valores v
+    JOIN 
+        campos_sensores cs ON v.campo_id = cs.id 
     GROUP BY
-        campo_id, fecha, hora
+        v.campo_id, cs.nombre, fecha, hora 
+    
+    -- Actualizamos los campos correspondientes
     ON DUPLICATE KEY UPDATE
         valor_min = VALUES(valor_min),
         valor_max = VALUES(valor_max),
-        valor_avg = VALUES(valor_avg),
+        valor_avg = VALUES(valor_avg),       
+        valor_sum = VALUES(valor_sum),       
         total_registros = VALUES(total_registros);
     """
     
     try:
         with conn.cursor() as cursor:
             print("Vaciando resúmenes anteriores (TRUNCATE)...")
-            # Vaciamos la tabla para asegurar datos limpios en esta prueba
             cursor.execute("TRUNCATE TABLE valores_agregados;") 
             
-            print("Ejecutando agregación (leyendo 'valores' y escribiendo en 'valores_agregados')...")
-            print("Esto puede tardar unos segundos...")
+            print("Ejecutando agregación inteligente (AVG/SUM)...")
             start_time = time.time()
             
-            # Ejecutar la consulta de agregación principal
             affected_rows = cursor.execute(sql_aggregate)
             
             conn.commit()

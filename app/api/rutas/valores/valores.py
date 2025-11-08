@@ -292,11 +292,40 @@ async def obtener_valores_por_campo_db(
 
         # 2. RANGO LARGO (más de 2 días): Consultar datos agregados
         else:
+            # print(f"--- CONSULTA RANGO LARGO (AGREGADA): {rango_en_dias} días ---")
+            # sql = """
+            # SELECT
+            #     va.id, 
+            #     va.valor_avg AS valor, -- 👈 Alias AS valor
+            #     TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_lectura,
+            #     TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_registro,
+            #     va.campo_id,
+            #     um.magnitud_tipo
+            # FROM 
+            #     valores_agregados va
+            # JOIN 
+            #     campos_sensores cs ON va.campo_id = cs.id
+            # LEFT JOIN 
+            #     unidades_medida um ON cs.unidad_medida_id = um.id
+            # WHERE 
+            #     va.campo_id = %s
+            #     AND va.fecha BETWEEN %s AND %s
+            # ORDER BY va.fecha, va.hora ASC;
+            # """
+            # params = [campo_id, fecha_inicio.date(), fecha_fin.date()]
             print(f"--- CONSULTA RANGO LARGO (AGREGADA): {rango_en_dias} días ---")
             sql = """
             SELECT
                 va.id, 
-                va.valor_avg AS valor, -- 👈 Alias AS valor
+                
+                -- 🚨 Lógica Condicional:
+                -- Si el nombre es 'Movimiento', devuelve la SUMA,
+                -- de lo contrario, devuelve el PROMEDIO.
+                CASE
+                    WHEN cs.nombre = 'Movimiento' THEN va.valor_sum
+                    ELSE va.valor_avg
+                END AS valor, -- 👈 Alias AS valor
+                
                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_lectura,
                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_registro,
                 va.campo_id,
@@ -304,7 +333,7 @@ async def obtener_valores_por_campo_db(
             FROM 
                 valores_agregados va
             JOIN 
-                campos_sensores cs ON va.campo_id = cs.id
+                campos_sensores cs ON va.campo_id = cs.id -- 👈 UNIMOS para saber el nombre
             LEFT JOIN 
                 unidades_medida um ON cs.unidad_medida_id = um.id
             WHERE 

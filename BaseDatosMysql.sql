@@ -170,6 +170,7 @@ CREATE TABLE valores_agregados (
   campo_id INT NOT NULL,
   fecha DATE NOT NULL,
   hora TINYINT NOT NULL,
+  valor_sum DECIMAL(15,6) NULL DEFAULT NULL;
   valor_min DECIMAL(15,6),
   valor_max DECIMAL(15,6),
   valor_avg DECIMAL(15,6),
