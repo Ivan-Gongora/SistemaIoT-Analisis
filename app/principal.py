@@ -8,8 +8,14 @@ from dotenv import load_dotenv
 
 # 🚨 Cargar variables de entorno una vez
 load_dotenv() 
-
+# -----------------------------------------------------
+# 🚨 1. IMPORTACIONES PARA EL SCHEDULER
+# -----------------------------------------------------
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from datetime import datetime, timedelta
 from app.configuracion import ConfiguracionSimulacion
+from app.servicios.servicio_agregacion import ejecutar_agregacion_horaria # 👈 Importa la función
 
 # Importación de Routers
 from app.api.rutas.valores.valores import router as valores_router
@@ -98,7 +104,28 @@ threading.Thread(target=udp_discovery, daemon=True).start()
 
 
 aplicacion = FastAPI()
+# -----------------------------------------------------
+# 🚨 2. LÓGICA DEL SCHEDULER
+# -----------------------------------------------------
+scheduler = AsyncIOScheduler()
 
+@aplicacion.on_event("startup")
+async def iniciar_tareas_programadas():
+    """
+    Se ejecuta cuando FastAPI arranca.
+    Inicia el trabajo de agregación para que se ejecute cada hora.
+    """
+    print("Iniciando el programador de tareas (Scheduler)...")
+    
+    scheduler.add_job(
+        ejecutar_agregacion_horaria,
+        trigger=IntervalTrigger(hours=1), # 👈 Se ejecuta cada hora
+        id="trabajo_agregacion_horaria",
+        replace_existing=True
+    )
+    scheduler.start()
+    
+    
 aplicacion.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

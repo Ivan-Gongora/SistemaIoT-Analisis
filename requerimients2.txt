@@ -9,3 +9,4 @@ jupyter
 prophet
 aiohttp
 openai
+apscheduler

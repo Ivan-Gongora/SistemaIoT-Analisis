@@ -1,209 +1,248 @@
 <template>
   <div class="chart-card" :class="{ 'theme-dark': isDark }">
-    <h4 class="chart-title">{{ titulo }}</h4>
+    <h4 class="chart-title">{{ chartTitle }}</h4>
     
-    <div v-if="loading" class="chart-loading">Cargando datos...</div>
+    <div v-if="loading" class="chart-loading">
+      <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando datos...
+    </div>
     <div v-else-if="error" class="chart-error">{{ error }}</div>
     
     <div v-else class="chart-wrapper">
-      <Line :data="chartData" :options="chartOptions" />
+      <v-chart :option="chartOption" autoresize />
     </div>
   </div>
 </template>
 
 <script>
-// Imports de Chart.js (Line y los módulos)
-import { Line } from 'vue-chartjs';
-import { 
-    Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend 
-} from 'chart.js';
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { LineChart } from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  DataZoomComponent, // 👈 Para el Zoom/Drill-down
+} from 'echarts/components';
+import VChart from 'vue-echarts';
+import { ref, watch, onMounted, computed } from 'vue';
 
-ChartJS.register(
-    CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend
-);
+// Registro de componentes de ECharts
+use([
+  CanvasRenderer, LineChart, TitleComponent, TooltipComponent, 
+  LegendComponent, GridComponent, DataZoomComponent
+]);
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
-    name: 'GraficoHistorico',
-    components: { Line },
-    props: {
-        campoId: { type: Number, required: true },
-        titulo: { type: String, default: 'Histórico de Datos' },
-        simboloUnidad: { type: String, default: '' },
-        isDark: { type: Boolean, default: false }
-    },
-    data() {
-        return {
-            loading: true,
-            error: null,
-            magnitudTipo: 'N/A', // 👈 Nuevo estado para guardar el tipo de magnitud
-            chartData: { labels: [], datasets: [] },
-            chartOptions: {
-                responsive: true,
-                maintainAspectRatio: false,
-                // ... (Opciones de Chart.js)
-            }
-        };
-    },
-    mounted() {
-        this.cargarDatosHistoricos();
-        this.actualizarOpcionesTema();
-    },
-    watch: {
-        campoId: {
-        immediate: true, // Esto hace que se ejecute una vez al montar
-        handler() {
-            if (this.campoId && this.campoId > 0) {
-                 this.cargarDatosHistoricos();
-            }
-        }
-    },
-       
-        isDark() {
-            this.actualizarOpcionesTema();
-        }
-    },
-    methods: {
-        async cargarDatosHistoricos() {// 🚨 CORRECCIÓN CRÍTICA: Bloquear la ejecución si campoId no es un número válido
-    if (!this.campoId || this.campoId <= 0 || isNaN(this.campoId)) {
-        this.loading = false;
-        this.error = 'Seleccione un campo de medición válido.';
-        return; // Detener la ejecución
-    }
+  name: 'GraficoHistorico',
+  components: { VChart },
+  props: {
+    campoId: { type: Number, required: true },
+    titulo: { type: String, default: 'Histórico de Datos' },
+    fechaInicio: { type: String, required: true }, // ISO String
+    fechaFin: { type: String, required: true },   // ISO String
+    isDark: { type: Boolean, default: false }
+  },
+  
+  setup(props) {
+    const loading = ref(true);
+    const error = ref(null);
+    const chartOption = ref({});
+    const chartTitle = ref(props.titulo); // Título dinámico
 
+    // Colores del tema
+    const gridColor = computed(() => props.isDark ? 'rgba(228, 230, 235, 0.2)' : 'rgba(51, 51, 51, 0.2)');
+    const textColor = computed(() => props.isDark ? '#E4E6EB' : '#333333');
+
+    // --- LÓGICA PRINCIPAL DE CARGA DE DATOS ---
+   const cargarDatosHistoricos = async () => {
+  // 1. Validar que tenemos un ID
+  if (!props.campoId || props.campoId <= 0) {
+    loading.value = false;
+    error.value = 'ID de campo no válido.';
+    return;
+  }
+  // 🚨 NUEVA VALIDACIÓN: Validar fechas
+      if (!props.fechaInicio || !props.fechaFin) {
+        loading.value = false;
+        error.value = 'Rango de fechas no válido.';
+        return; 
+      }
+  loading.value = true;
+  error.value = null;
+  const token = localStorage.getItem('accessToken');
+
+  // 🚨 CORRECCIÓN: Mover la construcción de la URL aquí (ANTES de usarla)
+  const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
+  url.searchParams.append('fecha_inicio', props.fechaInicio);
+  url.searchParams.append('fecha_fin', props.fechaFin);
+
+  try {
+    // Ahora 'url' ya está definida y se puede usar
+    const response = await fetch(url.toString(), {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) throw new Error('Fallo al cargar datos del gráfico.');
     
-    this.loading = true; this.error = null;
-    const token = localStorage.getItem('accessToken');
+    const valores = await response.json();
     
-    try {
-        // 🚨 CRÍTICO: Usar la ruta renombrada
-        const response = await fetch(`${API_BASE_URL}/api/valores/historico-campo/${this.campoId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!response.ok) {
-            throw new Error('Fallo al cargar datos del gráfico.');
-        }
-        
-        const valores = await response.json();
-        
-        if (valores.length === 0) {
-            this.chartData = { labels: ['Sin datos'], datasets: [{ data: [] }] };
-            throw new Error('No se encontraron valores históricos para este campo.');
-        }
-        
-        // 🚨 Extracción de la información de la unidad (del primer registro)
-        const primerValor = valores[0]; 
-        const magnitudLabel = primerValor.magnitud_tipo || this.titulo;
-        // Asumo que el backend también devuelve 'simbolo' en el JOIN, si no, quedará vacío.
-        const simbolo = primerValor.simbolo || ''; 
-        
-        const labels = valores.map(v => new Date(v.fecha_hora_lectura).toLocaleTimeString());
-        const dataPoints = valores.map(v => parseFloat(v.valor));
-
-        this.chartData = {
-            labels: labels,
-            datasets: [
-                {
-                    // 🚨 Etiqueta final del gráfico
-                    label: `${magnitudLabel} (${simbolo})`, 
-                    backgroundColor: '#8A2BE2',
-                    borderColor: '#8A2BE2',
-                    data: dataPoints,
-                    tension: 0.1 
-                }
-            ]
-        };
-        // 🚨 Importante: Actualizar opciones de tema para reflejar el color de ejes
-        this.actualizarOpcionesTema(); 
-
-    } catch (err) {
-        this.error = err.message;
-    } finally {
-        this.loading = false;
+    if (valores.length === 0) {
+      chartOption.value = {}; // Limpia el gráfico
+      throw new Error('No se encontraron valores históricos para este rango.');
     }
-},
-        actualizarOpcionesTema() {
-            // Actualiza los colores de los ejes y leyendas según el tema
-            const colorEjes = this.isDark ? '#E4E6EB' : '#333333';
-            this.chartOptions = {
-                ...this.chartOptions, // Mantener opciones anteriores
-                scales: {
-                    y: { ticks: { color: colorEjes } },
-                    x: { ticks: { color: colorEjes } }
-                },
-                plugins: {
-                    legend: { labels: { color: colorEjes } }
-                }
-            };
+
+    // 3. Procesar datos para ECharts
+    const primerValor = valores[0];
+    const magnitud = primerValor.magnitud_tipo || props.titulo;
+    // 🚨 CORRECCIÓN: Asumir que el backend devuelve 'simbolo_unidad'
+    const simbolo = primerValor.simbolo_unidad || ''; 
+    chartTitle.value = `${magnitud} (${simbolo})`; // Actualiza el título
+    
+    // ECharts prefiere pares [timestamp, valor]
+    const dataPoints = valores.map(v => [
+      v.fecha_hora_lectura, 
+      parseFloat(v.valor)
+    ]);
+
+    // 4. Actualizar las opciones del gráfico
+    actualizarOpciones(dataPoints, magnitud);
+
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    loading.value = false;
+  }
+};
+
+    // --- FUNCIÓN PARA CONSTRUIR EL GRÁFICO ECHARTS ---
+    const actualizarOpciones = (data, magnitud) => {
+      chartOption.value = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' }
+        },
+        grid: {
+          left: '50px', // Espacio para el eje Y
+          right: '20px',
+          bottom: '70px' // Espacio para el DataZoom
+        },
+        xAxis: {
+          type: 'time',
+          axisLine: { lineStyle: { color: gridColor.value } },
+          axisLabel: { color: textColor.value }
+        },
+        yAxis: {
+          type: 'value',
+          scale: true, // Permite que el eje se ajuste
+          axisLabel: { 
+            color: textColor.value,
+            formatter: '{value}' // Aquí podrías añadir el símbolo si es fijo
+          },
+          splitLine: { lineStyle: { color: gridColor.value } }
+        },
+        // 🚨 CRÍTICO: Habilita el Zoom y el Drill-down
+        dataZoom: [
+          {
+            type: 'slider', // Barra de deslizamiento inferior
+            start: 0,
+            end: 100,
+            bottom: 10,
+            height: 25,
+            backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.5)' : 'rgba(255, 255, 255, 0.5)',
+            borderColor: gridColor.value,
+            textStyle: { color: textColor.value }
+          },
+          {
+            type: 'inside' // Zoom con la rueda del ratón
+          }
+        ],
+        series: [{
+          name: magnitud,
+          data: data,
+          type: 'line',
+          showSymbol: false,
+          color: '#8A2BE2', // Color púrpura
+          lineStyle: { width: 2 },
+        }]
+      };
+    };
+
+    // --- WATCHERS ---
+    // Observa los props y recarga el gráfico si cambian
+    watch(
+      () => [props.campoId, props.fechaInicio, props.fechaFin], 
+      cargarDatosHistoricos, 
+      { immediate: true } // Carga los datos al montar
+    );
+
+    // Observa el tema para cambiar colores
+    watch(
+      () => props.isDark, 
+      () => {
+        // Recarga las opciones con los nuevos colores
+        if (chartOption.value && chartOption.value.series) {
+          actualizarOpciones(chartOption.value.series[0].data, chartOption.value.series[0].name);
         }
-    }
+      }
+    );
+
+    return { loading, error, chartOption, chartTitle };
+  }
 }
 </script>
 
-
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES DE PALETA (Copiadas de tu Tarjeta)
-// ----------------------------------------
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $GRAY-COLD: #99A2AD;
-// $LIGHT-TEXT: #E4E6EB;
-// $DARK-TEXT: #333333;
-// $SUBTLE-BG-DARK: #2B2B40;
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-// $DARK-BG-CONTRAST: #1A1A2E; 
+$PRIMARY-PURPLE: #8A2BE2;
+$GRAY-COLD: #99A2AD;
+$LIGHT-TEXT: #E4E6EB;
+$DARK-TEXT: #333333;
+$SUBTLE-BG-DARK: #2B2B40;
+$SUBTLE-BG-LIGHT: #FFFFFF;
+$DANGER-COLOR: #e74c3c;
 
 .chart-card {
     border-radius: 12px;
     padding: 20px;
-    height: 350px; 
+    height: 380px; /* Un poco más de altura para el dataZoom */
     display: flex;
     flex-direction: column;
-    transition: background-color 0.3s, box-shadow 0.3s, color 0.3s; 
+    transition: background-color 0.3s, box-shadow 0.3s;
 }
 .chart-wrapper {
     position: relative;
     flex-grow: 1;
+    width: 100%;
+    height: 100%; /* Asegura que ECharts tome el espacio */
 }
 .chart-title {
-    font-size: 1.2rem;
+    font-size: 1.1rem; /* Título más sutil */
     font-weight: 600;
     margin-bottom: 15px;
-    transition: color 0.3s;
 }
 .chart-loading, .chart-error {
     text-align: center;
-    margin-top: 50px;
+    margin: auto; /* Centrar vertical y horizontalmente */
     font-style: italic;
-    color: $GRAY-COLD; 
-    transition: color 0.3s;
+}
+.chart-error {
+    color: $DANGER-COLOR;
 }
 
-/* ----------------------------------------
-   TEMAS
-   ---------------------------------------- */
-
-/* TEMA CLARO */
+/* ------------------- TEMAS ------------------- */
 .theme-light .chart-card {
     background-color: $SUBTLE-BG-LIGHT;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    color: $DARK-TEXT; /* Color de texto general */
-}
-.theme-light .chart-title {
     color: $DARK-TEXT;
 }
-
-/* TEMA OSCURO (Asegura color de fondo y título) */
 .theme-dark .chart-card {
-    background-color: $SUBTLE-BG-DARK; /* Fondo de tarjeta oscuro (consistente) */
+    background-color: $SUBTLE-BG-DARK;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    color: $LIGHT-TEXT; /* Color de texto general para la tarjeta */
+    color: $LIGHT-TEXT;
 }
 .theme-dark .chart-title {
-    color: $LIGHT-TEXT; /* El título debe ser claro */
+    color: $LIGHT-TEXT;
 }
 .theme-dark .chart-loading, .theme-dark .chart-error {
     color: $GRAY-COLD;
