@@ -220,16 +220,16 @@ DELIMITER ;
 -- Paso 11: USUARIO Y PERMISOS (VERSIÓN MEJORADA)
 -- -----------------------------------------------------------
 
--- Eliminar usuario si existe (para evitar errores en reinstalaciones)
+-- 4️⃣ Eliminar usuario si ya existe
 DROP USER IF EXISTS 'sistemaiot'@'localhost';
 
--- Crear usuario
+-- 5️⃣ Crear el usuario con contraseña
 CREATE USER 'sistemaiot'@'localhost' IDENTIFIED BY 'raspberry';
 
--- Otorgar privilegios
+-- 6️⃣ Otorgar privilegios completos sobre la base de datos
 GRANT ALL PRIVILEGES ON sistemaiotA_db.* TO 'sistemaiot'@'localhost';
 
--- Aplicar cambios
+-- 7️⃣ Aplicar los cambios para que sean permanentes
 FLUSH PRIVILEGES;
 
 SELECT 'Base de datos IoT creada exitosamente!' as Mensaje;
