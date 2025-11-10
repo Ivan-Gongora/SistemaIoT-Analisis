@@ -1,22 +1,59 @@
 import pymysql
 import time
+from datetime import datetime, timedelta
 from app.servicios.servicio_simulacion import get_db_connection
 
-async def ejecutar_agregacion_horaria():
+async def ejecutar_agregacion_horaria(procesar_historico=False, dias_historia=30):
     """
-    Lee la tabla 'valores' de la última hora, calcula los agregados
-    (AVG o SUM según el tipo de campo) y los inserta o actualiza 
-    en 'valores_agregados'.
+    Agregación horaria que puede procesar datos históricos o recientes
+    
+    Args:
+        procesar_historico: Si es True, procesa datos históricos
+        dias_historia: Número de días hacia atrás para procesar (solo si procesar_historico=True)
     """
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Ejecutando agregación horaria inteligente...")
-
-            # 🚨 CONSULTA SQL ACTUALIZADA (CON LÓGICA CONDICIONAL) 🚨
-            sql_aggregate = """
+            current_time = datetime.now()
+            print(f"\n[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 🔄 INICIANDO AGREGACIÓN HORARIA")
+            
+            # 🚨 CONFIGURAR FILTRO DE TIEMPO SEGÚN MODO
+            if procesar_historico:
+                # Modo histórico: procesar datos de los últimos N días
+                fecha_limite = f"NOW() - INTERVAL {dias_historia} DAY"
+                print(f"[{current_time.strftime('%H:%M:%S')}] 📅 MODO HISTÓRICO: Procesando últimos {dias_historia} días")
+            else:
+                # Modo normal: solo últimas 2 horas
+                fecha_limite = "NOW() - INTERVAL 2 HOUR"
+                print(f"[{current_time.strftime('%H:%M:%S')}] ⏰ MODO NORMAL: Procesando últimas 2 horas")
+            
+            # 🚨 DIAGNÓSTICO MEJORADO
+            cursor.execute(f"""
+                SELECT 
+                    COUNT(*) as total_valores,
+                    COUNT(DISTINCT campo_id) as campos_distintos,
+                    COUNT(DISTINCT DATE(fecha_hora_lectura)) as dias_distintos,
+                    MIN(fecha_hora_lectura) as fecha_min,
+                    MAX(fecha_hora_lectura) as fecha_max
+                FROM valores 
+                WHERE fecha_hora_lectura >= {fecha_limite}
+            """)
+            stats_valores = cursor.fetchone()
+            print(f"[{current_time.strftime('%H:%M:%S')}] 📊 VALORES: {stats_valores['total_valores']} registros")
+            print(f"[{current_time.strftime('%H:%M:%S')}] 📊 RANGO: {stats_valores['fecha_min']} a {stats_valores['fecha_max']}")
+            
+            if stats_valores['total_valores'] == 0:
+                print(f"[{current_time.strftime('%H:%M:%S')}] ⚠️  No hay datos para procesar en el rango seleccionado")
+                return {
+                    "status": "success", 
+                    "message": "No hay datos nuevos para procesar",
+                    "affected_rows": 0
+                }
+            
+            # 🚨 CONSULTA PRINCIPAL MEJORADA
+            sql_aggregate = f"""
             INSERT INTO valores_agregados 
                 (campo_id, fecha, hora, valor_min, valor_max, valor_avg, valor_sum, total_registros)
             SELECT
@@ -24,19 +61,14 @@ async def ejecutar_agregacion_horaria():
                 DATE(v.fecha_hora_lectura) AS fecha,
                 HOUR(v.fecha_hora_lectura) AS hora,
                 
-                -- Min y Max se calculan para todos
                 MIN(v.valor) AS valor_min,
                 MAX(v.valor) AS valor_max,
                 
-                -- Lógica Condicional para AVG:
-                -- Si el nombre del campo es 'Movimiento', AVG es NULL.
                 CASE 
                     WHEN cs.nombre = 'Movimiento' THEN NULL
                     ELSE AVG(v.valor)
                 END AS valor_avg,
                 
-                -- Lógica Condicional para SUM:
-                -- Si el nombre es 'Movimiento', calculamos SUM().
                 CASE
                     WHEN cs.nombre = 'Movimiento' THEN SUM(v.valor)
                     ELSE NULL
@@ -45,36 +77,47 @@ async def ejecutar_agregacion_horaria():
                 COUNT(*) AS total_registros
             FROM
                 valores v
-            -- 🚨 Unimos con campos_sensores para saber el nombre del campo
             JOIN 
                 campos_sensores cs ON v.campo_id = cs.id
             WHERE
-                -- Procesa solo los datos de las últimas 2 horas (margen de seguridad)
-                v.fecha_hora_lectura >= NOW() - INTERVAL 2 HOUR
+                v.fecha_hora_lectura >= {fecha_limite}
+                AND NOT EXISTS (
+                    SELECT 1 
+                    FROM valores_agregados va 
+                    WHERE va.campo_id = v.campo_id 
+                    AND va.fecha = DATE(v.fecha_hora_lectura)
+                    AND va.hora = HOUR(v.fecha_hora_lectura)
+                )
             GROUP BY
-                v.campo_id, cs.nombre, fecha, hora
-            
-            -- Actualiza los campos correspondientes
-            ON DUPLICATE KEY UPDATE
-                valor_min = VALUES(valor_min),
-                valor_max = VALUES(valor_max),
-                valor_avg = VALUES(valor_avg),       -- Actualiza AVG (será NULL para Movimiento)
-                valor_sum = VALUES(valor_sum),       -- Actualiza SUM (será NULL para otros)
-                total_registros = valores_agregados.total_registros + VALUES(total_registros);
+                v.campo_id, cs.nombre, fecha, hora;
             """
             
+            # Ejecutar agregación
+            start_time = time.time()
             affected_rows = cursor.execute(sql_aggregate)
             conn.commit()
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Agregación completada. Filas afectadas/actualizadas: {affected_rows}")
+            end_time = time.time()
+            
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ AGREGACIÓN COMPLETADA")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Registros INSERTADOS: {affected_rows}")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏱️  Duración: {end_time - start_time:.2f} segundos")
+            
+            return {
+                "status": "success",
+                "affected_rows": affected_rows,
+                "duration_seconds": end_time - start_time,
+                "mode": "historical" if procesar_historico else "recent"
+            }
 
     except Exception as e:
-        print(f"Error en agregación programada: {e}")
+        error_msg = f"❌ Error en agregación: {str(e)}"
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {error_msg}")
         if conn:
             conn.rollback()
+        return {"status": "error", "message": str(e)}
     finally:
         if conn:
             conn.close()
-
 
 
 # import pymysql

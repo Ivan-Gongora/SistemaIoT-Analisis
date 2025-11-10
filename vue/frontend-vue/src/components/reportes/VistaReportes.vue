@@ -88,7 +88,8 @@
             </select>
           </div>
 
-        </div> <div class="campo-selector-container" :class="{ 'theme-dark': isDark }" v-if="campos.length > 0">
+        </div> 
+        <div class="campo-selector-container" :class="{ 'theme-dark': isDark }" v-if="campos.length > 0">
             <h4 class="selector-titulo">6. Seleccione los campos a graficar (1 o más)</h4>
             <div v-if="loadingCampos" class="loading-message">Cargando campos...</div>
             <div class="checkbox-grid">

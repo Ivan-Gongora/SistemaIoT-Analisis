@@ -7,8 +7,9 @@ import aiohttp
 
 # --- Configuración ---
 API_URL = "http://127.0.0.1:8001/api/guardar_json/"
-CSV_FILE = "simulacion_aula_1mes.csv"
+CSV_FILE = "DATOS2_2.csv"
 ID_PROYECTO_PRUEBA = "1" # Basado en tu JSON de ejemplo
+ID_D9SPOSITIVO_PRUEBA = "3" # Basado en tu JSON de ejemplo
 MAX_CONCURRENT_REQUESTS = 100 # Número de solicitudes a enviar al mismo tiempo
 # ---------------------
 
@@ -20,7 +21,7 @@ def transformar_fila_a_json(row):
     try:
         payload = {
             "proyecto": ID_PROYECTO_PRUEBA,
-            "dispositivo": row['Dispositivo_id'],
+            "dispositivo": ID_D9SPOSITIVO_PRUEBA, 
             "fecha": row['Fecha'],
             "hora": row['Hora'],
             "id_paquete": int(row['Paquete_id']),
@@ -35,9 +36,9 @@ def transformar_fila_a_json(row):
                 {
                     "nombre": "SCT-013-000",
                     "datos": {
-                        "Energia": float(row['Energia']),
-                        "Corriente": float(row['Corriente']),
-                        "Potencia": float(row['Potencia'])
+                        "Energia": float(row['Corriente']),
+                        "Corriente": float(row['Potencia']),
+                        "Potencia": float(row['Energia'])
                     }
                 },
                 {

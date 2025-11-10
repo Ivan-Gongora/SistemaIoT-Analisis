@@ -96,6 +96,8 @@ export default {
 
                 // Grupo 2: Análisis y Reportes
                 // Datos Históricos (Tu vista actual de reportes)
+                {path: '/tiempo-real', label: 'Datos en Tiempo Real', icon: 'bi bi-clock-history' },
+
                 { path: '/reportes', label: 'Datos Históricos', icon: 'bi bi-bar-chart-line-fill' }, 
 
                 {path: '/menu-gestion-datos-energeticos', label: 'Gestión de Datos Energéticos', icon: 'bi bi-lightning-fill' },

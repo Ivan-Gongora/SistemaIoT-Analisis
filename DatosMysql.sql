@@ -109,26 +109,32 @@ INSERT INTO dispositivos (nombre, descripcion, tipo, latitud, longitud, habilita
 ('NodeMCU Zona Norte', 'Dispositivo ESP8266 para medir condiciones cerca de la puerta', 'Microcontrolador', 20.5, -87.0, TRUE, NOW(), 1),
 ('Estación Exterior', 'Dispositivo principal para datos exteriores', 'Raspberry Pi', 20.501, -87.001, TRUE, NOW(), 2);
 
--- SENSORES DE PRUEBA
+-- SEGUNDO: INSERTAR SENSORES
 INSERT INTO sensores (nombre, tipo, fecha_creacion, habilitado, dispositivo_id) VALUES
 ('DHT22-Aire', 'Temperatura/Humedad', NOW(), TRUE, 1),
-('DS18B20-Suelo', 'Temperatura', NOW(), TRUE, 1);
+('SCT-013-000', 'Energía/Corriente/Potencia', NOW(), TRUE, 1),
+('BH1750', 'Iluminación', NOW(), TRUE, 1),
+('PIR HC-SR501', 'Movimiento', NOW(), TRUE, 1);
 
--- CAMPOS DE SENSORES DE PRUEBA
+-- TERCERO: INSERTAR CAMPOS_SENSORES (con IDs correctos de unidades_medida)
 INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES
-('Temperatura Ambiente', 'Float', 1, 1),
-('Humedad Relativa', 'Float', 1, 2),
-('Temperatura Suelo', 'Float', 2, 1);
+('Temperatura', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'), (SELECT id FROM unidades_medida WHERE nombre = 'Celsius')),
+('Humedad', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'), (SELECT id FROM unidades_medida WHERE nombre = 'Humedad Relativa')),
+('Energia', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Kilowatt-hora')),
+('Corriente', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Amperios')),
+('Potencia', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Watts')),
+('Iluminacion', 'Integer', (SELECT id FROM sensores WHERE nombre = 'BH1750'), (SELECT id FROM unidades_medida WHERE nombre = 'Lux')),
+('Movimiento', 'Integer', (SELECT id FROM sensores WHERE nombre = 'PIR HC-SR501'), (SELECT id FROM unidades_medida WHERE nombre = 'Booleano (Estado)'));
 
--- DATOS DE VALORES DE PRUEBA (CORREGIDO - usa los nombres de columna correctos)
+-- CUARTO: INSERTAR VALORES (usando los datos del JSON)
 INSERT INTO valores (valor, fecha_hora_lectura, fecha_hora_registro, campo_id) VALUES
-(25.500000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 1),
-(65.200000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 2),
-(22.800000, NOW() - INTERVAL 1 HOUR, NOW() - INTERVAL 1 HOUR, 3),
-(26.100000, NOW(), NOW(), 1),
-(63.800000, NOW(), NOW(), 2),
-(23.200000, NOW(), NOW(), 3);
-
+(29.500000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Temperatura' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'))),
+(87.900000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Humedad' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'))),
+(123.700000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Energia' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'))),
+(23.450000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Corriente' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'))),
+(245.100000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Potencia' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'))),
+(684.000000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Iluminacion' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'BH1750'))),
+(0.000000, NOW(), NOW(), (SELECT id FROM campos_sensores WHERE nombre = 'Movimiento' AND sensor_id = (SELECT id FROM sensores WHERE nombre = 'PIR HC-SR501')));
 -- ************************************************************
 -- INSERCIÓN DE DATOS REALES DE RECIBOS DE ENERGÍA
 -- ************************************************************

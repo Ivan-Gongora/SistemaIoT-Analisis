@@ -45,37 +45,6 @@ async def get_valores_historicos(
         raise HTTPException(status_code=500, detail=f"Error al obtener valores: {str(e)}")
 
 
-# ----------------------------------------------------------------------
-# ENDPOINT (INTELIGENTE) DE DATOS HISTÓRICOS (Existente)
-# ----------------------------------------------------------------------
-# @router.get("/valores/historico-campo/{campo_id}", response_model=List[Valor])
-# async def get_valores_historicos(
-#     campo_id: int,
-#     fecha_inicio: Optional[datetime] = Query(None, description="Filtro de fecha inicial (ISO 8601)"),
-#     fecha_fin: Optional[datetime] = Query(None, description="Filtro de fecha final (ISO 8601)"),
-#     current_user_id: int = Depends(get_current_user_id)
-# ):
-#     """
-#     Obtiene los registros históricos de un campo de sensor específico.
-#     OPTIMIZADO: Usa 'valores_agregados' para rangos largos.
-#     """
-#     try:
-#         if not fecha_fin:
-#             fecha_fin = datetime.now()
-#         if not fecha_inicio:
-#             fecha_inicio = fecha_fin - timedelta(days=7) 
-
-#         valores = await obtener_valores_por_campo_db(campo_id, fecha_inicio, fecha_fin)
-        
-#         if not valores:
-#             return []
-        
-#         return valores
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error al obtener valores: {str(e)}")
 
 # ----------------------------------------------------------------------
 # 🚨 ENDPOINT NUEVO: Obtener rango de fechas (MIN/MAX)
@@ -100,71 +69,30 @@ async def get_rango_fechas_dispositivo(
         raise HTTPException(status_code=500, detail=f"Error al obtener rango de fechas: {str(e)}")
 
 
-# ----------------------------------------------------------------------
-# FUNCIÓN DE SERVICIO DE BASE DE DATOS (Optimizada)
-# ----------------------------------------------------------------------
+# ... (tus otros imports) ...
 
-# async def obtener_valores_por_campo_db(
-#     campo_id: int, 
-#     fecha_inicio: datetime,
-#     fecha_fin: datetime
-# ) -> List[Dict[str, Any]]:
-    
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+# ----------------------------------------------------------------------
+# 🚨 ENDPOINT NUEVO: Obtener el ÚLTIMO valor de un campo (Tiempo Real)
+# ----------------------------------------------------------------------
+@router.get("/valores/ultimo/{campo_id}", response_model=Valor)
+async def get_ultimo_valor(
+    campo_id: int,
+    current_user_id: int = Depends(get_current_user_id)
+):
+    """
+    Obtiene el registro de valor más reciente (última lectura)
+    para un campo de sensor específico.
+    """
+    try:
+        valor = await obtener_ultimo_valor_db(campo_id)
+        if not valor:
+             raise HTTPException(status_code=404, detail="No se encontraron valores para este campo.")
+        return valor
         
-#         rango_en_dias = (fecha_fin - fecha_inicio).days
-        
-#         # 1. RANGO CORTO (ej. 2 días o menos): Consultar datos crudos
-#         if rango_en_dias <= 2:
-#             print(f"--- CONSULTA RANGO CORTO (RAW): {rango_en_dias} días ---")
-#             sql = """
-#             SELECT
-#                 v.id, v.valor, v.fecha_hora_lectura, v.fecha_hora_registro, v.campo_id,
-#                 um.magnitud_tipo  
-#             FROM valores v
-#             JOIN campos_sensores cs ON v.campo_id = cs.id
-#             LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
-#             WHERE
-#                 v.campo_id = %s
-#                 AND v.fecha_hora_lectura BETWEEN %s AND %s
-#             ORDER BY v.fecha_hora_lectura ASC;
-#             """
-#             params = [campo_id, fecha_inicio, fecha_fin]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el último valor: {str(e)}")
 
-#         # 2. RANGO LARGO (más de 2 días): Consultar datos agregados
-#         else:
-#             print(f"--- CONSULTA RANGO LARGO (AGREGADA): {rango_en_dias} días ---")
-#             sql = """
-#             SELECT
-#                 va.id, 
-#                 va.valor_avg AS valor,
-#                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_lectura,
-#                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_registro,
-#                 va.campo_id,
-#                 um.magnitud_tipo
-#             FROM 
-#                 valores_agregados va
-#             JOIN 
-#                 campos_sensores cs ON va.campo_id = cs.id
-#             LEFT JOIN 
-#                 unidades_medida um ON cs.unidad_medida_id = um.id
-#             WHERE 
-#                 va.campo_id = %s
-#                 AND va.fecha BETWEEN %s AND %s
-#             ORDER BY va.fecha, va.hora ASC;
-#             """
-#             params = [campo_id, fecha_inicio.date(), fecha_fin.date()]
-        
-#         cursor.execute(sql, params)
-#         return cursor.fetchall()
-        
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"DB Error al obtener valores: {str(e)}")
-#     finally:
-#         if conn: conn.close()
+
 
 # ----------------------------------------------------------------------
 # 🚨 FUNCIÓN DE SERVICIO NUEVA: Para el rango de fechas
@@ -199,58 +127,9 @@ async def obtener_rango_fechas_db(dispositivo_id: int) -> Dict[str, Any]:
     finally:
         if conn: conn.close()
 
-# # app/api/rutas/valores/valores.py
-# # 🚨 VERSIÓN FINAL (OPTIMIZACIÓN ACTIVADA)
+# ----------------------------------------------------------------------
+# FUNCIÓN DE SERVICIO DE BASE DE DATOS (Optimizada)
 
-# from fastapi import Path, Body
-# from fastapi import APIRouter, Query, HTTPException, Depends, status
-# from fastapi.responses import JSONResponse
-# from typing import Optional, List, Dict, Any
-# from datetime import datetime, timedelta
-# import pymysql
-
-# from app.servicios.auth_utils import get_current_user_id
-# from app.configuracion import configuracion
-# from app.servicios.servicio_simulacion import get_db_connection
-# from app.api.modelos.valores import Valor
-
-# router = APIRouter()
-
-# # ----------------------------------------------------------------------
-# # ENDPOINT (INTELIGENTE)
-# # ----------------------------------------------------------------------
-# @router.get("/valores/historico-campo/{campo_id}", response_model=List[Valor])
-# async def get_valores_historicos(
-#     campo_id: int,
-#     fecha_inicio: Optional[datetime] = Query(None, description="Filtro de fecha inicial (ISO 8601)"),
-#     fecha_fin: Optional[datetime] = Query(None, description="Filtro de fecha final (ISO 8601)"),
-#     current_user_id: int = Depends(get_current_user_id)
-# ):
-#     """
-#     Obtiene los registros históricos de un campo de sensor específico.
-#     OPTIMIZADO: Usa 'valores_agregados' para rangos largos.
-#     """
-#     try:
-#         if not fecha_fin:
-#             fecha_fin = datetime.now()
-#         if not fecha_inicio:
-#             fecha_inicio = fecha_fin - timedelta(days=7) 
-
-#         valores = await obtener_valores_por_campo_db(campo_id, fecha_inicio, fecha_fin)
-        
-#         if not valores:
-#             return []
-        
-#         return valores
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error al obtener valores: {str(e)}")
-
-# # ----------------------------------------------------------------------
-# # FUNCIÓN DE SERVICIO DE BASE DE DATOS (LÓGICA 'INTELIGENTE' ACTIVADA)
-# # ----------------------------------------------------------------------
 
 async def obtener_valores_por_campo_db(
     campo_id: int, 
@@ -350,6 +229,201 @@ async def obtener_valores_por_campo_db(
         raise HTTPException(status_code=500, detail=f"DB Error al obtener valores: {str(e)}")
     finally:
         if conn: conn.close()
+
+
+# ----------------------------------------------------------------------
+# 🚨 FUNCIÓN DE SERVICIO NUEVA: Para el endpoint de tiempo real
+# ----------------------------------------------------------------------
+async def obtener_ultimo_valor_db(campo_id: int) -> Dict[str, Any]:
+    """
+    Consulta la tabla 'valores' para encontrar el registro más reciente
+    (LIMIT 1) basado en fecha_hora_lectura para un campo_id.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # Esta consulta es EXTREMADAMENTE RÁPIDA gracias al índice
+        # idx_valores_campo_fecha(campo_id, fecha_hora_lectura)
+        sql = """
+        SELECT
+            v.id, v.valor, v.fecha_hora_lectura, v.fecha_hora_registro, v.campo_id,
+            um.magnitud_tipo
+        FROM valores v
+        JOIN campos_sensores cs ON v.campo_id = cs.id
+        LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+        WHERE v.campo_id = %s
+        ORDER BY v.fecha_hora_lectura DESC
+        LIMIT 1; 
+        """
+        
+        cursor.execute(sql, (campo_id,))
+        return cursor.fetchone() # Devuelve solo un registro o None
+        
+    except Exception as e:
+        print(f"Error en DB (obtener_ultimo_valor_db): {e}")
+        raise e
+    finally:
+        if conn: conn.close()
+# ----------------------------------------------------------------------
+# ENDPOINT (INTELIGENTE) DE DATOS HISTÓRICOS (Existente)
+# ----------------------------------------------------------------------
+# @router.get("/valores/historico-campo/{campo_id}", response_model=List[Valor])
+# async def get_valores_historicos(
+#     campo_id: int,
+#     fecha_inicio: Optional[datetime] = Query(None, description="Filtro de fecha inicial (ISO 8601)"),
+#     fecha_fin: Optional[datetime] = Query(None, description="Filtro de fecha final (ISO 8601)"),
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     """
+#     Obtiene los registros históricos de un campo de sensor específico.
+#     OPTIMIZADO: Usa 'valores_agregados' para rangos largos.
+#     """
+#     try:
+#         if not fecha_fin:
+#             fecha_fin = datetime.now()
+#         if not fecha_inicio:
+#             fecha_inicio = fecha_fin - timedelta(days=7) 
+
+#         valores = await obtener_valores_por_campo_db(campo_id, fecha_inicio, fecha_fin)
+        
+#         if not valores:
+#             return []
+        
+#         return valores
+        
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener valores: {str(e)}")
+
+
+
+# ----------------------------------------------------------------------
+# FUNCIÓN DE SERVICIO DE BASE DE DATOS (Optimizada)
+# ----------------------------------------------------------------------
+
+# async def obtener_valores_por_campo_db(
+#     campo_id: int, 
+#     fecha_inicio: datetime,
+#     fecha_fin: datetime
+# ) -> List[Dict[str, Any]]:
+    
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         rango_en_dias = (fecha_fin - fecha_inicio).days
+        
+#         # 1. RANGO CORTO (ej. 2 días o menos): Consultar datos crudos
+#         if rango_en_dias <= 2:
+#             print(f"--- CONSULTA RANGO CORTO (RAW): {rango_en_dias} días ---")
+#             sql = """
+#             SELECT
+#                 v.id, v.valor, v.fecha_hora_lectura, v.fecha_hora_registro, v.campo_id,
+#                 um.magnitud_tipo  
+#             FROM valores v
+#             JOIN campos_sensores cs ON v.campo_id = cs.id
+#             LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+#             WHERE
+#                 v.campo_id = %s
+#                 AND v.fecha_hora_lectura BETWEEN %s AND %s
+#             ORDER BY v.fecha_hora_lectura ASC;
+#             """
+#             params = [campo_id, fecha_inicio, fecha_fin]
+
+#         # 2. RANGO LARGO (más de 2 días): Consultar datos agregados
+#         else:
+#             print(f"--- CONSULTA RANGO LARGO (AGREGADA): {rango_en_dias} días ---")
+#             sql = """
+#             SELECT
+#                 va.id, 
+#                 va.valor_avg AS valor,
+#                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_lectura,
+#                 TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) AS fecha_hora_registro,
+#                 va.campo_id,
+#                 um.magnitud_tipo
+#             FROM 
+#                 valores_agregados va
+#             JOIN 
+#                 campos_sensores cs ON va.campo_id = cs.id
+#             LEFT JOIN 
+#                 unidades_medida um ON cs.unidad_medida_id = um.id
+#             WHERE 
+#                 va.campo_id = %s
+#                 AND va.fecha BETWEEN %s AND %s
+#             ORDER BY va.fecha, va.hora ASC;
+#             """
+#             params = [campo_id, fecha_inicio.date(), fecha_fin.date()]
+        
+#         cursor.execute(sql, params)
+#         return cursor.fetchall()
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"DB Error al obtener valores: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+
+
+# # app/api/rutas/valores/valores.py
+# # 🚨 VERSIÓN FINAL (OPTIMIZACIÓN ACTIVADA)
+
+# from fastapi import Path, Body
+# from fastapi import APIRouter, Query, HTTPException, Depends, status
+# from fastapi.responses import JSONResponse
+# from typing import Optional, List, Dict, Any
+# from datetime import datetime, timedelta
+# import pymysql
+
+# from app.servicios.auth_utils import get_current_user_id
+# from app.configuracion import configuracion
+# from app.servicios.servicio_simulacion import get_db_connection
+# from app.api.modelos.valores import Valor
+
+# router = APIRouter()
+
+# # ----------------------------------------------------------------------
+# # ENDPOINT (INTELIGENTE)
+# # ----------------------------------------------------------------------
+# @router.get("/valores/historico-campo/{campo_id}", response_model=List[Valor])
+# async def get_valores_historicos(
+#     campo_id: int,
+#     fecha_inicio: Optional[datetime] = Query(None, description="Filtro de fecha inicial (ISO 8601)"),
+#     fecha_fin: Optional[datetime] = Query(None, description="Filtro de fecha final (ISO 8601)"),
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     """
+#     Obtiene los registros históricos de un campo de sensor específico.
+#     OPTIMIZADO: Usa 'valores_agregados' para rangos largos.
+#     """
+#     try:
+#         if not fecha_fin:
+#             fecha_fin = datetime.now()
+#         if not fecha_inicio:
+#             fecha_inicio = fecha_fin - timedelta(days=7) 
+
+#         valores = await obtener_valores_por_campo_db(campo_id, fecha_inicio, fecha_fin)
+        
+#         if not valores:
+#             return []
+        
+#         return valores
+        
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener valores: {str(e)}")
+
+# # ----------------------------------------------------------------------
+# # FUNCIÓN DE SERVICIO DE BASE DE DATOS (LÓGICA 'INTELIGENTE' ACTIVADA)
+# # ----------------------------------------------------------------------
+
+
+
+
 
 # # app/api/rutas/valores/valores.py
 # # 🚨 VERSIÓN DE PRUEBA: Optimizaciones deshabilitadas temporalmente.

@@ -22,6 +22,7 @@ import VistaReportes from '@/components/reportes/VistaReportes.vue';
 import MenuGestionDatosEnergeticos from '@/components/reportes/VistaGestionDatosEnergeticos.vue';
 import VistaSimuladorEnergetico from '@/components/reportes/VistaSimuladorEnergetico.vue';
 import VistaResumenEstadistico from '@/components/reportes/VistaResumenEstadistico.vue';
+import VistaTiempoReal from '@/components/reportes/VistaTiempoReal.vue';
 // ----------------------------------------------------------------
 // ... el resto de tu código de rutas y router
 
@@ -126,6 +127,11 @@ const routes = [
       path: '/resumen-estadistico',
       name: 'VistaResumenEstadistico',
       component: VistaResumenEstadistico
+    },
+    {
+      path: '/tiempo-real',
+      name: 'VistaTiempoReal',
+      component: VistaTiempoReal
     }
     
     
@@ -163,7 +169,8 @@ const protectedRoutes = [
     'VistaReportes',
     'MenuGestionDatosEnergeticos',
     'VistaSimuladorEnergetico',
-    'VistaResumenEstadistico'
+    'VistaResumenEstadistico',
+    'VistaTiempoReal'
 
 ];
 
