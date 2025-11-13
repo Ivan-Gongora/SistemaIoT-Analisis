@@ -111,15 +111,15 @@ INSERT INTO dispositivos (nombre, descripcion, tipo, latitud, longitud, habilita
 
 -- SEGUNDO: INSERTAR SENSORES
 INSERT INTO sensores (nombre, tipo, fecha_creacion, habilitado, dispositivo_id) VALUES
-('DHT22-Aire', 'Temperatura/Humedad', NOW(), TRUE, 1),
+('DHT22', 'Temperatura/Humedad', NOW(), TRUE, 1),
 ('SCT-013-000', 'Energía/Corriente/Potencia', NOW(), TRUE, 1),
 ('BH1750', 'Iluminación', NOW(), TRUE, 1),
 ('PIR HC-SR501', 'Movimiento', NOW(), TRUE, 1);
 
 -- TERCERO: INSERTAR CAMPOS_SENSORES (con IDs correctos de unidades_medida)
 INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES
-('Temperatura', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'), (SELECT id FROM unidades_medida WHERE nombre = 'Celsius')),
-('Humedad', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22-Aire'), (SELECT id FROM unidades_medida WHERE nombre = 'Humedad Relativa')),
+('Temperatura', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22'), (SELECT id FROM unidades_medida WHERE nombre = 'Celsius')),
+('Humedad', 'Float', (SELECT id FROM sensores WHERE nombre = 'DHT22'), (SELECT id FROM unidades_medida WHERE nombre = 'Humedad Relativa')),
 ('Energia', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Kilowatt-hora')),
 ('Corriente', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Amperios')),
 ('Potencia', 'Float', (SELECT id FROM sensores WHERE nombre = 'SCT-013-000'), (SELECT id FROM unidades_medida WHERE nombre = 'Watts')),

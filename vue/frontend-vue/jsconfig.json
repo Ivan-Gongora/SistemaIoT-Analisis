@@ -1,9 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "esnext",
     "module": "esnext",
+    "ignoreDeprecations": "6.0",
     "baseUrl": "./",
-    "moduleResolution": "node",
+    
+    // --- CORRECCIÓN ---
+    // Cambia "node" por "bundler". Esto soluciona la advertencia de "baseUrl".
+    "moduleResolution": "bundler", 
+
     "paths": {
       "@/*": [
         "src/*"
@@ -15,5 +20,9 @@
       "dom.iterable",
       "scripthost"
     ]
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

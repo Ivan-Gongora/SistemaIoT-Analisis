@@ -2,83 +2,155 @@
   <div class="modulo-actividad-reciente" :class="{ 'theme-dark': isDark, 'theme-light': !isDark }">
     
     <h3 class="modulo-titulo">Actividad Reciente</h3>
-    <p class="modulo-subtitulo">Eventos del sistema en tiempo real (Por el momento son datos fijos)</p>
+    <p class="modulo-subtitulo">Ultimos eventos del sistema</p>
     
-   <div class="event-list">
-  <div v-for="(event, index) in recentEvents" :key="index" class="event-item">
-    
-    <i :class="getIconClass(event.type)" class="event-icon"></i>
-    
-    <div class="event-details">
-      <p class="event-title">{{ event.title }}</p>
-      <p class="event-source">{{ event.source }}</p>
+    <div v-if="loading" class="loading-message">
+      <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando actividad...
     </div>
-    <span class="event-time">{{ event.time }}</span>
-  </div>
-</div>
+    <div v-else-if="error" class="error-message">
+      <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+    </div>
+    <div v-else-if="recentEvents.length === 0" class="no-data-message">
+      <i class="bi bi-info-circle-fill"></i> No hay actividad reciente.
+    </div>
+    
+    <div v-else class="event-list">
+      <div v-for="(event, index) in recentEvents" :key="index" class="event-item">
+        <i :class="getIconClass(event.tipo)" class="event-icon"></i>
+        <div class="event-details">
+          <p class="event-title">{{ event.titulo }}</p>
+          <p class="event-source">{{ event.fuente }}</p>
+        </div>
+        <span class="event-time">{{ formatRelativeTime(event.fecha) }}</span>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script>
-export default {
-    name: 'ActividadReciente',
-    props: {
-        isDark: {
-            type: Boolean,
-            required: true
-        }
-    },
-    data() {
-        return {
-            // Datos simulados (futura API de eventos)
-            recentEvents: [
-                { type: 'new', title: 'Nuevo dispositivo conectado', source: 'Sensor Temperatura Sala', time: 'Hace 2 minutos' },
-                { type: 'alert', title: 'Alerta de batería baja', source: 'Sensor Industrial A1', time: 'Hace 15 minutos' },
-                { type: 'report', title: 'Reporte generado', source: 'Análisis Semanal Industrial', time: 'Hace 30 minutos' },
-                { type: 'error', title: 'Fallo de conexión crítico', source: 'Gateway Principal', time: 'Hace 1 hora' },
-            ]
-        };
-    },
-    // ActividadReciente.vue <script> (Añadir a methods)
+// Asumo que API_BASE_URL esta definida globalmente (main.js)
+// const API_BASE_URL = 'http://127.0.0.1:8001';
 
-methods: {
-    // 🚨 NUEVA FUNCIÓN: Mapea el tipo de evento al ícono y color de Bootstrap
-    getIconClass(type) {
-        switch (type) {
-            case 'new':
-                return 'bi bi-plus-circle-fill text-success'; // Para nuevo registro
-            case 'alert':
-                return 'bi bi-exclamation-triangle-fill text-warning'; // Para alertas (batería, etc.)
-            case 'report':
-                return 'bi bi-file-earmark-bar-graph-fill text-info'; // Para reportes generados
-            case 'error':
-                return 'bi bi-x-octagon-fill text-danger'; // Para fallos críticos
-            default:
-                return 'bi bi-info-circle-fill';
+export default {
+  name: 'ActividadReciente',
+  props: {
+    isDark: {
+      type: Boolean,
+      required: true
+    }
+  },
+  data() {
+    return {
+      loading: true,
+      error: null,
+      recentEvents: []
+    };
+  },
+  mounted() {
+    this.cargarActividadReciente();
+  },
+  methods: {
+    async cargarActividadReciente() {
+      this.loading = true;
+      this.error = null;
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        this.error = "Error de autenticacion.";
+        this.loading = false;
+        return;
+      }
+
+      try {
+        // Este endpoint ya esta preparado para la nueva tabla
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/actividad-reciente`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'No se pudo cargar la actividad.');
         }
+        
+        this.recentEvents = await response.json();
+        
+      } catch (err) {
+        this.error = err.message;
+        console.error("Error cargando actividad:", err);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // METODO getIconClass ACTUALIZADO
+    getIconClass(type) {
+      if (!type) {
+        return 'bi bi-info-circle-fill';
+      }
+
+      // --- 1. Casos Especiales (Modulo Energia, Alertas) ---
+      switch (type) {
+        case 'LOTE_ENERGIA_CARGADO':
+          return 'bi bi-file-earmark-spreadsheet-fill text-success';
+        case 'SIMULACION_EJECUTADA':
+          return 'bi bi-calculator-fill text-info';
+        case 'ALERTA_GENERADA':
+          return 'bi bi-exclamation-triangle-fill text-warning';
+      }
+
+      // --- 2. Casos Genericos (CRUD) ---
+      // Revisa el sufijo del tipo de evento
+      
+      if (type.endsWith('_CREADO')) {
+          return 'bi bi-plus-circle-fill text-success'; // CREAR
+      }
+      if (type.endsWith('_MODIFICADO')) {
+          return 'bi bi-pencil-fill text-info'; // MODIFICAR
+      }
+      if (type.endsWith('_ELIMINADO')) {
+          return 'bi bi-trash-fill text-danger'; // ELIMINAR
+      }
+
+      // --- 3. Caso por Defecto ---
+      return 'bi bi-info-circle-fill';
     },
     
-}
+    formatRelativeTime(isoString) {
+      const fecha = new Date(isoString);
+      const ahora = new Date();
+      const diffMs = ahora - fecha;
+      const diffMins = Math.round(diffMs / 60000);
+
+      if (diffMins < 1) return "Ahora mismo";
+      if (diffMins < 60) return `Hace ${diffMins} min`;
+      
+      const diffHoras = Math.floor(diffMins / 60);
+      if (diffHoras < 24) return `Hace ${diffHoras} h`;
+      
+      const diffDias = Math.floor(diffHoras / 24);
+      return `Hace ${diffDias} d`;
+    }
+  }
 }
 </script>
 
 <style scoped lang="scss">
 // ----------------------------------------
-// VARIABLES DE LA PALETA
+// VARIABLES DE LA PALETA (Asegurate de tenerlas definidas)
 // ----------------------------------------
-// $LIGHT-TEXT: #E4E6EB;
-// $DARK-TEXT: #333333;
-// $GRAY-COLD: #99A2AD;
-// $SUCCESS-COLOR: #1ABC9C;
-// $ALERT-COLOR: #c69a13; 
-// $ERROR-COLOR: #E74C3C;
-// $INFO-COLOR: #8A2BE2;
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-// $BLUE-MIDNIGHT: #1A1A2E; 
-// $BG-CARD-DARK: #2B2B40; // Fondo de la tarjeta en modo oscuro
+$LIGHT-TEXT: #E4E6EB;
+$DARK-TEXT: #333333;
+$GRAY-COLD: #99A2AD;
+$SUCCESS-COLOR: #1ABC9C;
+$DANGER-COLOR: #E74C3C;
+$INFO-COLOR: #3498DB;
+$WARNING-COLOR: #FFC107;
+$SUBTLE-BG-LIGHT: #FFFFFF;
+$BG-CARD-DARK: #2B2B40; 
 
 // ----------------------------------------
-// ESTILOS PRINCIPALES DEL MÓDULO
+// ESTILOS PRINCIPALES DEL MODULO
 // ----------------------------------------
 .modulo-actividad-reciente {
     padding: 25px;
@@ -108,32 +180,21 @@ methods: {
 
 .event-item {
     display: grid;
-    grid-template-columns: 10px 1fr auto; /* Punto, Detalles, Tiempo */
-    gap: 10px;
-    align-items: center;
-}
-
-// ActividadReciente.vue <style> (Fragmento)
-
-// ----------------------------------------
-// LISTA DE EVENTOS
-// ----------------------------------------
-
-.event-item {
-    display: grid;
-    // 🚨 Reducimos el tamaño de la primera columna para el ícono
     grid-template-columns: 25px 1fr auto; 
     gap: 10px;
     align-items: center;
 }
 
-// 🚨 NUEVA CLASE: Estilo del Ícono
 .event-icon {
-    font-size: 1.1rem; /* Asegura un tamaño visible */
+    font-size: 1.1rem;
     text-align: center;
     width: 25px;
 }
 
+.text-success { color: $SUCCESS-COLOR !important; }
+.text-info { color: $INFO-COLOR !important; }
+.text-warning { color: $WARNING-COLOR !important; }
+.text-danger { color: $DANGER-COLOR !important; }
 
 .event-details {
     .event-title { font-weight: 500; margin: 0; font-size: 0.95rem; }
@@ -141,6 +202,17 @@ methods: {
 }
 
 .event-time { font-size: 0.8rem; text-align: right; }
+
+.loading-message, .error-message, .no-data-message {
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+    opacity: 0.7;
+    i { margin-right: 8px; }
+}
+.error-message {
+    color: $DANGER-COLOR;
+}
 
 // ----------------------------------------
 // TEMAS
@@ -153,12 +225,15 @@ methods: {
 }
 
 .theme-dark {
-    background-color: $BG-CARD-DARK; /* Fondo de tarjeta un poco más claro que el fondo de la página */
+    background-color: $BG-CARD-DARK; 
     color: $LIGHT-TEXT;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
     
     .modulo-titulo { color: $LIGHT-TEXT; }
     .modulo-subtitulo { border-bottom-color: rgba($LIGHT-TEXT, 0.1); }
     .event-details .event-source, .event-time { color: $GRAY-COLD; }
+    .loading-message, .error-message, .no-data-message {
+        color: $GRAY-COLD;
+    }
 }
 </style>

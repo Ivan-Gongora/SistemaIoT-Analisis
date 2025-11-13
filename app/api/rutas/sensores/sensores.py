@@ -11,6 +11,7 @@ from app.servicios.auth_utils import get_current_user_id # Solo autenticación
 from app.servicios.servicio_simulacion import get_db_connection
 from app.api.modelos.sensores import SensorCrear,Sensor, SensorActualizar, SensorGeneral
 
+from app.servicios.servicio_actividad import registrar_actividad_db
 router_sensor = APIRouter()
 
 # ----------------------------------------------------------------------
@@ -24,7 +25,7 @@ async def crear_sensor_endpoint(
     current_user_id: int = Depends(get_current_user_id) # Usado para autenticación
 ):
     try:
-        resultados = await set_sensor(datos)
+        resultados = await set_sensor(datos,current_user_id)
         return {"message": "Sensor registrado exitosamente.", "resultados": resultados}
     except HTTPException:
         raise
@@ -95,7 +96,7 @@ async def actualizar_sensor_endpoint(
 ):
     try:
         # 1. Ejecutar la actualización (db_function ya existe)
-        await actualizar_sensor_db(id, datos)
+        await actualizar_sensor_db(id, datos,current_user_id)
         
         # 2. 🚨 CRÍTICO: Obtener y devolver el objeto completo y actualizado
         sensor_actualizado = await obtener_sensor_por_id_db(id)
@@ -120,7 +121,7 @@ async def eliminar_sensor_endpoint(
 ):
     # Nota: Aquí iría la verificación de permiso (CRUD_SENSOR)
     try:
-        return await eliminar_sensor_db(id)
+        return await eliminar_sensor_db(id,current_user_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -131,7 +132,7 @@ async def eliminar_sensor_endpoint(
 # ----------------------------------------------------------------------
 
 # POST: Insertar un nuevo sensor y sus campos asociados
-async def set_sensor(datos: SensorCrear) -> Dict[str, Any]:
+async def set_sensor(datos: SensorCrear,usuario_id: int) -> Dict[str, Any]:
     conn = None
     
     try:
@@ -147,9 +148,18 @@ async def set_sensor(datos: SensorCrear) -> Dict[str, Any]:
         print("-" * 50)
             
         # 1. Validar existencia del dispositivo padre
-        cursor.execute("SELECT id FROM dispositivos WHERE id = %s", (datos.dispositivo_id,))
-        if not cursor.fetchone():
+        cursor.execute(
+            "SELECT id, nombre, proyecto_id FROM dispositivos WHERE id = %s", 
+            (datos.dispositivo_id,)
+        )
+        dispositivo_padre = cursor.fetchone()
+        
+        if not dispositivo_padre:
             raise HTTPException(status_code=404, detail=f"Dispositivo con ID '{datos.dispositivo_id}' no encontrado.")
+        
+        # Guardamos los datos para el log
+        proyecto_id_padre = dispositivo_padre['proyecto_id']
+        dispositivo_nombre = dispositivo_padre['nombre']
             
         fecha_creacion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -164,16 +174,37 @@ async def set_sensor(datos: SensorCrear) -> Dict[str, Any]:
         sensor_id = conn.insert_id()
         
         # 4. 🚨 ITERAR E INSERTAR CAMPOS DE SENSOR
-        for campo in datos.campos:
-            # Puedes omitir la validación de unidad_medida_id si ya confías en el frontend
-            
-            cursor.execute(
-                """INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) 
-                   VALUES (%s, %s, %s, %s)""",
-                (campo.nombre, campo.tipo_valor, sensor_id, campo.unidad_medida_id)
-            )
+        campos_agregados_count = 0
+        if datos.campos:
+            for campo in datos.campos:
+                cursor.execute(
+                    """INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) 
+                       VALUES (%s, %s, %s, %s)""",
+                    (campo.nombre, campo.tipo_valor, sensor_id, campo.unidad_medida_id)
+                )
+                
+                # -------------------------------------------------
+                # 🚨 NUEVO: Registrar la actividad de CADA CAMPO CREADO
+                # -------------------------------------------------
+                await registrar_actividad_db(
+                    usuario_id=usuario_id,
+                    proyecto_id=proyecto_id_padre,
+                    tipo_evento='CAMPO_CREADO',
+                    titulo=campo.nombre, # Ej: "Temperatura"
+                    fuente=f"Sensor: {datos.nombre}" # Ej: "Sensor: DHT22"
+                )
+                # -------------------------------------------------
+                campos_agregados_count += 1
         
-        conn.commit()
+        conn.commit() # 👈 Transacción completada
+        
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='SENSOR_CREADO',
+            titulo=datos.nombre, 
+            fuente=f"Dispositivo: {dispositivo_nombre}" 
+        )
         
         return {
             "status": "success", 
@@ -235,18 +266,38 @@ async def obtener_sensores_por_dispositivo_db(dispositivo_id: int) -> List[Dict[
         if conn: conn.close()
 
 # PUT: Actualizar un sensor
-async def actualizar_sensor_db(id: int, datos: SensorActualizar) -> Dict[str, Any]:
+async def actualizar_sensor_db(
+    id: int, 
+    datos: SensorActualizar, 
+    usuario_id: int 
+) -> Dict[str, Any]:
+    
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # 1. Validación de existencia
-        cursor.execute("SELECT id FROM sensores WHERE id = %s", (id,))
-        if not cursor.fetchone():
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        sql_info = """
+        SELECT 
+            s.nombre AS nombre_sensor,
+            d.nombre AS nombre_dispositivo,
+            d.proyecto_id
+        FROM sensores s
+        JOIN dispositivos d ON s.dispositivo_id = d.id
+        WHERE s.id = %s;
+        """
+        cursor.execute(sql_info, (id,))
+        info_sensor = cursor.fetchone()
+
+        if not info_sensor:
             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
 
-        # 2. Construcción de UPDATE dinámico
+   
+        proyecto_id_padre = info_sensor['proyecto_id']
+        nombre_dispositivo_padre = info_sensor['nombre_dispositivo']
+        nombre_actual_sensor = info_sensor['nombre_sensor']
+
+
         campos = []
         valores = []
         
@@ -258,46 +309,172 @@ async def actualizar_sensor_db(id: int, datos: SensorActualizar) -> Dict[str, An
              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
              
         valores.append(id)
-        sql = f"UPDATE sensores SET {', '.join(campos)} WHERE id = %s"
-        cursor.execute(sql, valores)
+        sql_update = f"UPDATE sensores SET {', '.join(campos)} WHERE id = %s"
+        
+        cursor.execute(sql_update, valores)
         conn.commit()
         
+  
+        nombre_para_log = datos.nombre if datos.nombre is not None else nombre_actual_sensor
+
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='SENSOR_MODIFICADO',
+            titulo=nombre_para_log, # Nombre del sensor
+            fuente=f"Dispositivo: {nombre_dispositivo_padre}" # Nombre del dispositivo padre
+        )
+
+        
         return {"status": "success", "rows_affected": cursor.rowcount}
+        
+    except pymysql.MySQLError as db_error:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos al actualizar sensor: {db_error}")
+    except HTTPException as http_exc:
+        # Re-lanzar excepciones HTTP (como el 404)
+        raise http_exc
     except Exception as e:
         if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=f"DB Error al actualizar sensor: {str(e)}")
     finally:
         if conn: conn.close()
+# async def actualizar_sensor_db(id: int, datos: SensorActualizar) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # 1. Validación de existencia
+#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+
+#         # 2. Construcción de UPDATE dinámico
+#         campos = []
+#         valores = []
+        
+#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
+#         if datos.tipo is not None: campos.append("tipo = %s"); valores.append(datos.tipo)
+#         if datos.habilitado is not None: campos.append("habilitado = %s"); valores.append(datos.habilitado)
+        
+#         if not campos:
+#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
+             
+#         valores.append(id)
+#         sql = f"UPDATE sensores SET {', '.join(campos)} WHERE id = %s"
+#         cursor.execute(sql, valores)
+#         conn.commit()
+        
+#         return {"status": "success", "rows_affected": cursor.rowcount}
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar sensor: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # DELETE: Eliminar un sensor (Y sus campos/datos)
-async def eliminar_sensor_db(id: int) -> Dict[str, Any]:
+async def eliminar_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        # 🚨 3. Cambiar a DictCursor para leer los nombres
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 1. Lógica de Eliminación en Cascada (Hojas primero)
+        # 4. VALIDAR Y OBTENER DATOS PARA EL LOG (ANTES DE BORRAR)
+        sql_info = """
+        SELECT 
+            s.nombre AS nombre_sensor,
+            d.nombre AS nombre_dispositivo,
+            d.proyecto_id
+        FROM sensores s
+        JOIN dispositivos d ON s.dispositivo_id = d.id
+        WHERE s.id = %s;
+        """
+        cursor.execute(sql_info, (id,))
+        info_sensor = cursor.fetchone()
+
+        if not info_sensor:
+            raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+        
+        # Guardamos los datos para el log
+        proyecto_id_padre = info_sensor['proyecto_id']
+        nombre_dispositivo_padre = info_sensor['nombre_dispositivo']
+        nombre_sensor_eliminado = info_sensor['nombre_sensor']
+
+        # 5. Lógica de Eliminación en Cascada (Tu lógica original)
         
         # a) Eliminar VALORES (depende de campos_sensores)
+        # (Nota: Si 'campos_sensores' tiene ON DELETE CASCADE, esto es redundante,
+        # pero es más seguro hacerlo explícitamente).
         cursor.execute("DELETE FROM valores WHERE campo_id IN (SELECT id FROM campos_sensores WHERE sensor_id = %s)", (id,))
         
         # b) Eliminar CAMPOS DE SENSORES
         cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (id,))
         
-        # 2. Eliminar SENSOR
+        # 6. Eliminar SENSOR
         cursor.execute("DELETE FROM sensores WHERE id = %s", (id,))
-        conn.commit()
         
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+        row_count = cursor.rowcount # Capturar filas afectadas por la última consulta
+        
+        conn.commit() # 👈 Transacción completada
+        
+        if row_count == 0:
+            # Esto no debería pasar si la validación del paso 4 funcionó
+            raise HTTPException(status_code=404, detail="Sensor no encontrado (fallo post-commit).")
+
+        # -------------------------------------------------
+        # 🚨 7. REGISTRAR LA ACTIVIDAD (Después del Commit)
+        # -------------------------------------------------
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='SENSOR_ELIMINADO',
+            titulo=nombre_sensor_eliminado, # El nombre del sensor
+            fuente=f"Dispositivo: {nombre_dispositivo_padre}" # El nombre del dispositivo padre
+        )
+        # -------------------------------------------------
             
-        return {"status": "success", "message": "Sensor eliminado exitosamente."}
+        return {"status": "success", "message": f"Sensor '{nombre_sensor_eliminado}' eliminado exitosamente."}
+        
     except pymysql.Error as e:
-        if e.args[0] == 1451: # Si falla por otra clave foránea (no debería)
+        if conn: conn.rollback()
+        if e.args[0] == 1451: 
              raise HTTPException(status_code=400, detail="No se puede eliminar: El sensor aún tiene dependencias externas.")
         raise HTTPException(status_code=500, detail=f"DB Error al eliminar sensor: {str(e)}")
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
     finally:
         if conn: conn.close()
+# async def eliminar_sensor_db(id: int) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # 1. Lógica de Eliminación en Cascada (Hojas primero)
+        
+#         # a) Eliminar VALORES (depende de campos_sensores)
+#         cursor.execute("DELETE FROM valores WHERE campo_id IN (SELECT id FROM campos_sensores WHERE sensor_id = %s)", (id,))
+        
+#         # b) Eliminar CAMPOS DE SENSORES
+#         cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (id,))
+        
+#         # 2. Eliminar SENSOR
+#         cursor.execute("DELETE FROM sensores WHERE id = %s", (id,))
+#         conn.commit()
+        
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+            
+#         return {"status": "success", "message": "Sensor eliminado exitosamente."}
+#     except pymysql.Error as e:
+#         if e.args[0] == 1451: # Si falla por otra clave foránea (no debería)
+#              raise HTTPException(status_code=400, detail="No se puede eliminar: El sensor aún tiene dependencias externas.")
+#         raise HTTPException(status_code=500, detail=f"DB Error al eliminar sensor: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # GET: Obtener un sensor por ID
 async def obtener_sensor_por_id_db(sensor_id: int) -> Dict[str, Any] | None:

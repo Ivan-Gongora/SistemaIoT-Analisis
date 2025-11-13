@@ -38,7 +38,7 @@ from app.api.rutas.recepcion.recepcion import router_recepcion as router_recepci
 from app.api.rutas.energetico.analisis import router as energetico_analisis_router
 from app.api.rutas.energetico.proyecciones import router as energetico_proyecciones_router
 from app.api.rutas.energetico.gestion_datos import router as energetico_gestion_datos_router
-
+from app.api.rutas.dashboard.dashboard import router_dashboard as router_dashboard
 # Se importa el threading para doble ejecución de servicios sin detener uno
 import threading
 import socket
@@ -208,7 +208,7 @@ aplicacion.include_router(router_recepcion, prefix="/api")
 aplicacion.include_router(energetico_analisis_router, prefix="/api")
 aplicacion.include_router(energetico_proyecciones_router, prefix="/api")
 aplicacion.include_router(energetico_gestion_datos_router, prefix="/api")
-
+aplicacion.include_router(router_dashboard, prefix="/api")
 
 
 # Ruta principal

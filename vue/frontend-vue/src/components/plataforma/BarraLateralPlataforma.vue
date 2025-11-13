@@ -102,14 +102,14 @@ export default {
 
                 {path: '/menu-gestion-datos-energeticos', label: 'Gestión de Datos Energéticos', icon: 'bi bi-lightning-fill' },
                  
-                // Análisis Avanzado
-                { path: '/analisis', label: 'Análisis Avanzado', icon: 'bi bi-funnel-fill' }, 
+                // // Análisis Avanzado
+                // { path: '/analisis', label: 'Análisis Avanzado', icon: 'bi bi-funnel-fill' }, 
                 
-                // Predicción de Gastos (Función Gemini)
-                { path: '/prediccion-gastos', label: 'Predicción de Gastos', icon: 'bi bi-robot' }, 
+                // // Predicción de Gastos (Función Gemini)
+                // { path: '/prediccion-gastos', label: 'Predicción de Gastos', icon: 'bi bi-robot' }, 
 
-                 // Reportes Generados
-                { path: '/reportes-generados', label: 'Reportes Generados', icon: 'bi bi-file-earmark-bar-graph' }, 
+                //  // Reportes Generados
+                // { path: '/reportes-generados', label: 'Reportes Generados', icon: 'bi bi-file-earmark-bar-graph' }, 
             ]
     };
   },

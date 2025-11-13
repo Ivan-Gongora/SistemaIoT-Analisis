@@ -8,16 +8,14 @@
       <EncabezadoPlataforma @toggle-sidebar="toggleSidebar" :is-sidebar-open="isSidebarOpen" />
       
       <div class="dashboard-grid">
-        <TarjetasPlataforma class="grid-item-cards" />
-        
-        <div class="grid-item-metrics">
-            <EstadoSistema :is-dark="isDark" /> 
-        </div>
-        
-        <div class="grid-item-activity">
-            <ActividadReciente :is-dark="isDark" /> 
-        </div>
-    </div>
+    <TarjetasPlataforma class="grid-item-cards" />
+    
+    <div class="grid-item-summaries"> 
+        <EstadoSistema :is-dark="isDark" /> 
+        <ResumenAnalisisEnergetico :is-dark="isDark" /> </div>
+    
+    <ActividadReciente class="grid-item-activity" :is-dark="isDark" /> 
+</div>
 
     </div>
   </div>

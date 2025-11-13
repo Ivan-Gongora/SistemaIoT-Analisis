@@ -4,12 +4,13 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import pymysql
 
-# 🚨 Importaciones CRÍTICAS de Utilidades JWT
+#  Importaciones CRÍTICAS de Utilidades JWT
 from app.servicios.auth_utils import get_current_user_id 
 from app.configuracion import configuracion
 from app.servicios.servicio_simulacion import get_db_connection, simular_datos_json
 from app.api.modelos.dispositivos import DispositivoCrear, DispositivoActualizar,Dispositivo, Sensor, CampoSensor,DispositivoGeneral
 from app.servicios import servicio_simulacion as servicio_simulacion 
+from app.servicios.servicio_actividad import registrar_actividad_db
 
 router_dispositivo = APIRouter()
 
@@ -18,14 +19,34 @@ router_dispositivo = APIRouter()
 # ------------------------------------------------------------------
 
 # Crear Dispositivos (PROTEGIDO)
+# @router_dispositivo.post("/dispositivos/")
+# async def crear_Dispositivo(
+#     datos: DispositivoCrear,
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     try:
+#         # Nota: Aquí se debería verificar que el current_user_id sea propietario del proyecto.
+#         resultados = await set_dispositivo(datos)
+#         return {"message": "Se registro el dispositivo", "resultados": resultados}
+
+#     except ValueError as e:
+#         return {"message": "Error en los datos enviados", "details": str(e)}
+#     except Exception as e:
+#         return JSONResponse(status_code=500, content={"message": "Error inesperado durante la inserción ", "details": str(e)},)
 @router_dispositivo.post("/dispositivos/")
 async def crear_Dispositivo(
     datos: DispositivoCrear,
     current_user_id: int = Depends(get_current_user_id) # 🚨 PROTEGIDO
 ):
     try:
-        # Nota: Aquí se debería verificar que el current_user_id sea propietario del proyecto.
-        resultados = await set_dispositivo(datos)
+        # 🚨 2. PASA EL 'current_user_id' A LA FUNCIÓN DE SERVICIO
+        resultados = await set_dispositivo(datos, current_user_id)
+        
+        # Manejo de respuesta (basado en tu código de set_dispositivo)
+        resultado_final = resultados[0]
+        if resultado_final.get("status") == "error":
+             raise HTTPException(status_code=400, detail=resultado_final.get("message"))
+             
         return {"message": "Se registro el dispositivo", "resultados": resultados}
 
     except ValueError as e:
@@ -34,19 +55,18 @@ async def crear_Dispositivo(
         return JSONResponse(status_code=500, content={"message": "Error inesperado durante la inserción ", "details": str(e)},)
 
 
-
     
 # Eliminar dispositivo (RUTA CORREGIDA Y PROTEGIDA) 
 @router_dispositivo.delete("/dispositivos/")
 async def eliminar_dispositivo_endpoint(
     id: Optional[int] = Query(..., description="ID del dispositivo a eliminar"),
     proyecto_id: int = Query(..., description="ID del proyecto"),
-    current_user_id: int = Depends(get_current_user_id) # 🚨 PROTEGIDO
+    current_user_id: int = Depends(get_current_user_id) 
 ) -> Dict:
     # Nota: Se debería verificar que el current_user_id sea propietario del proyecto_id
     try:
         # Llama a la función de servicio de DB
-        return await eliminar_dispositivo_db(id, proyecto_id) 
+        return await eliminar_dispositivo_db(id, proyecto_id, current_user_id) 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar dispositivo(s): {str(e)}")
 
@@ -56,7 +76,7 @@ async def get_all_dispositivos_general(
     current_user_id: int = Depends(get_current_user_id) 
 ):
     try:
-        # 🚨 Llamada a la función de DB
+        # Llamada a la función de DB
         dispositivos = await obtener_dispositivos_globales_db(current_user_id) 
         
         if not dispositivos:
@@ -79,7 +99,7 @@ async def get_dispositivo_resumen(
     Obtiene un resumen de métricas clave para un dispositivo específico.
     """
     try:
-        # 🚨 CORRECCIÓN: Llamar a la función de servicio
+        # CORRECCIÓN: Llamar a la función de servicio
         resumen = await get_resumen_dispositivo_db(dispositivo_id)
         
         if not resumen:
@@ -98,15 +118,15 @@ async def get_dispositivo_resumen(
  
  
 # Actualizar información de dispositivos (CORREGIDO Y PROTEGIDO)
-@router_dispositivo.put("/dispositivos/{dispositivo_id}") # 🚨 RUTA CORREGIDA: Usando Path parameter
+@router_dispositivo.put("/dispositivos/{dispositivo_id}") # RUTA CORREGIDA: Usando Path parameter
 async def endpoint_actualizar_dispositivo(
     dispositivo_id: int, 
     datos: DispositivoActualizar,
-    current_user_id: int = Depends(get_current_user_id) # 🚨 PROTEGIDO
+    current_user_id: int = Depends(get_current_user_id) # PROTEGIDO
 ):
     # Nota: Aquí se debería verificar que el current_user_id sea propietario del proyecto.
     try:
-        resultados = await actualizar_datos_dispositivo(dispositivo_id, datos) # Llama a la función de DB
+        resultados = await actualizar_datos_dispositivo(dispositivo_id, datos,current_user_id) # Llama a la función de DB
         return {"message": "Actualización de datos completada.", "resultados": resultados}
 
     except ValueError as e:
@@ -124,11 +144,11 @@ async def endpoint_actualizar_dispositivo(
 @router_dispositivo.get("/dispositivos/proyecto/{proyecto_id}", response_model=List[Dispositivo])
 async def get_dispositivos_por_proyecto(
     proyecto_id: int,
-    current_user_id: int = Depends(get_current_user_id) # 🚨 PROTEGIDO
+    current_user_id: int = Depends(get_current_user_id) # PROTEGIDO
 ):
     # Nota: Aquí se debería verificar que el current_user_id tenga acceso al proyecto_id.
     
-    # 🚨 CAMBIO CRÍTICO: Llamamos a la función integrada
+    # CAMBIO CRÍTICO: Llamamos a la función integrada
     try:
         dispositivos = await obtener_dispositivos_por_proyecto_db(proyecto_id) 
         
@@ -160,7 +180,7 @@ async def get_dispositivo_por_id(
         if not dispositivo:
             raise HTTPException(status_code=404, detail=f"Dispositivo con ID '{dispositivo_id}' no encontrado.")
         
-        # 🚨 CORRECCIÓN CRÍTICA: Convertir datetime a string ANTES de retornar
+        # CORRECCIÓN CRÍTICA: Convertir datetime a string ANTES de retornar
         if 'fecha_creacion' in dispositivo and isinstance(dispositivo['fecha_creacion'], datetime):
             dispositivo['fecha_creacion'] = dispositivo['fecha_creacion'].strftime(DATE_FORMAT)
 
@@ -182,21 +202,24 @@ async def get_dispositivo_por_id(
 # ------------------------------------------------------------------
 # 3. FUNCIONES DE BASE DE DATOS (SERVICIO DE DATOS BASE)
 # ------------------------------------------------------------------
-
-# Crear dispositivo
-async def set_dispositivo(datos: DispositivoCrear) -> List[Dict[str, Any]]:
-    # ... (cuerpo de la función set_dispositivo que ya tenías) ...
+# 3. AÑADE 'usuario_id' A LOS PARÁMETROS DE LA FUNCIÓN
+async def set_dispositivo(datos: DispositivoCrear, usuario_id: int) -> List[Dict[str, Any]]:
     procesado = []
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # Validar existencia del proyecto
-        cursor.execute("SELECT id FROM proyectos WHERE id = %s", (datos.proyecto_id,))
+        # Validar existencia del proyecto Y OBTENER SU NOMBRE
+        # 4. SELECCIONA EL NOMBRE DEL PROYECTO PARA EL LOG
+        cursor.execute("SELECT id, nombre FROM proyectos WHERE id = %s", (datos.proyecto_id,))
         proyecto_row = cursor.fetchone()
+        
         if not proyecto_row:
             return [{"status": "error", "message": f"El proyecto con id: '{datos.proyecto_id}' no existe"}]
+        
+        # Guardamos el nombre del proyecto para el log
+        nombre_del_proyecto = proyecto_row['nombre']
         
         fecha_creacion = datos.fecha_creacion or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -204,8 +227,21 @@ async def set_dispositivo(datos: DispositivoCrear) -> List[Dict[str, Any]]:
         cursor.execute("INSERT INTO dispositivos (nombre, descripcion, tipo, latitud, longitud, habilitado, fecha_creacion, proyecto_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (
             datos.nombre, datos.descripcion, datos.tipo, datos.latitud, datos.longitud, datos.habilitado, fecha_creacion, datos.proyecto_id
         ))
-        conn.commit()
-        procesado.append({"nombre": datos.nombre, "status": "success", "id_insertado": conn.insert_id()})
+        
+        id_insertado = conn.insert_id()
+        conn.commit() # 
+
+        
+        await registrar_actividad_db(
+            usuario_id=usuario_id,           
+            proyecto_id=datos.proyecto_id,   
+            tipo_evento='DISPOSITIVO_CREADO',
+            titulo=datos.nombre,             
+            fuente=f"Proyecto: {nombre_del_proyecto}" 
+        )
+        # -------------------------------------------------
+
+        procesado.append({"nombre": datos.nombre, "status": "success", "id_insertado": id_insertado})
 
     except pymysql.MySQLError as e:
         if conn: conn.rollback()
@@ -216,22 +252,75 @@ async def set_dispositivo(datos: DispositivoCrear) -> List[Dict[str, Any]]:
     finally:
         if conn: conn.close()
     return procesado
+# # Crear dispositivo
+# async def set_dispositivo(datos: DispositivoCrear) -> List[Dict[str, Any]]:
+#     # ... (cuerpo de la función set_dispositivo que ya tenías) ...
+#     procesado = []
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # Validar existencia del proyecto
+#         cursor.execute("SELECT id FROM proyectos WHERE id = %s", (datos.proyecto_id,))
+#         proyecto_row = cursor.fetchone()
+#         if not proyecto_row:
+#             return [{"status": "error", "message": f"El proyecto con id: '{datos.proyecto_id}' no existe"}]
+        
+#         fecha_creacion = datos.fecha_creacion or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+#         # Insertar el dispositivo
+#         cursor.execute("INSERT INTO dispositivos (nombre, descripcion, tipo, latitud, longitud, habilitado, fecha_creacion, proyecto_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (
+#             datos.nombre, datos.descripcion, datos.tipo, datos.latitud, datos.longitud, datos.habilitado, fecha_creacion, datos.proyecto_id
+#         ))
+#         conn.commit()
+#         procesado.append({"nombre": datos.nombre, "status": "success", "id_insertado": conn.insert_id()})
 
-# Función para actualizar datos del dispositivo (CORREGIDO)
-async def actualizar_datos_dispositivo(dispositivo_id: int, datos: DispositivoActualizar) -> List[Dict[str, Any]]:
+#     except pymysql.MySQLError as e:
+#         if conn: conn.rollback()
+#         procesado.append({"status": "error", "message": f"DB Error: {str(e)}"})
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         procesado.append({"status": "error", "message": f"Unexpected Error: {str(e)}"})
+#     finally:
+#         if conn: conn.close()
+#     return procesado
+async def actualizar_datos_dispositivo(
+    dispositivo_id: int, 
+    datos: DispositivoActualizar, 
+    usuario_id: int  # <-- El endpoint debe pasar el current_user_id aquí
+) -> List[Dict[str, Any]]:
+    
     procesado = []
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # Validar existencia del dispositivo
-        cursor.execute("SELECT * FROM dispositivos WHERE id = %s", (dispositivo_id,))
-        if not cursor.fetchone():
+        # 🚨 3. VALIDAR Y OBTENER DATOS PARA EL LOG
+        # Obtenemos los datos del dispositivo (y su proyecto padre) ANTES de actualizar
+        sql_info = """
+        SELECT 
+            d.nombre AS nombre_dispositivo, 
+            p.id AS proyecto_id,
+            p.nombre AS nombre_proyecto
+        FROM dispositivos d
+        JOIN proyectos p ON d.proyecto_id = p.id
+        WHERE d.id = %s
+        """
+        cursor.execute(sql_info, (dispositivo_id,))
+        info_dispositivo = cursor.fetchone()
+        
+        if not info_dispositivo:
             return [{"status": "error", "message": f"El dispositivo con id: '{dispositivo_id}' no existe"}]
+        
+        # Guardamos los datos para el log
+        proyecto_id_padre = info_dispositivo['proyecto_id']
+        nombre_proyecto_padre = info_dispositivo['nombre_proyecto']
+        nombre_actual_dispositivo = info_dispositivo['nombre_dispositivo']
 
-        # Construir lista de campos a actualizar dinámicamente
+
+        # 4. Construir la consulta de actualización (Tu lógica original)
         campos = []
         valores = []
 
@@ -242,59 +331,126 @@ async def actualizar_datos_dispositivo(dispositivo_id: int, datos: DispositivoAc
         if datos.longitud is not None: campos.append("longitud = %s"); valores.append(datos.longitud)
         if datos.habilitado is not None: campos.append("habilitado = %s"); valores.append(datos.habilitado)
 
+        if not campos:
+            procesado.append({"status": "warning", "message": "No se proporcionaron datos para actualizar"})
+            return procesado # Salir temprano si no hay nada que actualizar
+
         valores.append(dispositivo_id)
 
-        if campos:
-            sql = f"UPDATE dispositivos SET {', '.join(campos)} WHERE id = %s"
-            cursor.execute(sql, valores)
-            conn.commit()
+        # 5. Ejecutar la actualización
+        sql_update = f"UPDATE dispositivos SET {', '.join(campos)} WHERE id = %s"
+        cursor.execute(sql_update, valores)
+        conn.commit() # 👈 Transacción completada
 
-            procesado.append({"status": "success", "message": f"Dispositivo con id '{dispositivo_id}' actualizado correctamente", "actualizado": datos.model_dump(exclude_none=True)})
-        else:
-            procesado.append({"status": "warning", "message": "No se proporcionaron datos para actualizar"})
+        # -------------------------------------------------
+        # 🚨 6. REGISTRAR LA ACTIVIDAD (Después del Commit)
+        # -------------------------------------------------
+        
+        # Determinar qué nombre usar para el log (el nuevo o el viejo)
+        nombre_para_log = datos.nombre if datos.nombre is not None else nombre_actual_dispositivo
+
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='DISPOSITIVO_MODIFICADO',
+            titulo=nombre_para_log, # El nombre del dispositivo (actualizado si cambió)
+            fuente=f"Proyecto: {nombre_proyecto_padre}"
+        )
+        # -------------------------------------------------
+
+        procesado.append({"status": "success", "message": f"Dispositivo con id '{dispositivo_id}' actualizado correctamente", "actualizado": datos.model_dump(exclude_none=True)})
 
     except Exception as e:
         if conn: conn.rollback()
         procesado.append({"status": "error", "message": f"Unexpected Error: {str(e)}"})
     finally:
         if conn: conn.close()
+        
     return procesado
+
+# # Función para actualizar datos del dispositivo (CORREGIDO)
+# async def actualizar_datos_dispositivo(dispositivo_id: int, datos: DispositivoActualizar,usuario_id:int) -> List[Dict[str, Any]]:
+#     procesado = []
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # Validar existencia del dispositivo
+#         cursor.execute("SELECT * FROM dispositivos WHERE id = %s", (dispositivo_id,))
+#         if not cursor.fetchone():
+#             return [{"status": "error", "message": f"El dispositivo con id: '{dispositivo_id}' no existe"}]
+
+#         # Construir lista de campos a actualizar dinámicamente
+#         campos = []
+#         valores = []
+
+#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
+#         if datos.descripcion is not None: campos.append("descripcion = %s"); valores.append(datos.descripcion)
+#         if datos.tipo is not None: campos.append("tipo = %s"); valores.append(datos.tipo)
+#         if datos.latitud is not None: campos.append("latitud = %s"); valores.append(datos.latitud)
+#         if datos.longitud is not None: campos.append("longitud = %s"); valores.append(datos.longitud)
+#         if datos.habilitado is not None: campos.append("habilitado = %s"); valores.append(datos.habilitado)
+
+#         valores.append(dispositivo_id)
+
+#         if campos:
+#             sql = f"UPDATE dispositivos SET {', '.join(campos)} WHERE id = %s"
+#             cursor.execute(sql, valores)
+#             conn.commit()
+
+#             procesado.append({"status": "success", "message": f"Dispositivo con id '{dispositivo_id}' actualizado correctamente", "actualizado": datos.model_dump(exclude_none=True)})
+#         else:
+#             procesado.append({"status": "warning", "message": "No se proporcionaron datos para actualizar"})
+
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         procesado.append({"status": "error", "message": f"Unexpected Error: {str(e)}"})
+#     finally:
+#         if conn: conn.close()
+#     return procesado
 
 
 # Función de Eliminación de Dispositivo
-async def eliminar_dispositivo_db(id: Optional[int], proyecto_id: int) -> Dict:
+async def eliminar_dispositivo_db(id: Optional[int], proyecto_id: int, usuario_id: int) -> Dict:
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+       
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 🚨 Lógica de eliminación en cascada de Dispositivos (corregida)
-        cursor.execute("SELECT * FROM proyectos WHERE id = %s", (proyecto_id,))
-        if not cursor.fetchone(): raise HTTPException(status_code=404, detail=f"El proyecto con id: '{proyecto_id}' no existe")
-
-        cursor_dict = conn.cursor(pymysql.cursors.DictCursor)
+        # 4. Validar proyecto y obtener nombre para el log
+        cursor.execute("SELECT nombre FROM proyectos WHERE id = %s AND usuario_id = %s", (proyecto_id, usuario_id))
+        proyecto_row = cursor.fetchone()
+        if not proyecto_row: 
+             raise HTTPException(status_code=404, detail=f"El proyecto con id: '{proyecto_id}' no existe o no pertenece al usuario.")
         
-        if id is not None:
-            # Eliminar un solo dispositivo si pertenece al proyecto
-            cursor_dict.execute("SELECT id FROM dispositivos WHERE id = %s AND proyecto_id = %s", (id, proyecto_id))
-        else:
-            # Eliminar todos los dispositivos del proyecto
-            cursor_dict.execute("SELECT id FROM dispositivos WHERE proyecto_id = %s", (proyecto_id,))
-            
-        dispositivos = cursor_dict.fetchall()
-        if not dispositivos: raise HTTPException(status_code=404, detail="No se encontraron dispositivos para eliminar")
+        nombre_proyecto = proyecto_row['nombre'] # Guardamos para el log
 
-        for dispositivo in dispositivos:
+        
+        # 5. Obtener los dispositivos a eliminar (CON NOMBRE)
+        if id is not None:
+            # Obtener un solo dispositivo si pertenece al proyecto
+            cursor.execute("SELECT id, nombre FROM dispositivos WHERE id = %s AND proyecto_id = %s", (id, proyecto_id))
+        else:
+            # Obtener todos los dispositivos del proyecto
+            cursor.execute("SELECT id, nombre FROM dispositivos WHERE proyecto_id = %s", (proyecto_id,))
+            
+        dispositivos_a_eliminar = cursor.fetchall()
+        if not dispositivos_a_eliminar: 
+            raise HTTPException(status_code=404, detail="No se encontraron dispositivos para eliminar")
+
+        # 6. ELIMINACIÓN EN CASCADA (Tu lógica original)
+        for dispositivo in dispositivos_a_eliminar:
             dispositivo_id = dispositivo["id"]
             
             # 1. Obtener y eliminar campos/valores (Hojas)
-            cursor_dict.execute("SELECT id FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
-            sensores = cursor_dict.fetchall()
+            cursor.execute("SELECT id FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
+            sensores = cursor.fetchall()
 
             for sensor in sensores:
                 sensor_id = sensor["id"]
-                # Eliminar valores y campos (asumimos que la lógica es compleja y la simplificamos)
-                cursor.execute("DELETE FROM valores WHERE campo_id IN (SELECT id FROM campos_sensores WHERE sensor_id = %s)", (sensor_id,))
+               
                 cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (sensor_id,))
             
             # 2. Eliminar Sensores
@@ -303,14 +459,77 @@ async def eliminar_dispositivo_db(id: Optional[int], proyecto_id: int) -> Dict:
             # 3. Eliminar Dispositivo
             cursor.execute("DELETE FROM dispositivos WHERE id = %s", (dispositivo_id,))
 
-        conn.commit()
-        return {"status": "success", "message": f"{len(dispositivos)} dispositivo(s) eliminado(s) correctamente."}
+        conn.commit() 
+        for dispositivo in dispositivos_a_eliminar:
+            await registrar_actividad_db(
+                usuario_id=usuario_id,
+                proyecto_id=proyecto_id,
+                tipo_evento='DISPOSITIVO_ELIMINADO',
+                titulo=dispositivo['nombre'], # El nombre del dispositivo eliminado
+                fuente=f"Proyecto: {nombre_proyecto}"
+            )
+        # -------------------------------------------------
 
+        return {"status": "success", "message": f"{len(dispositivos_a_eliminar)} dispositivo(s) eliminado(s) correctamente."}
+
+    except HTTPException as http_exc:
+        # Re-lanzar errores de validación (404, 403)
+        if conn: conn.rollback()
+        raise http_exc
     except Exception as e:
         if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error al eliminar dispositivo(s): {str(e)}")
     finally:
         if conn: conn.close()
+# async def eliminar_dispositivo_db(id: Optional[int], proyecto_id: int) -> Dict:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+
+#         # 🚨 Lógica de eliminación en cascada de Dispositivos (corregida)
+#         cursor.execute("SELECT * FROM proyectos WHERE id = %s", (proyecto_id,))
+#         if not cursor.fetchone(): raise HTTPException(status_code=404, detail=f"El proyecto con id: '{proyecto_id}' no existe")
+
+#         cursor_dict = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         if id is not None:
+#             # Eliminar un solo dispositivo si pertenece al proyecto
+#             cursor_dict.execute("SELECT id FROM dispositivos WHERE id = %s AND proyecto_id = %s", (id, proyecto_id))
+#         else:
+#             # Eliminar todos los dispositivos del proyecto
+#             cursor_dict.execute("SELECT id FROM dispositivos WHERE proyecto_id = %s", (proyecto_id,))
+            
+#         dispositivos = cursor_dict.fetchall()
+#         if not dispositivos: raise HTTPException(status_code=404, detail="No se encontraron dispositivos para eliminar")
+
+#         for dispositivo in dispositivos:
+#             dispositivo_id = dispositivo["id"]
+            
+#             # 1. Obtener y eliminar campos/valores (Hojas)
+#             cursor_dict.execute("SELECT id FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
+#             sensores = cursor_dict.fetchall()
+
+#             for sensor in sensores:
+#                 sensor_id = sensor["id"]
+#                 # Eliminar valores y campos (asumimos que la lógica es compleja y la simplificamos)
+#                 cursor.execute("DELETE FROM valores WHERE campo_id IN (SELECT id FROM campos_sensores WHERE sensor_id = %s)", (sensor_id,))
+#                 cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (sensor_id,))
+            
+#             # 2. Eliminar Sensores
+#             cursor.execute("DELETE FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
+            
+#             # 3. Eliminar Dispositivo
+#             cursor.execute("DELETE FROM dispositivos WHERE id = %s", (dispositivo_id,))
+
+#         conn.commit()
+#         return {"status": "success", "message": f"{len(dispositivos)} dispositivo(s) eliminado(s) correctamente."}
+
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         raise HTTPException(status_code=500, detail=f"Error al eliminar dispositivo(s): {str(e)}")
+#     finally:
+#         if conn: conn.close()
         
 
 

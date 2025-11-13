@@ -9,6 +9,7 @@ from app.servicios.auth_utils import get_current_user_id
 from app.servicios.servicio_simulacion import get_db_connection
 from app.api.modelos.campos_sensores import CampoSensor, CampoSensorCrear, CampoSensorActualizar
 
+from app.servicios.servicio_actividad import registrar_actividad_db
 router_campos = APIRouter()
 
 # ----------------------------------------------------------------------
@@ -68,7 +69,7 @@ async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
                 WHERE v.campo_id = cs.id 
                 ORDER BY v.fecha_hora_lectura DESC 
                 LIMIT 1
-            ) AS ultimo_valor  -- ✅ MANTENER como Decimal, el modelo lo maneja
+            ) AS ultimo_valor  
         FROM campos_sensores cs
         LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
         WHERE cs.sensor_id = %s;
@@ -82,92 +83,294 @@ async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
     finally:
         if conn: conn.close()
         
-        
 # POST: Crear un nuevo campo
-async def set_campo_sensor_db(datos: CampoSensorCrear) -> Dict[str, Any]:
+async def set_campo_sensor_db(datos: CampoSensorCrear, usuario_id: int) -> Dict[str, Any]:
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+      
+        cursor = conn.cursor(pymysql.cursors.DictCursor) 
         
-        # Validaciones (Sensor padre y Unidad de medida)
-        cursor.execute("SELECT id FROM sensores WHERE id = %s", (datos.sensor_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Sensor padre no encontrado.")
-            
-        cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
 
-        # Insertar el campo
+        sql_val_sensor = """
+        SELECT 
+            s.id AS sensor_id, 
+            s.nombre AS sensor_nombre,
+            d.proyecto_id,
+            d.nombre AS dispositivo_nombre
+        FROM sensores s
+        JOIN dispositivos d ON s.dispositivo_id = d.id
+        WHERE s.id = %s;
+        """
+        cursor.execute(sql_val_sensor, (datos.sensor_id,))
+        sensor_padre = cursor.fetchone()
+        
+        if not sensor_padre:
+            raise HTTPException(status_code=404, detail="Sensor padre no encontrado.")
+
+        # Guardamos los datos para el log
+        proyecto_id_padre = sensor_padre['proyecto_id']
+        sensor_nombre_padre = sensor_padre['sensor_nombre']
+            
+        # 4. Validar Unidad de medida (si se proporciona)
+        if datos.unidad_medida_id:
+            cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
+
+        # 5. Insertar el campo
         cursor.execute(
             "INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES (%s, %s, %s, %s)",
             (datos.nombre, datos.tipo_valor, datos.sensor_id, datos.unidad_medida_id)
         )
+        id_insertado = conn.insert_id()
         conn.commit()
-        return {"status": "success", "id_insertado": conn.insert_id(), "nombre": datos.nombre}
+
+
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='CAMPO_CREADO',
+            titulo=datos.nombre, # Ej: "Temperatura"
+            fuente=f"Sensor: {sensor_nombre_padre}" # Ej: "Sensor: DHT22"
+        )
+        # -------------------------------------------------
+        
+        return {"status": "success", "id_insertado": id_insertado, "nombre": datos.nombre}
     
+    except pymysql.MySQLError as db_error:
+        # Manejo de error específico de DB
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos al insertar campo: {db_error}")
+    except HTTPException as http_exc:
+        # Re-lanzar excepciones HTTP (como el 404)
+        raise http_exc
     except Exception as e:
         if conn: conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al insertar campo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error inesperado al insertar campo: {str(e)}")
     finally:
         if conn: conn.close()
+# # POST: Crear un nuevo campo
+# async def set_campo_sensor_db(datos: CampoSensorCrear) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # Validaciones (Sensor padre y Unidad de medida)
+#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (datos.sensor_id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Sensor padre no encontrado.")
+            
+#         cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
+
+#         # Insertar el campo
+#         cursor.execute(
+#             "INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES (%s, %s, %s, %s)",
+#             (datos.nombre, datos.tipo_valor, datos.sensor_id, datos.unidad_medida_id)
+#         )
+#         conn.commit()
+#         return {"status": "success", "id_insertado": conn.insert_id(), "nombre": datos.nombre}
+    
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         raise HTTPException(status_code=500, detail=f"Error al insertar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # PUT: Actualizar un campo de sensor
-async def actualizar_campo_sensor_db(id: int, datos: CampoSensorActualizar) -> Dict[str, Any]:
+async def actualizar_campo_sensor_db(
+    id: int, 
+    datos: CampoSensorActualizar, 
+    usuario_id: int 
+) -> Dict[str, Any]:
+    
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
+
+        sql_info = """
+        SELECT 
+            cs.nombre AS nombre_campo,
+            s.nombre AS nombre_sensor,
+            d.proyecto_id
+        FROM campos_sensores cs
+        JOIN sensores s ON cs.sensor_id = s.id
+        JOIN dispositivos d ON s.dispositivo_id = d.id
+        WHERE cs.id = %s;
+        """
+        cursor.execute(sql_info, (id,))
+        info_campo = cursor.fetchone()
+
+        if not info_campo:
+            raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+
+        proyecto_id_padre = info_campo['proyecto_id']
+        nombre_sensor_padre = info_campo['nombre_sensor']
+        nombre_actual_campo = info_campo['nombre_campo']
+
         campos = []
         valores = []
         
         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
         if datos.tipo_valor is not None: campos.append("tipo_valor = %s"); valores.append(datos.tipo_valor)
-        if datos.unidad_medida_id is not None: campos.append("unidad_medida_id = %s"); valores.append(datos.unidad_medida_id)
+        
+        # Validación extra para unidad_medida_id
+        if datos.unidad_medida_id is not None:
+            cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
+            campos.append("unidad_medida_id = %s"); valores.append(datos.unidad_medida_id)
         
         if not campos:
              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
              
         valores.append(id)
-        sql = f"UPDATE campos_sensores SET {', '.join(campos)} WHERE id = %s"
-        cursor.execute(sql, valores)
-        conn.commit()
+        sql_update = f"UPDATE campos_sensores SET {', '.join(campos)} WHERE id = %s"
         
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+        cursor.execute(sql_update, valores)
+        row_count = cursor.rowcount # Capturar filas afectadas
+        conn.commit() # 👈 Transacción completada
         
-        return {"status": "success", "rows_affected": cursor.rowcount}
-    except pymysql.Error as e:
+       
+        nombre_para_log = datos.nombre if datos.nombre is not None else nombre_actual_campo
+
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='CAMPO_MODIFICADO',
+            titulo=nombre_para_log, # Nombre del campo
+            fuente=f"Sensor: {nombre_sensor_padre}" # Nombre del sensor padre
+        )
+       
+        return {"status": "success", "rows_affected": row_count}
+
+    except pymysql.MySQLError as db_error:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos al actualizar campo: {db_error}")
+    except HTTPException as http_exc:
+        # Re-lanzar excepciones HTTP (como el 404)
+        raise http_exc
+    except Exception as e:
+        if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=f"DB Error al actualizar campo: {str(e)}")
     finally:
         if conn: conn.close()
+# async def actualizar_campo_sensor_db(id: int, datos: CampoSensorActualizar) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         campos = []
+#         valores = []
+        
+#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
+#         if datos.tipo_valor is not None: campos.append("tipo_valor = %s"); valores.append(datos.tipo_valor)
+#         if datos.unidad_medida_id is not None: campos.append("unidad_medida_id = %s"); valores.append(datos.unidad_medida_id)
+        
+#         if not campos:
+#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
+             
+#         valores.append(id)
+#         sql = f"UPDATE campos_sensores SET {', '.join(campos)} WHERE id = %s"
+#         cursor.execute(sql, valores)
+#         conn.commit()
+        
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+        
+#         return {"status": "success", "rows_affected": cursor.rowcount}
+#     except pymysql.Error as e:
+#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # DELETE: Eliminar un campo de sensor
-async def eliminar_campo_sensor_db(id: int) -> Dict[str, Any]:
+async def eliminar_campo_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
         
-        # 1. Eliminar valores asociados (Hoja)
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+
+        sql_info = """
+        SELECT 
+            cs.nombre AS nombre_campo,
+            s.nombre AS nombre_sensor,
+            d.proyecto_id
+        FROM campos_sensores cs
+        JOIN sensores s ON cs.sensor_id = s.id
+        JOIN dispositivos d ON s.dispositivo_id = d.id
+        WHERE cs.id = %s;
+        """
+        cursor.execute(sql_info, (id,))
+        info_campo = cursor.fetchone()
+
+        if not info_campo:
+            raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+
+        # Guardamos los datos para el log
+        proyecto_id_padre = info_campo['proyecto_id']
+        nombre_sensor_padre = info_campo['nombre_sensor']
+        nombre_campo_eliminado = info_campo['nombre_campo']
+
         cursor.execute("DELETE FROM valores WHERE campo_id = %s", (id,))
         
-        # 2. Eliminar el campo
         cursor.execute("DELETE FROM campos_sensores WHERE id = %s", (id,))
-        conn.commit()
         
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+        conn.commit() 
+        
+   
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=proyecto_id_padre,
+            tipo_evento='CAMPO_ELIMINADO',
+            titulo=nombre_campo_eliminado, # El nombre del campo
+            fuente=f"Sensor: {nombre_sensor_padre}" # El nombre del sensor padre
+        )
+        # -------------------------------------------------
             
-        return {"status": "success", "message": "Campo de sensor eliminado exitosamente."}
+        return {"status": "success", "message": f"Campo '{nombre_campo_eliminado}' eliminado exitosamente."}
+
     except pymysql.Error as e:
-        if e.args[0] == 1451: # Error de FK (si valores falla)
-             raise HTTPException(status_code=400, detail="No se puede eliminar: El campo aún tiene valores asociados.")
+        if conn: conn.rollback()
+        if e.args[0] == 1451: # Error de FK
+             raise HTTPException(status_code=400, detail="No se puede eliminar: El campo aún tiene dependencias externas.")
         raise HTTPException(status_code=500, detail=f"DB Error al eliminar campo: {str(e)}")
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
     finally:
         if conn: conn.close()
+# async def eliminar_campo_sensor_db(id: int) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # 1. Eliminar valores asociados (Hoja)
+#         cursor.execute("DELETE FROM valores WHERE campo_id = %s", (id,))
+        
+#         # 2. Eliminar el campo
+#         cursor.execute("DELETE FROM campos_sensores WHERE id = %s", (id,))
+#         conn.commit()
+        
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+            
+#         return {"status": "success", "message": "Campo de sensor eliminado exitosamente."}
+#     except pymysql.Error as e:
+#         if e.args[0] == 1451: # Error de FK (si valores falla)
+#              raise HTTPException(status_code=400, detail="No se puede eliminar: El campo aún tiene valores asociados.")
+#         raise HTTPException(status_code=500, detail=f"DB Error al eliminar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # ----------------------------------------------------------------------
 # ENDPOINTS (Protegidos por JWT)
@@ -198,7 +401,7 @@ async def crear_campo_sensor(
 ):
     # NOTA: Autorización
     try:
-        resultado = await set_campo_sensor_db(datos)
+        resultado = await set_campo_sensor_db(datos, current_user_id)
         return {"message": "Campo de sensor creado exitosamente.", "resultados": resultado}
     except HTTPException:
         raise
@@ -214,7 +417,7 @@ async def actualizar_campo_sensor(
 ):
     # NOTA: Autorización
     try:
-        return await actualizar_campo_sensor_db(id, datos)
+        return await actualizar_campo_sensor_db(id, datos,current_user_id)
     except HTTPException:
         raise
     except Exception as e:

@@ -2,71 +2,116 @@
   <div class="modulo-estado-sistema" :class="{ 'theme-dark': isDark, 'theme-light': !isDark }">
     
     <h3 class="modulo-titulo">
-      <i class="bi bi-activity"></i> Estado del Sistema
+      <i class="bi bi-activity"></i> Estado de la Red IoT
     </h3>
-    <p class="modulo-subtitulo">Métricas en tiempo real (Por el momento son datos fijos)</p>
+    <p class="modulo-subtitulo">Metricas de conexion de la infraestructura</p>
     
-    <div class="metric-list">
+    <div v-if="loading" class="metric-loading">
+      <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando estado de la red...
+    </div>
+    <div v-else-if="error" class="metric-error">
+      <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+    </div>
+    
+    <div v-else class="metric-list">
+      <div class="metric-item">
+        <div class="metric-icon metric-icon-primary"><i class="bi bi-wifi"></i></div>
+        <div class="metric-label">Dispositivos Conectados</div>
+        <div class="metric-value">{{ estado.activos }} / {{ estado.total }}</div>
+      </div>
+
       <div class="metric-item">
         <div class="metric-icon metric-icon-success"><i class="bi bi-graph-up-arrow"></i></div>
         <div class="metric-label">Uptime</div>
-        <div class="metric-value">{{ metrics.uptime }}</div>
+        <div class="metric-value">99.9%</div>
       </div>
 
       <div class="metric-item">
         <div class="metric-icon metric-icon-accent"><i class="bi bi-lightning-fill"></i></div>
         <div class="metric-label">Latencia</div>
-        <div class="metric-value">{{ metrics.latency }}</div>
-      </div>
-      
-      <div class="metric-item">
-        <div class="metric-icon metric-icon-primary"><i class="bi bi-globe"></i></div>
-        <div class="metric-label">Conectados</div>
-        <div class="metric-value">{{ metrics.connected }}</div>
+        <div class="metric-value">12ms</div>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+// Asumo que API_BASE_URL esta definida globalmente (main.js)
+// const API_BASE_URL = 'http://127.0.0.1:8001';
+
 export default {
-    name: 'EstadoSistema',
-    props: {
-        isDark: {
-            type: Boolean,
-            required: true
+  name: 'EstadoSistema',
+  props: {
+    isDark: {
+      type: Boolean,
+      required: true
+    }
+  },
+  data() {
+    return {
+      loading: true, 
+      error: null,   
+      estado: {     
+        activos: 0,
+        total: 0
+      }
+    };
+  },
+  mounted() {
+    this.cargarEstadoDispositivos();
+  },
+  methods: {
+    async cargarEstadoDispositivos() {
+      this.loading = true;
+      this.error = null;
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        this.error = "Error de autenticacion.";
+        this.loading = false;
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/estado-dispositivos`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'No se pudo cargar el estado de los dispositivos.');
         }
-    },
-    data() {
-        return {
-            metrics: {
-                // Datos simulados (futuro endpoint de FastAPI)
-                uptime: '99.9%',
-                latency: '12ms',
-                connected: '14/16'
-            }
-        };
-    },
-    // Nota: Los estilos SCSS se proporcionan en la siguiente sección
+        
+        this.estado = await response.json();
+        
+      } catch (err) {
+        this.error = err.message;
+        console.error("Error cargando estado de dispositivos:", err);
+      } finally {
+        this.loading = false;
+      }
+    }
+  }
 }
 </script>
 
 <style scoped lang="scss">
 // ----------------------------------------
-// VARIABLES DE LA PALETA
+// VARIABLES DE LA PALETA (Asegurate de tenerlas definidas)
 // ----------------------------------------
-// $LIGHT-TEXT: #E4E6EB;
-// $DARK-TEXT: #333333;
-// $GRAY-COLD: #99A2AD;
-// $BLUE-MIDNIGHT: #1A1A2E; 
-// $SUBTLE-BG-DARK: #2B2B40; 
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $ACCENT-COLOR: #FFC107; 
-// $SUBTLE-BG-LIGHT: #FFFFFF;
+$LIGHT-TEXT: #E4E6EB;
+$DARK-TEXT: #333333;
+$GRAY-COLD: #99A2AD;
+$BLUE-MIDNIGHT: #1A1A2E; 
+$SUBTLE-BG-DARK: #2B2B40; 
+$PRIMARY-PURPLE: #8A2BE2;
+$SUCCESS-COLOR: #1ABC9C;
+$ACCENT-COLOR: #FFC107; 
+$SUBTLE-BG-LIGHT: #FFFFFF;
+$DANGER-COLOR: #E74C3C;
 
 // ----------------------------------------
-// ESTILOS PRINCIPALES DEL MÓDULO
+// ESTILOS PRINCIPALES DEL MODULO
 // ----------------------------------------
 .modulo-estado-sistema {
     padding: 25px;
@@ -89,7 +134,7 @@ export default {
 }
 
 // ----------------------------------------
-// ESTILOS DE MÉTRICAS INDIVIDUALES
+// ESTILOS DE METRICAS INDIVIDUALES
 // ----------------------------------------
 .metric-list {
     display: flex;
@@ -115,7 +160,6 @@ export default {
     width: 30px;
 }
 
-/* Estilos de color para los iconos */
 .metric-icon-success i { color: $SUCCESS-COLOR; }
 .metric-icon-accent i { color: $ACCENT-COLOR; }
 .metric-icon-primary i { color: $PRIMARY-PURPLE; }
@@ -129,28 +173,34 @@ export default {
     font-weight: 700;
     font-size: 1.1rem;
     
-    /* Aplica el color del icono al valor para contraste */
-    .metric-item:nth-child(2) & { color: $ACCENT-COLOR; } 
-    .metric-item:nth-child(3) & { color: $PRIMARY-PURPLE; }
+    .metric-item:first-child & { color: $PRIMARY-PURPLE; }
+    .metric-item:nth-child(2) & { color: $SUCCESS-COLOR; }
+    .metric-item:nth-child(3) & { color: $ACCENT-COLOR; }
 }
+
+.metric-loading, .metric-error {
+  padding: 20px;
+  font-style: italic;
+  text-align: center;
+  i { margin-right: 8px; }
+}
+.metric-error { color: $DANGER-COLOR; }
 
 // ----------------------------------------
 // TEMAS
 // ----------------------------------------
 
-// MODO CLARO
 .theme-light {
     background-color: $SUBTLE-BG-LIGHT; 
     color: $DARK-TEXT;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     
-    .modulo-subtitulo, .metric-list .metric-item {
-        color: $GRAY-COLD;
+    .modulo-subtitulo { color: $GRAY-COLD; }
+    .metric-list .metric-item {
         border-bottom-color: #eee;
     }
 }
 
-// MODO OSCURO (Estilo fijo y profundo)
 .theme-dark {
     background-color: $SUBTLE-BG-DARK; 
     color: $LIGHT-TEXT;
@@ -161,5 +211,9 @@ export default {
     .metric-list .metric-item {
         border-bottom-color: rgba($LIGHT-TEXT, 0.1);
     }
+    .metric-loading, .metric-error {
+        color: $GRAY-COLD;
+    }
+    .metric-error { color: $DANGER-COLOR; }
 }
 </style>

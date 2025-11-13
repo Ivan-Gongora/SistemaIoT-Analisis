@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import pymysql
 
-# 🚨 Importaciones CRÍTICAS de Utilidades JWT
+# Importaciones CRÍTICAS de Utilidades JWT
 from app.servicios.auth_utils import get_current_user_id, create_access_token, validate_invitation_token
 from app.configuracion import configuracion
 from app.servicios.servicio_simulacion import get_db_connection, simular_datos_json
@@ -15,7 +15,8 @@ from app.api.modelos.proyectos import ProyectoCrear, ProyectoActualizar, Proyect
 from app.api.modelos.simulacion import DatosSimulacion
 from app.servicios import servicio_simulacion as servicio_simulacion
 
-# 🚨 Declaración del Router (Debe ir aquí para que se exporte correctamente)
+from app.servicios.servicio_actividad import registrar_actividad_db
+# Declaración del Router (Debe ir aquí para que se exporte correctamente)
 router_proyecto = APIRouter()
 
 
@@ -77,6 +78,7 @@ async def crear_proyecto(
         raise HTTPException(status_code=403, detail="El ID de usuario en el payload no coincide con el usuario logueado.")
         
     try:
+     
         resultados = await set_proyecto(datos) # Llama a la función de servicio definida abajo
         return {"message": "Se registro el proyecto", "resultados": resultados}
     except Exception as e:
@@ -94,7 +96,7 @@ async def endpoint_actualizar_datos_proyecto(
         raise HTTPException(status_code=403, detail="No autorizado para actualizar este proyecto.")
         
     try:
-        resultados = await actualizar_datos_proyecto(id, datos) # Llama a la función de servicio definida abajo
+        resultados = await actualizar_datos_proyecto(id, datos,current_user_id) # Llama a la función de servicio definida abajo
         return {"message": "Actualización de datos para actualizar completada.", "resultados": resultados}
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": "Error inesperado durante la actualización", "details": str(e)},)
@@ -234,7 +236,7 @@ async def process_join_project(
 # app/api/rutas/proyectos/proyectos.py
 
 
-# 🚨 Endpoint para obtener miembros de un proyecto específico (AÑADIDO)
+#  Endpoint para obtener miembros de un proyecto específico (AÑADIDO)
 @router_proyecto.get("/proyectos/{proyecto_id}/miembros")
 async def get_project_members(
     proyecto_id: int,
@@ -300,7 +302,7 @@ async def set_proyecto(datos: ProyectoCrear) -> List[Dict[str, Any]]:
             (datos.nombre, datos.descripcion, datos.usuario_id, datos.tipo_industria) # 🚨 Pasar el nuevo valor
         )
         
-        # 🚨 2. Obtener el ID del proyecto recién creado
+        #  2. Obtener el ID del proyecto recién creado
         proyecto_id = conn.insert_id() 
         
         # Obtener el ID del rol 'Administrador'
@@ -315,7 +317,13 @@ async def set_proyecto(datos: ProyectoCrear) -> List[Dict[str, Any]]:
         )
 
         conn.commit()
-        
+        await registrar_actividad_db(
+            usuario_id=datos.usuario_id,    # El ID del usuario que crea
+            proyecto_id=proyecto_id,        # El ID del proyecto recién creado
+            tipo_evento='PROYECTO_CREADO',
+            titulo=datos.nombre,            # El nombre del proyecto
+            fuente="Módulo de Proyectos"
+        )
         # Incluir el nuevo campo en la respuesta de procesado
         procesado.append({
             "nombre": datos.nombre, 
@@ -335,7 +343,7 @@ async def set_proyecto(datos: ProyectoCrear) -> List[Dict[str, Any]]:
 
 
 # Función para actualizar datos del proyecto
-async def actualizar_datos_proyecto(id: int, datos: ProyectoActualizar) -> List[Dict[str, Any]]:
+async def actualizar_datos_proyecto(id: int, datos: ProyectoActualizar,usuario_id: int) -> List[Dict[str, Any]]:
     procesado = []
     conn = None
     try:
@@ -401,6 +409,13 @@ async def actualizar_datos_proyecto(id: int, datos: ProyectoActualizar) -> List[
                     "tipo_industria": datos.tipo_industria 
                 }
             })
+            await registrar_actividad_db(
+                usuario_id=usuario_id,
+                proyecto_id=id,
+                tipo_evento='PROYECTO_MODIFICADO',
+                titulo=datos.nombre, # El nuevo nombre del proyecto
+                fuente="Módulo de Proyectos"
+            )
         else:
             procesado.append({"status": "warning", "message": "No se proporcionaron datos para actualizar"})
             
@@ -413,32 +428,38 @@ async def actualizar_datos_proyecto(id: int, datos: ProyectoActualizar) -> List[
     return procesado
 
 
-
-
-
 async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
     conn = None
+    nombre_proyecto_eliminado = "" # Variable para guardar el nombre
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor) 
         
-        # ... (1. VALIDACIÓN DE PROPIEDAD Y EXISTENCIA - sin cambios) ...
-        cursor.execute("SELECT usuario_id FROM proyectos WHERE id = %s", (id,))
+
+        # Obtenemos el nombre ANTES de borrarlo
+        cursor.execute("SELECT nombre, usuario_id FROM proyectos WHERE id = %s", (id,))
         proyecto_row = cursor.fetchone() 
-        # ... (validaciones) ...
+        
+        if not proyecto_row:
+             raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
+        if proyecto_row['usuario_id'] != usuario_id:
+             raise HTTPException(status_code=403, detail="No autorizado para eliminar este proyecto.")
+
+        # Guardamos el nombre para el log
+        nombre_proyecto_eliminado = proyecto_row['nombre']
+
 
         proyecto_id = id # Usamos el ID directamente del query
         
-        # Obtener los datos necesarios para el bucle (solo si vas a usarlo)
+        # Obtener los datos necesarios para el bucle (Lógica original)
         cursor.execute("SELECT id FROM proyectos WHERE id = %s AND usuario_id = %s", (proyecto_id, usuario_id))
         proyectos = cursor.fetchall()
         
-        # 🚨 2. ELIMINACIÓN EN CASCADA (ORDEN CORREGIDO)
+        # 3. ELIMINACIÓN EN CASCADA (Tu lógica original)
         for proyecto in proyectos:
             proyecto_id_actual = proyecto["id"] 
 
-            # 🚨 CRÍTICO: ELIMINAR PROYECTO_USUARIOS PRIMERO 🚨
-            # Esto resuelve el error 1451
+            # Eliminar proyecto_usuarios primero
             cursor.execute("DELETE FROM proyecto_usuarios WHERE proyecto_id = %s", (proyecto_id_actual,)) 
 
             # Obtener dispositivos
@@ -460,8 +481,8 @@ async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
                     campos = cursor.fetchall()
 
                     for campo in campos:
-                        # Eliminar valores registrados
-                        cursor.execute("DELETE FROM valores WHERE campo_id = %s", (campo["id"],))
+                       
+                        pass
 
                     # Eliminar campos del sensor
                     cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (sensor_id,))
@@ -472,18 +493,100 @@ async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
             # Eliminar dispositivos del proyecto
             cursor.execute("DELETE FROM dispositivos WHERE proyecto_id = %s", (proyecto_id_actual,))
 
-            # Eliminar el proyecto (AHORA ES SEGURO ELIMINAR LA FILA PADRE)
+            # Eliminar el proyecto
             cursor.execute("DELETE FROM proyectos WHERE id = %s", (proyecto_id_actual,))
 
-        conn.commit()
-        return {"status": "success", "message": f"Proyecto {id} eliminado exitosamente."}
+        conn.commit() 
+        
+       
+        await registrar_actividad_db(
+            usuario_id=usuario_id,
+            proyecto_id=None, # El ID ya no existe en la DB
+            tipo_evento='PROYECTO_ELIMINADO',
+            titulo=nombre_proyecto_eliminado, # El nombre que guardamos
+            fuente="Módulo de Proyectos"
+        )
+        # -------------------------------------------------
+        
+        # Mensaje de éxito usando el nombre capturado
+        return {"status": "success", "message": f"Proyecto '{nombre_proyecto_eliminado}' (ID: {id}) eliminado exitosamente."}
 
     except Exception as e:
         if conn: conn.rollback()
-        # 🚨 Mantenemos el detalle del error para cualquier nuevo fallo
         raise HTTPException(status_code=500, detail=f"Fallo de DB: {str(e)}")
     finally:
         if conn: conn.close()
+
+
+# async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor) 
+        
+#         # ... (1. VALIDACIÓN DE PROPIEDAD Y EXISTENCIA - sin cambios) ...
+#         cursor.execute("SELECT usuario_id FROM proyectos WHERE id = %s", (id,))
+#         proyecto_row = cursor.fetchone() 
+     
+
+#         proyecto_id = id # Usamos el ID directamente del query
+        
+#         # Obtener los datos necesarios para el bucle (solo si vas a usarlo)
+#         cursor.execute("SELECT id FROM proyectos WHERE id = %s AND usuario_id = %s", (proyecto_id, usuario_id))
+#         proyectos = cursor.fetchall()
+        
+#         # 🚨 2. ELIMINACIÓN EN CASCADA (ORDEN CORREGIDO)
+#         for proyecto in proyectos:
+#             proyecto_id_actual = proyecto["id"] 
+
+#             # 🚨 CRÍTICO: ELIMINAR PROYECTO_USUARIOS PRIMERO 🚨
+#             # Esto resuelve el error 1451
+#             cursor.execute("DELETE FROM proyecto_usuarios WHERE proyecto_id = %s", (proyecto_id_actual,)) 
+
+#             # Obtener dispositivos
+#             cursor.execute("SELECT id FROM dispositivos WHERE proyecto_id = %s", (proyecto_id_actual,))
+#             dispositivos = cursor.fetchall()
+
+#             for dispositivo in dispositivos:
+#                 dispositivo_id = dispositivo["id"]
+                
+#                 # Obtener sensores
+#                 cursor.execute("SELECT id FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
+#                 sensores = cursor.fetchall()
+
+#                 for sensor in sensores:
+#                     sensor_id = sensor["id"]
+                    
+#                     # Obtener campos
+#                     cursor.execute("SELECT id FROM campos_sensores WHERE sensor_id = %s", (sensor_id,))
+#                     campos = cursor.fetchall()
+
+#                     for campo in campos:
+#                         # Eliminar valores registrados
+#                         cursor.execute("DELETE FROM valores WHERE campo_id = %s", (campo["id"],))
+
+#                     # Eliminar campos del sensor
+#                     cursor.execute("DELETE FROM campos_sensores WHERE sensor_id = %s", (sensor_id,))
+
+#                 # Eliminar sensores del dispositivo
+#                 cursor.execute("DELETE FROM sensores WHERE dispositivo_id = %s", (dispositivo_id,))
+
+#             # Eliminar dispositivos del proyecto
+#             cursor.execute("DELETE FROM dispositivos WHERE proyecto_id = %s", (proyecto_id_actual,))
+
+#             # Eliminar el proyecto (AHORA ES SEGURO ELIMINAR LA FILA PADRE)
+#             cursor.execute("DELETE FROM proyectos WHERE id = %s", (proyecto_id_actual,))
+
+#         conn.commit()
+        
+#         return {"status": "success", "message": f"Proyecto {id} eliminado exitosamente."}
+
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         # 🚨 Mantenemos el detalle del error para cualquier nuevo fallo
+#         raise HTTPException(status_code=500, detail=f"Fallo de DB: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 # # Función de Eliminación de Proyecto (eliminar_proyecto_db)
 # async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:

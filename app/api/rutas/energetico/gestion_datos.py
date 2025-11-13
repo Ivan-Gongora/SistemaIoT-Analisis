@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status,
 import logging
 
 from app.servicios.auth_utils import get_current_user_id 
-# 🎯 Importar la nueva función de servicio
+# Importar la nueva función de servicio
 from app.servicios.energetico.gestion_datos_servicio import procesar_y_guardar_csv_recibos
-# 🚨 Importar la función de invalidación de caché
+# Importar la función de invalidación de caché
 from app.servicios.energetico.dependencias import invalidate_user_dataframe_cache 
+
+from app.servicios.servicio_actividad import registrar_actividad_db
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,18 @@ async def cargar_datos_csv(
         
         # --- ¡AQUÍ ES DONDE INVALIDAMOS LA CACHÉ! ---
         invalidate_user_dataframe_cache(current_user_id)
-        
+        try:
+            await registrar_actividad_db(
+                usuario_id=current_user_id,
+                proyecto_id=None, # Este evento no está ligado a un proyecto IoT
+                tipo_evento='LOTE_ENERGIA_CARGADO',
+                titulo=f"Lote: {lote_nombre}", # Ej: "Lote: Recibos 2023"
+                fuente="Módulo de Análisis Energético"
+            )
+        except Exception as log_error:
+            # Si el log falla, no detenemos la operación, solo lo reportamos
+            logger.warning(f"[{current_user_id}] Falla al registrar actividad de LOTE_ENERGIA_CARGADO: {log_error}")
+            
         return {"message": f"Datos cargados exitosamente al lote '{lote_nombre}': {num_registros} registros insertados."}
 
     except ValueError as ve:
