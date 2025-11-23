@@ -14,7 +14,7 @@ async def enviar_correo_alerta_registro(
     cuerpo: str,
     destinatario_correo: str,
     # Ahora accedemos a los atributos de la instancia 'configuracion'
-    remitente_correo: str = configuracion.EMAIL_REMITENTE,
+    remitente_correo: str = configuracion.EMAIL_REMITENTE_CORREO,
     remitente_password: str = configuracion.EMAIL_PASSWORD,
     smtp_server: str = configuracion.EMAIL_SMTP_SERVER,
     smtp_port: int = configuracion.EMAIL_SMTP_PORT

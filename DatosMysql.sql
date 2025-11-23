@@ -29,6 +29,39 @@ INSERT INTO roles (nombre_rol, descripcion) VALUES
 ('Observador', 'Puede ver datos, pero no modificar configuraciones'),
 ('Colaborador', 'Puede modificar y crear sensores/datos en proyectos invitados');
 
+-- PERMISOS DEL SISTEMA (Corregidos)
+INSERT INTO permisos (id, nombre_permiso, descripcion) VALUES
+(1, 'GESTION_USUARIOS_SISTEMA', 'Permite el control total de las cuentas de usuario (Solo Admin)'),
+(2, 'CRUD_PROYECTO_PROPIO', 'Permite modificar y eliminar proyectos PROPIOS'),
+(3, 'CREAR_PROYECTO', 'Permite crear nuevos proyectos'),
+(4, 'GESTIONAR_ACCESO_PROYECTO', 'Permite invitar y remover usuarios de un proyecto'),
+(5, 'CRUD_HARDWARE', 'Permite crear/modificar/eliminar Dispositivos, Sensores y Campos'),
+(6, 'VER_DATOS_IOT', 'Permite ver Reportes Históricos y Gráficos en Tiempo Real'),
+(7, 'GESTIONAR_LOTES_ENERGIA', 'Permite cargar y eliminar lotes de CSV de energía'),
+(8, 'VER_ANALISIS_ENERGIA', 'Permite ver los dashboards de Análisis Energético y Simulaciones');
+
+-- ASIGNACIÓN DE PERMISOS A ROLES (Corregida)
+INSERT INTO rol_permisos (rol_id, permiso_id) VALUES
+-- 1: Administrador (Control Total del Sistema)
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
+
+-- 2: Propietario (Dueño del Proyecto: Puede hacer todo DENTRO del proyecto)
+(2, 2), -- CRUD Proyecto Propio
+(2, 3), -- Crear Proyecto
+(2, 4), -- Gestionar Acceso
+(2, 5), -- CRUD Hardware
+(2, 6), -- Ver Datos IoT
+(2, 7), -- Gestionar Lotes
+(2, 8), -- Ver Análisis Energía
+
+-- 3: Observador (Invitado: Solo Ver)
+(3, 6), -- Ver Datos IoT
+(3, 8), -- Ver Análisis Energía
+
+-- 4: Colaborador (Invitado: Ver y Editar Hardware)
+(4, 5), -- CRUD Hardware
+(4, 6), -- Ver Datos IoT
+(4, 8); -- Ver Análisis Energía
 -- UNIDADES DE MEDIDA
 INSERT INTO unidades_medida (nombre, simbolo, descripcion, magnitud_tipo) VALUES
 ('Celsius', '°C', 'Temperatura en grados Celsius', 'Temperatura'),
@@ -65,23 +98,7 @@ INSERT INTO unidades_medida (nombre, simbolo, descripcion, magnitud_tipo) VALUES
 ('Índice Ultravioleta', 'Índice UV', 'Intensidad de radiación solar UV', 'Radiación'),
 ('Factor de Potencia', 'PF', 'Eficiencia eléctrica (Adimensional, cos(φ))', 'Factor de Potencia');
 
--- PERMISOS DEL SISTEMA
-INSERT INTO permisos (nombre_permiso, descripcion) VALUES
-('GESTION_USUARIOS', 'Permite el control total de las cuentas de usuario'),
-('CRUD_PROYECTO', 'Permite crear, modificar y eliminar proyectos'),
-('VER_LISTA_GLOBAL', 'Permite ver una lista global de todos los proyectos/dispositivos'),
-('GESTIONAR_ACCESO', 'Permite invitar y remover a otros usuarios de un proyecto'),
-('CRUD_SENSOR', 'Permite crear/modificar/eliminar sensores y sus campos'),
-('CRUD_DATO_SENSOR', 'Permite crear/modificar/eliminar datos de sensores');
 
--- ASIGNACIÓN DE PERMISOS A ROLES
-INSERT INTO rol_permisos (rol_id, permiso_id) VALUES
--- Administrador (todos los permisos)
-(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
--- Propietario (gestión de proyectos, acceso, sensores y datos)
-(2, 2), (2, 4), (2, 5), (2, 6),
--- Colaborador (solo manipulación de sensores y datos)
-(4, 5), (4, 6);
 
 -- ************************************************************
 -- INSERCIÓN DE USUARIOS Y PROYECTOS DE PRUEBA

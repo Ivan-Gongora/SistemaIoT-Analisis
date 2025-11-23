@@ -9,6 +9,12 @@ from app.servicios.auth_utils import get_current_user_id
 from app.servicios.servicio_simulacion import get_db_connection
 from app.api.modelos.campos_sensores import CampoSensor, CampoSensorCrear, CampoSensorActualizar
 
+from app.servicios.servicio_permisos import (
+    verificar_permiso_proyecto,
+    obtener_proyecto_id_desde_sensor, # Para GET y POST (tenemos sensor_id)
+    obtener_proyecto_id_desde_campo   # Para PUT y DELETE (tenemos campo_id)
+)
+
 from app.servicios.servicio_actividad import registrar_actividad_db
 router_campos = APIRouter()
 
@@ -375,64 +381,99 @@ async def eliminar_campo_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
 # ----------------------------------------------------------------------
 # ENDPOINTS (Protegidos por JWT)
 # ----------------------------------------------------------------------
-
-# GET (Ya lo tienes en el router de sensores, lo movemos aquí)
+# -----------------------------------------------------------
+# GET: Obtener Campos por Sensor (Lectura)
+# -----------------------------------------------------------
 @router_campos.get("/sensores/{sensor_id}/campos", response_model=List[CampoSensor])
 async def get_campos_por_sensor(
     sensor_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # NOTA: Aquí iría la autorización (check_user_permission)
+    # 🚨 1. Averiguar el proyecto al que pertenece el sensor
+    proyecto_id = await obtener_proyecto_id_desde_sensor(sensor_id)
+    
+    
+    # Esto permite que Propietarios, Colaboradores y Observadores vean los campos
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
     try:
         campos = await obtener_campos_por_sensor_db(sensor_id)
         if not campos:
-            raise HTTPException(status_code=404, detail="No se encontraron campos para este sensor.")
+            # Devolver lista vacía es mejor práctica que 404 en listas, pero mantenemos tu lógica si prefieres
+            return [] 
         return campos
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener campos: {str(e)}")
 
-# POST (Crear)
+
+# -----------------------------------------------------------
+# POST: Crear Campo (Escritura)
+# -----------------------------------------------------------
 @router_campos.post("/campos_sensores/", response_model=Dict[str, Any])
 async def crear_campo_sensor(
     datos: CampoSensorCrear,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # NOTA: Autorización
+    # 🚨 1. Averiguar el proyecto usando el sensor_id del payload
+    proyecto_id = await obtener_proyecto_id_desde_sensor(datos.sensor_id)
+    
+    # 🚨 2. Verificar permiso de ESCRITURA
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+
     try:
+        # Llamada al servicio (ya incluye registro de actividad)
         resultado = await set_campo_sensor_db(datos, current_user_id)
         return {"message": "Campo de sensor creado exitosamente.", "resultados": resultado}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al crear campo: {str(e)}")
+        return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})
 
-# PUT (Actualizar)
+
+# -----------------------------------------------------------
+# PUT: Actualizar Campo (Escritura)
+# -----------------------------------------------------------
 @router_campos.put("/campos_sensores/{id}", response_model=Dict[str, Any])
 async def actualizar_campo_sensor(
     id: int,
     datos: CampoSensorActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # NOTA: Autorización
+    # 🚨 1. Averiguar el proyecto usando el ID del campo
+    proyecto_id = await obtener_proyecto_id_desde_campo(id)
+    
+    # 🚨 2. Verificar permiso de ESCRITURA
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+
     try:
-        return await actualizar_campo_sensor_db(id, datos,current_user_id)
+        # Llamada al servicio (ya incluye registro de actividad)
+        return await actualizar_campo_sensor_db(id, datos, current_user_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al actualizar campo: {str(e)}")
+        return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})
 
-# DELETE (Eliminar)
+
+# -----------------------------------------------------------
+# DELETE: Eliminar Campo (Escritura)
+# -----------------------------------------------------------
 @router_campos.delete("/campos_sensores/{id}", response_model=Dict[str, Any])
 async def eliminar_campo_sensor(
     id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # NOTA: Autorización
+    # 🚨 1. Averiguar el proyecto usando el ID del campo
+    proyecto_id = await obtener_proyecto_id_desde_campo(id)
+    
+    # 🚨 2. Verificar permiso de ESCRITURA
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+
     try:
-        return await eliminar_campo_sensor_db(id)
+        # Llamada al servicio (Pasamos current_user_id para el log de actividad)
+        return await eliminar_campo_sensor_db(id, current_user_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al eliminar campo: {str(e)}")
+        return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})

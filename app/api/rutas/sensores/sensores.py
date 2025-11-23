@@ -6,10 +6,11 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import pymysql
 
-# 🚨 Importaciones de Modelos y Utilidades
+#  Modelos y Utilidades
 from app.servicios.auth_utils import get_current_user_id # Solo autenticación
 from app.servicios.servicio_simulacion import get_db_connection
 from app.api.modelos.sensores import SensorCrear,Sensor, SensorActualizar, SensorGeneral
+from app.servicios.servicio_permisos import verificar_permiso_proyecto,obtener_proyecto_id_desde_dispositivo, obtener_proyecto_id_desde_sensor
 
 from app.servicios.servicio_actividad import registrar_actividad_db
 router_sensor = APIRouter()
@@ -17,21 +18,31 @@ router_sensor = APIRouter()
 # ----------------------------------------------------------------------
 # ENDPOINT DE CREACIÓN
 # ----------------------------------------------------------------------
-
-# POST: Crear Sensor (Requiere JWT)
+# -----------------------------------------------------------
+# 1. CREAR SENSOR (POST)
+# -----------------------------------------------------------
 @router_sensor.post("/sensores/")
 async def crear_sensor_endpoint(
     datos: SensorCrear,
-    current_user_id: int = Depends(get_current_user_id) # Usado para autenticación
+    current_user_id: int = Depends(get_current_user_id)
 ):
+
+    # 1. Averiguar el proyecto del dispositivo padre
+    proyecto_id = await obtener_proyecto_id_desde_dispositivo(datos.dispositivo_id)
+    
+    # 2. Verificar permiso sobre ese proyecto
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+
     try:
-        resultados = await set_sensor(datos,current_user_id)
+        # Llamada al servicio (ya incluye registro de actividad)
+        resultados = await set_sensor(datos, current_user_id)
         return {"message": "Sensor registrado exitosamente.", "resultados": resultados}
     except HTTPException:
         raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})
-
+    
+    
 # GET: Obtener todos los sensores accesibles para el usuario (propietario o miembro)
 @router_sensor.get("/sensores/todos", response_model=List[SensorGeneral])
 async def get_all_sensores_general(
@@ -87,24 +98,32 @@ async def get_sensores_por_dispositivo(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")
 
-# PUT: Actualizar Sensor (Requiere JWT)
+# -----------------------------------------------------------
+# 2. ACTUALIZAR SENSOR (PUT)
+# -----------------------------------------------------------
 @router_sensor.put("/sensores/{id}")
 async def actualizar_sensor_endpoint(
     id: int,
     datos: SensorActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
+    # 🚨 VERIFICACIÓN DE SEGURIDAD
+    # 1. Averiguar el proyecto usando el ID del sensor
+    proyecto_id = await obtener_proyecto_id_desde_sensor(id)
+    
+    # 2. Verificar permiso
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+
     try:
-        # 1. Ejecutar la actualización (db_function ya existe)
-        await actualizar_sensor_db(id, datos,current_user_id)
+        # 1. Ejecutar la actualización
+        await actualizar_sensor_db(id, datos, current_user_id)
         
-        # 2. 🚨 CRÍTICO: Obtener y devolver el objeto completo y actualizado
+        # 2. Obtener y devolver el objeto actualizado
         sensor_actualizado = await obtener_sensor_por_id_db(id)
         
         if not sensor_actualizado:
              raise HTTPException(status_code=404, detail="Sensor actualizado no encontrado para devolver.")
              
-        # Envuelve el resultado en un diccionario para imitar el patrón de respuesta de otras rutas
         return {"status": "success", "resultados": [sensor_actualizado]}
         
     except HTTPException:
@@ -113,20 +132,28 @@ async def actualizar_sensor_endpoint(
         raise HTTPException(status_code=500, detail=f"Error al actualizar sensor: {str(e)}")
 
 
-# DELETE: Eliminar Sensor (Requiere JWT)
+# -----------------------------------------------------------
+# 3. ELIMINAR SENSOR (DELETE)
+# -----------------------------------------------------------
 @router_sensor.delete("/sensores/{id}")
 async def eliminar_sensor_endpoint(
     id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # Nota: Aquí iría la verificación de permiso (CRUD_SENSOR)
+    # 1. Averiguar el proyecto usando el ID del sensor
+    proyecto_id = await obtener_proyecto_id_desde_sensor(id)
+    
+    # 2. Verificar permiso
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
+    
     try:
-        return await eliminar_sensor_db(id,current_user_id)
+        # Llamada al servicio (ya incluye registro de actividad)
+        return await eliminar_sensor_db(id, current_user_id)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar sensor: {str(e)}")
-
+    
 # ----------------------------------------------------------------------
 # FUNCIONES DE SERVICIO DE BASE DE DATOS
 # ----------------------------------------------------------------------

@@ -209,7 +209,8 @@ CREATE TABLE actividad_reciente (
         'PROYECTO_CREADO', 
         'PROYECTO_MODIFICADO',
         'PROYECTO_ELIMINADO',
-        
+        'USUARIO_INVITADO', 
+         'USUARIO_REMOVIDO', 
         -- Dispositivos
         'DISPOSITIVO_CREADO', 
         'DISPOSITIVO_MODIFICADO',

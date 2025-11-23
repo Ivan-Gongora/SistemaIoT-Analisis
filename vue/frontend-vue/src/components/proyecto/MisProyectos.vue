@@ -184,7 +184,7 @@ export default {
         async eliminar(id) {
             const token = localStorage.getItem('accessToken');
             const usuarioId = this.id_usuario; 
-            const url = `${API_BASE_URL}/api/proyectos/?id=${id}&usuario_id=${usuarioId}`; 
+            const url = `${API_BASE_URL}/api/proyectos/${id}`; 
 
             if (!token || !usuarioId) {
                 alert("Error: Sesión no válida.");

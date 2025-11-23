@@ -235,7 +235,7 @@ export default {
             const usuarioId = this.dispositivoEliminarPropietarioId; 
 
             // 🚨 CONSTRUCCIÓN DE LA URL CORREGIDA Y SEGURA
-            const url = `${API_BASE_URL}/api/dispositivos/?id=${dispositivoId}&proyecto_id=${proyectoId}&usuario_id=${usuarioId}`; 
+            const url = `${API_BASE_URL}/api/dispositivos/?id=${dispositivoId}&proyecto_id=${proyectoId}`; 
 
             if (!token || !usuarioId || !proyectoId) {
                 alert("Error: Faltan datos de seguridad (token/proyecto/dueño).");

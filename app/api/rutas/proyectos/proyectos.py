@@ -16,7 +16,10 @@ from app.api.modelos.simulacion import DatosSimulacion
 from app.servicios import servicio_simulacion as servicio_simulacion
 
 from app.servicios.servicio_actividad import registrar_actividad_db
-# Declaración del Router (Debe ir aquí para que se exporte correctamente)
+from app.servicios.servicio_permisos import verificar_permiso_proyecto
+
+
+
 router_proyecto = APIRouter()
 
 
@@ -85,120 +88,160 @@ async def crear_proyecto(
         return JSONResponse(status_code=500, content={"message": "Error inesperado durante la inserción ", "details": str(e)},)
 
 
-# Actualizar información de proyectos (PROTEGIDO)
+# -----------------------------------------------------------
+# ACTUALIZAR PROYECTO (PUT)
+# -----------------------------------------------------------
 @router_proyecto.put("/proyectos/{id}")
 async def endpoint_actualizar_datos_proyecto(
     id: int, 
     datos: ProyectoActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    if datos.usuario_id != current_user_id:
-        raise HTTPException(status_code=403, detail="No autorizado para actualizar este proyecto.")
-        
+    # 🚨 1. ELIMINAR ESTA VALIDACIÓN ANTIGUA:
+    # if datos.usuario_id != current_user_id: ...
+
+    # 🚨 2. CONFIAR EN EL GUARDIÁN (RBAC):
+    # Este verificará si eres dueño O si tienes el permiso 'CRUD_PROYECTO' como colaborador
+    await verificar_permiso_proyecto(current_user_id, id, 'CRUD_PROYECTO') 
+    
     try:
-        resultados = await actualizar_datos_proyecto(id, datos,current_user_id) # Llama a la función de servicio definida abajo
-        return {"message": "Actualización de datos para actualizar completada.", "resultados": resultados}
+        # Pasamos el current_user_id para el registro de actividad
+        resultados = await actualizar_datos_proyecto(id, datos, current_user_id) 
+        return {"message": "Actualización de datos completada.", "resultados": resultados}
+        
+    except HTTPException:
+        raise 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"message": "Error inesperado durante la actualización", "details": str(e)},)
+        return JSONResponse(
+            status_code=500, 
+            content={"message": "Error inesperado durante la actualización", "details": str(e)}
+        )
 
 
-# (Endpoint)
-
-
-# Eliminar proyecto (PROTEGIDO)
-@router_proyecto.delete("/proyectos/")
+# -----------------------------------------------------------
+# ELIMINAR PROYECTO (DELETE)
+# -----------------------------------------------------------
+@router_proyecto.delete("/proyectos/{id}") # 👈 Usar Path param {id}, es más limpio REST
 async def eliminar_proyecto(
-    id: Optional[int] = Query(None, description="Eliminar por ID"),
-    usuario_id: int = Query(..., description="ID del usuario"),
+    id: int, # Recibimos ID directamente del Path
+    # usuario_id: int = Query(...)  <-- 🚨 ELIMINAR ESTE PARÁMETRO. No debemos pedirle al usuario su ID, ya lo tenemos en el token.
     current_user_id: int = Depends(get_current_user_id)
 ) -> Dict:
-    if usuario_id != current_user_id:
-        raise HTTPException(status_code=403, detail="No autorizado para eliminar proyectos de otro usuario.")
-        
+    
+    # 🚨 1. ELIMINAR VALIDACIÓN ANTIGUA:
+    # if usuario_id != current_user_id: ...
+    
+    # 🚨 2. CONFIAR EN EL GUARDIÁN:
+    # Solo permitirá pasar si tiene 'CRUD_PROYECTO_PROPIO' (que solo el dueño tiene)
+    await verificar_permiso_proyecto(current_user_id, id, 'CRUD_PROYECTO_PROPIO')
+    
     try:
-        # 🚨 Llamada a la función de servicio de DB
-        return await eliminar_proyecto_db(id, usuario_id) 
+        # Llamada a la función de servicio
+        return await eliminar_proyecto_db(id, current_user_id) 
+        
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al eliminar proyecto(s): {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"Error al eliminar proyecto: {str(e)}")
 # ------------------------------------------------------------------
 # 2. ENDPOINT DE GESTIÓN DE ACCESO (NUEVA FUNCIONALIDAD JWT)
 # ------------------------------------------------------------------
-
 # Endpoint para generar el link de invitación (Protegido)
 @router_proyecto.post("/proyectos/{proyecto_id}/invitar")
 async def generar_link_invitacion(
     proyecto_id: int,
+    # 1. AÑADIR EL PARÁMETRO rol_id (Por defecto 3=Observador)
+    rol_id: int = Query(3, description="ID del rol a asignar (3=Observador, 4=Colaborador)"),
     current_user_id: int = Depends(get_current_user_id)
 ):
+    # 1. Verificación de seguridad
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'GESTIONAR_ACCESO_PROYECTO')
+
+    # 2. Validación simple de roles permitidos
+    if rol_id not in [3, 4]:
+        raise HTTPException(status_code=400, detail="Rol no válido para invitación (Use 3 o 4).")
+
     try:
         invitation_expires = timedelta(hours=configuracion.ACCESS_TOKEN_EXPIRE_MINUTES / 60)
+        
+        # 🚨 3. GUARDAR EL ROL EN EL TOKEN
         invitation_token = create_access_token(
-            data={"sub": str(current_user_id), "project_id": proyecto_id, "type": "INVITE"},
+            data={
+                "sub": str(current_user_id), 
+                "project_id": proyecto_id, 
+                "role_id": rol_id,  # <--- AQUÍ GUARDAMOS EL ROL SELECCIONADO
+                "type": "INVITE"
+            },
             expires_delta=invitation_expires
         )
-       #cuando es para cuando es en tu propia maquina 
-        BASE_FRONTEND_URL = "http://localhost:8081" 
         
-        #cuando es para que lo puedan ver en la misma red local
-        # BASE_FRONTEND_URL = "http://172.21.235.58:8080" 
- 
+        link_completo = f"{configuracion.FRONTEND_URL}/join?token={invitation_token}"
 
-        link_completo = f"{BASE_FRONTEND_URL}/join?token={invitation_token}"
-
-        return {"status": "success", "link": link_completo, "expira_en_horas": invitation_expires.total_seconds() / 3600}
+        return {
+            "status": "success", 
+            "link": link_completo, 
+            "rol_asignado": rol_id, # Confirmación visual
+            "expira_en_horas": invitation_expires.total_seconds() / 3600
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar link: {str(e)}")
-
-
 # app/api/rutas/proyectos/proyectos.py (Añadir a la sección de Endpoints de Gestión)
 
 @router_proyecto.delete("/proyectos/{proyecto_id}/miembros/{usuario_id_a_remover}")
 async def remove_project_member(
     proyecto_id: int,
     usuario_id_a_remover: int,
-    current_user_id: int = Depends(get_current_user_id) # El usuario que realiza la acción
+    current_user_id: int = Depends(get_current_user_id)
 ):
+    # 🚨 1. VERIFICACIÓN DE SEGURIDAD (Usando el servicio centralizado)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'GESTIONAR_ACCESO_PROYECTO')
+    
+    if usuario_id_a_remover == current_user_id:
+         raise HTTPException(status_code=400, detail="No puedes removerte a ti mismo.")
+
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 🚨 1. AUTORIZACIÓN (CRÍTICO): Verificar si el current_user_id es el propietario/admin del proyecto
-        # NOTA: En un sistema real, aquí harías una consulta para verificar el rol.
-        # Por simplicidad, verificaremos que el current_user_id sea el propietario registrado del proyecto.
-        cursor.execute("SELECT usuario_id FROM proyectos WHERE id = %s", (proyecto_id,))
-        project_owner = cursor.fetchone()
+        # Obtener nombres para el log
+        cursor.execute("SELECT nombre FROM proyectos WHERE id = %s", (proyecto_id,))
+        nombre_proyecto = cursor.fetchone()['nombre']
         
-        if not project_owner or project_owner['usuario_id'] != current_user_id:
-             raise HTTPException(status_code=403, detail="Solo el propietario del proyecto puede remover miembros.")
+        cursor.execute("SELECT nombre_usuario FROM usuarios WHERE id = %s", (usuario_id_a_remover,))
+        usuario_removido = cursor.fetchone()
+        nombre_usuario_removido = usuario_removido['nombre_usuario'] if usuario_removido else f"ID {usuario_id_a_remover}"
 
-        # 🚨 2. PROPIEDAD: No permitir que el propietario se auto-elimine
-        if usuario_id_a_remover == current_user_id:
-             raise HTTPException(status_code=400, detail="No puedes remover al propietario del proyecto.")
-
-        # 🚨 3. ELIMINACIÓN DE LA MEMBRESÍA
+        # Eliminar
         cursor.execute(
             "DELETE FROM proyecto_usuarios WHERE proyecto_id = %s AND usuario_id = %s",
             (proyecto_id, usuario_id_a_remover)
         )
-        conn.commit()
-
+        
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="El usuario no era miembro de este proyecto.")
+            
+        conn.commit()
 
-        return {"status": "success", "message": f"Usuario {usuario_id_a_remover} removido del proyecto {proyecto_id}."}
+        # 🚨 2. REGISTRAR ACTIVIDAD
+        await registrar_actividad_db(
+            usuario_id=current_user_id,
+            proyecto_id=proyecto_id,
+            tipo_evento='USUARIO_REMOVIDO',
+            titulo=f"Usuario removido: {nombre_usuario_removido}",
+            fuente=f"Proyecto: {nombre_proyecto}"
+        )
+
+        return {"status": "success", "message": f"Usuario removido exitosamente."}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en la base de datos: {str(e)}")
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     finally:
         if conn: conn.close()
 
-# Endpoint para procesar la unión al proyecto
+# Endpoint para procesar la unión al proyecto (CORREGIDO)
 @router_proyecto.post("/join-project/{invitation_token}")
 async def process_join_project(
     invitation_token: str,
@@ -207,49 +250,69 @@ async def process_join_project(
     conn = None
     try:
         invitation_data = validate_invitation_token(invitation_token)
+        
         project_id = invitation_data.get("project_id")
-        ROL_OBSERVADOR_ID = 3 
+        inviter_id = int(invitation_data.get("sub")) 
+        
+        # 🚨 4. LEER EL ROL DEL TOKEN (Si no existe, usa 3 por defecto)
+        rol_a_asignar = invitation_data.get("role_id", 3) 
         
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
+        # Obtener nombre del proyecto para el log
+        cursor.execute("SELECT nombre FROM proyectos WHERE id = %s", (project_id,))
+        proyecto_row = cursor.fetchone()
+        nombre_proyecto = proyecto_row['nombre'] if proyecto_row else "Proyecto Desconocido"
+
+        # 🚨 5. USAR EL ROL DINÁMICO EN EL INSERT
         cursor.execute(
             """
             INSERT INTO proyecto_usuarios (proyecto_id, usuario_id, rol_id) 
             VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE rol_id = rol_id;
             """, 
-            (project_id, current_user_id, ROL_OBSERVADOR_ID)
+            (project_id, current_user_id, rol_a_asignar) # <--- USAMOS LA VARIABLE, NO EL NÚMERO FIJO
         )
         conn.commit()
         
-        return {"status": "success", "message": "Te has unido al proyecto exitosamente.", "project_id": project_id}
+        # Obtener nombre del rol para el log (Opcional, para que se vea bonito)
+        nombre_rol_asignado = "Observador" if rol_a_asignar == 3 else "Colaborador"
+
+        # Registrar Actividad
+        await registrar_actividad_db(
+            usuario_id=inviter_id,
+            proyecto_id=project_id,
+            tipo_evento='USUARIO_INVITADO',
+            titulo=f"Nuevo miembro: {nombre_rol_asignado}",
+            fuente=f"Proyecto: {nombre_proyecto}"
+        )
+        
+        return {"status": "success", "message": f"Te has unido al proyecto como {nombre_rol_asignado}.", "project_id": project_id}
 
     except pymysql.Error as e:
-        if e.args[0] == 1062:
+        if e.args[0] == 1062: 
             return {"status": "warning", "message": "Ya eres miembro de este proyecto."}
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
     except Exception as e:
+        if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
     finally:
         if conn: conn.close()
 # app/api/rutas/proyectos/proyectos.py
-
-
 #  Endpoint para obtener miembros de un proyecto específico (AÑADIDO)
 @router_proyecto.get("/proyectos/{proyecto_id}/miembros")
 async def get_project_members(
     proyecto_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
+    # 🚨 VERIFICACIÓN DE SEGURIDAD (Cualquiera con acceso de lectura puede ver miembros)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
     conn = None
     try:
-        # 🚨 USAMOS get_db_connection (que está importada arriba)
-        # El warning debería desaparecer al llamar la función correctamente
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # Lógica de DB
         cursor.execute(
             """
             SELECT 
@@ -263,16 +326,13 @@ async def get_project_members(
             """, 
             (proyecto_id,)
         )
-        members = cursor.fetchall()
-
-        # Nota: Aquí se añadiría la validación de permisos de vista si fuera necesario
-        
-        return members
+        return cursor.fetchall()
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener miembros: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     finally:
         if conn: conn.close()
+
 
 
 # ------------------------------------------------------------------
@@ -640,5 +700,158 @@ async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
 #     except Exception as e:
 #         if conn: conn.rollback()
 #         raise HTTPException(status_code=500, detail=f"Error al eliminar proyecto(s): {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+
+
+
+# # ------------------------------------------------------------------
+# # 2. ENDPOINT DE GESTIÓN DE ACCESO (NUEVA FUNCIONALIDAD JWT)
+# # ------------------------------------------------------------------
+
+# # Endpoint para generar el link de invitación (Protegido)
+# @router_proyecto.post("/proyectos/{proyecto_id}/invitar")
+# async def generar_link_invitacion(
+#     proyecto_id: int,
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     try:
+#         invitation_expires = timedelta(hours=configuracion.ACCESS_TOKEN_EXPIRE_MINUTES / 60)
+#         invitation_token = create_access_token(
+#             data={"sub": str(current_user_id), "project_id": proyecto_id, "type": "INVITE"},
+#             expires_delta=invitation_expires
+#         )
+#        #cuando es para cuando es en tu propia maquina 
+#         BASE_FRONTEND_URL = "http://localhost:8081" 
+        
+#         #cuando es para que lo puedan ver en la misma red local
+#         # BASE_FRONTEND_URL = "http://172.21.235.58:8080" 
+ 
+
+#         link_completo = f"{BASE_FRONTEND_URL}/join?token={invitation_token}"
+
+#         return {"status": "success", "link": link_completo, "expira_en_horas": invitation_expires.total_seconds() / 3600}
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al generar link: {str(e)}")
+
+
+# # app/api/rutas/proyectos/proyectos.py (Añadir a la sección de Endpoints de Gestión)
+
+# @router_proyecto.delete("/proyectos/{proyecto_id}/miembros/{usuario_id_a_remover}")
+# async def remove_project_member(
+#     proyecto_id: int,
+#     usuario_id_a_remover: int,
+#     current_user_id: int = Depends(get_current_user_id) # El usuario que realiza la acción
+# ):
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+
+#         # 🚨 1. AUTORIZACIÓN (CRÍTICO): Verificar si el current_user_id es el propietario/admin del proyecto
+#         # NOTA: En un sistema real, aquí harías una consulta para verificar el rol.
+#         # Por simplicidad, verificaremos que el current_user_id sea el propietario registrado del proyecto.
+#         cursor.execute("SELECT usuario_id FROM proyectos WHERE id = %s", (proyecto_id,))
+#         project_owner = cursor.fetchone()
+        
+#         if not project_owner or project_owner['usuario_id'] != current_user_id:
+#              raise HTTPException(status_code=403, detail="Solo el propietario del proyecto puede remover miembros.")
+
+#         # 🚨 2. PROPIEDAD: No permitir que el propietario se auto-elimine
+#         if usuario_id_a_remover == current_user_id:
+#              raise HTTPException(status_code=400, detail="No puedes remover al propietario del proyecto.")
+
+#         # 🚨 3. ELIMINACIÓN DE LA MEMBRESÍA
+#         cursor.execute(
+#             "DELETE FROM proyecto_usuarios WHERE proyecto_id = %s AND usuario_id = %s",
+#             (proyecto_id, usuario_id_a_remover)
+#         )
+#         conn.commit()
+
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="El usuario no era miembro de este proyecto.")
+
+#         return {"status": "success", "message": f"Usuario {usuario_id_a_remover} removido del proyecto {proyecto_id}."}
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error en la base de datos: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+# # Endpoint para procesar la unión al proyecto
+# @router_proyecto.post("/join-project/{invitation_token}")
+# async def process_join_project(
+#     invitation_token: str,
+#     current_user_id: int = Depends(get_current_user_id), 
+# ):
+#     conn = None
+#     try:
+#         invitation_data = validate_invitation_token(invitation_token)
+#         project_id = invitation_data.get("project_id")
+#         ROL_OBSERVADOR_ID = 3 
+        
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         cursor.execute(
+#             """
+#             INSERT INTO proyecto_usuarios (proyecto_id, usuario_id, rol_id) 
+#             VALUES (%s, %s, %s)
+#             ON DUPLICATE KEY UPDATE rol_id = rol_id;
+#             """, 
+#             (project_id, current_user_id, ROL_OBSERVADOR_ID)
+#         )
+#         conn.commit()
+        
+#         return {"status": "success", "message": "Te has unido al proyecto exitosamente.", "project_id": project_id}
+
+#     except pymysql.Error as e:
+#         if e.args[0] == 1062:
+#             return {"status": "warning", "message": "Ya eres miembro de este proyecto."}
+#         raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+# # app/api/rutas/proyectos/proyectos.py
+
+
+# #  Endpoint para obtener miembros de un proyecto específico (AÑADIDO)
+# @router_proyecto.get("/proyectos/{proyecto_id}/miembros")
+# async def get_project_members(
+#     proyecto_id: int,
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     conn = None
+#     try:
+#         # 🚨 USAMOS get_db_connection (que está importada arriba)
+#         # El warning debería desaparecer al llamar la función correctamente
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # Lógica de DB
+#         cursor.execute(
+#             """
+#             SELECT 
+#                 u.id AS usuario_id,
+#                 u.nombre_usuario, 
+#                 r.nombre_rol
+#             FROM proyecto_usuarios pu
+#             JOIN usuarios u ON pu.usuario_id = u.id
+#             JOIN roles r ON pu.rol_id = r.id
+#             WHERE pu.proyecto_id = %s;
+#             """, 
+#             (proyecto_id,)
+#         )
+#         members = cursor.fetchall()
+
+#         # Nota: Aquí se añadiría la validación de permisos de vista si fuera necesario
+        
+#         return members
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener miembros: {str(e)}")
 #     finally:
 #         if conn: conn.close()

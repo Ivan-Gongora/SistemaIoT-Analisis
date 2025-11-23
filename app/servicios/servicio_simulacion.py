@@ -21,11 +21,11 @@ def get_db_connection():
     """Retorna un objeto de conexión a la base de datos usando la configuración global."""
     try:
         return pymysql.connect(
-            host=configuracion.db_host,
-            port=configuracion.db_port,
-            user=configuracion.db_user,
-            password=configuracion.db_password,
-            database=configuracion.db_name,
+           host=configuracion.DB_HOST,
+            user=configuracion.DB_USER,
+            password=configuracion.DB_PASSWORD,
+            database=configuracion.DB_NAME,
+            port=configuracion.DB_PORT,
             cursorclass=pymysql.cursors.DictCursor
         )
     except pymysql.Error as e:
