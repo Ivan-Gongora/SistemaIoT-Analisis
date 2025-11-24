@@ -86,7 +86,7 @@ L.Icon.Default.mergeOptions({
     shadowUrl: markerShadow,
 });
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
+
 
 // 🚨 Definición del control de ubicación personalizado (Método estable para el botón de geolocalización)
 L.Control.CustomLocate = L.Control.extend({

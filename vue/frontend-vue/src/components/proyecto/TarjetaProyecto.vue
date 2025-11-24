@@ -42,21 +42,47 @@
                 </span>
                 
                 <div class="acciones">
-                    <button @click="toggleState" class="btn-accion btn-toggle-state" :class="{'btn-pause': proyecto.activo}" :title="toggleAction">
+                    <button 
+                        v-if="proyecto.mi_rol === 'Propietario' || proyecto.mi_rol === 'Colaborador'"
+                        @click="toggleState" 
+                        class="btn-accion btn-toggle-state" 
+                        :class="{'btn-pause': proyecto.activo}" 
+                        :title="toggleAction"
+                    >
                         <i :class="toggleIcon"></i> 
                         {{ toggleAction }}
                     </button>
                     
-                    <button class="btn-accion btn-share" @click="openShareModal" title="Invitar usuarios">
+                    <button 
+                        v-if="proyecto.mi_rol === 'Propietario'"
+                        class="btn-accion btn-share" 
+                        @click="openShareModal" 
+                        title="Invitar usuarios"
+                    >
                         <i class="bi bi-share"></i>
                     </button>
                     
-                    <button class="btn-accion btn-detalle" @click="editProject(proyecto)" title="Editar proyecto">
+                    <button 
+                        v-if="proyecto.mi_rol === 'Propietario'"
+                        class="btn-accion btn-detalle" 
+                        @click="editProject(proyecto)" 
+                        title="Editar proyecto"
+                    >
                         <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn-accion btn-eliminar" @click="deleteProject" title="Eliminar proyecto">
+
+                    <button 
+                        v-if="proyecto.mi_rol === 'Propietario'"
+                        class="btn-accion btn-eliminar" 
+                        @click="deleteProject" 
+                        title="Eliminar proyecto"
+                    >
                         <i class="bi bi-trash"></i>
                     </button>
+                    
+                    <span class="role-badge" :class="proyecto.mi_rol.toLowerCase()">
+                        {{ proyecto.mi_rol }}
+                    </span>
                 </div>
             </div>
         

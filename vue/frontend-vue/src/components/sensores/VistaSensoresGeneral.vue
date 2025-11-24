@@ -7,100 +7,137 @@
       
       <EncabezadoPlataforma 
         titulo="Sensores (Global)"
-        subtitulo="Vista de todos los sensores agrupados por proyecto y dispositivo"
+        subtitulo="Vista de todos los sensores agrupados por proyecto"
         @toggle-sidebar="toggleSidebar" 
         :is-sidebar-open="isSidebarOpen"
       />
 
       <div class="sensores-general-contenido">
         
-        <div v-if="loading" class="alert-info">Cargando todos los sensores...</div>
+        <div class="controls-header">
+            <div class="total-info">
+                <span class="count-badge">{{ totalRecords }}</span> Sensores detectados
+            </div>
+            
+            <div class="search-box">
+                <i class="bi bi-search search-icon"></i>
+                <input 
+                    type="text" 
+                    v-model="searchQuery" 
+                    @input="onSearchInput" 
+                    placeholder="Buscar..." 
+                    class="search-input"
+                >
+            </div>
+        </div>
+
+        <div v-if="loading" class="alert-info">
+            <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando sensores...
+        </div>
         <div v-else-if="error" class="alert-error">{{ error }}</div>
-        <div v-else-if="Object.keys(sensoresAgrupados).length === 0" class="alert-empty">
+        
+        <div v-else-if="sensores.length === 0" class="alert-empty">
           <i class="bi bi-box-fill"></i> No se encontraron sensores.
         </div>
         
-        <div v-else>
-          <section 
+        <div v-else class="ecosystem-list">
+          
+          <div 
             v-for="(proyectoData, nombreProyecto) in sensoresAgrupados" 
             :key="nombreProyecto" 
-            class="proyecto-seccion"
+            class="proyecto-bloque"
           >
-            <h2 class="proyecto-titulo"><i class="bi bi-folder2-open"></i> {{ nombreProyecto }}</h2>
+            <h2 class="proyecto-titulo">
+                <span class="marker"></span> {{ nombreProyecto }}
+            </h2>
 
             <div 
               v-for="(dispositivoData, nombreDispositivo) in proyectoData.dispositivos" 
               :key="nombreDispositivo" 
-              class="dispositivo-subseccion"
+              class="dispositivo-group"
             >
-              <h3 class="dispositivo-titulo"><i class="bi bi-tablet-fill"></i> {{ nombreDispositivo }}</h3>
+              <h3 class="dispositivo-titulo">{{ nombreDispositivo }}</h3>
               
-              <div class="lista-sensores-container">
-                <div class="lista-header">
-                  <div class="col-sensor">Sensor</div>
-                  <div class="col-tipo">Tipo</div>
-                  <div class="col-campos">Campos</div>
-                  <div class="col-estado">Estado</div>
-                  <div class="col-acciones">Acciones</div>
-                </div>
-                <div class="lista-body">
-    
-    <router-link 
-        v-for="sensor in dispositivoData.sensores" 
-        :key="sensor.id" 
-        :to="{ name: 'DetalleSensor', params: { id: sensor.id } }"
-        custom
-        v-slot="{ navigate }"
-    >
-        <div 
-            class="lista-fila" 
-            @click="navigate" 
-            role="link" 
-            style="cursor: pointer;"
-        >
-            <div class="col-sensor">{{ sensor.nombre }}</div>
-            <div class="col-tipo">{{ sensor.tipo }}</div>
-            <div class="col-campos">{{ sensor.total_campos }}</div>
-            <div class="col-estado">
-                <span class="status-badge" :class="sensor.habilitado ? 'active' : 'inactive'">
-                    {{ sensor.habilitado ? 'Activo' : 'Inactivo' }}
-                </span>
-            </div>
-            <div class="col-acciones">
-                <button @click.stop="navigateToSensorDetail(sensor.id)" class="btn-action btn-view" title="Ver Campos">
-                    <i class="bi bi-eye-fill"></i>
-                </button>
-                <button @click.stop="openEditSensorModal(sensor)" class="btn-action btn-edit" title="Modificar">
-                    <i class="bi bi-pencil"></i>
-                </button>
-                <button @click.stop="confirmarEliminacionSensor(sensor.id, sensor.nombre)" class="btn-action btn-delete" title="Eliminar">
-                              <i class="bi bi-trash"></i>
-                </button>
-            </div>
-        </div>
-    </router-link>
+              <div class="sensors-stack">
+                    <div 
+                        v-for="sensor in dispositivoData.sensores" 
+                        :key="sensor.id" 
+                        class="sensor-strip" 
+                        @click="navigateToSensorDetail(sensor.id)"
+                    >
+                        <div class="strip-icon">
+                             <i class="bi bi-activity"></i>
+                        </div>
 
-</div>
+                        <div class="strip-info">
+                            <span class="sensor-name">{{ sensor.nombre }}</span>
+                            <span class="sensor-type">{{ sensor.tipo }}</span>
+                        </div>
+
+                        <div class="strip-meta">
+                            <span class="meta-label">Campos</span>
+                            <span class="meta-value">{{ sensor.total_campos || 0 }}</span>
+                        </div>
+
+                        <div class="strip-status">
+                            <span class="status-pill" :class="sensor.habilitado ? 'status-on' : 'status-off'">
+                                <i :class="sensor.habilitado ? 'bi bi-check-circle-fill' : 'bi bi-x-circle-fill'"></i>
+                                {{ sensor.habilitado ? 'Activo' : 'Inactivo' }}
+                            </span>
+                        </div>
+
+                        <div class="strip-actions">
+                            
+                            <button 
+                                @click.stop="navigateToSensorDetail(sensor.id)" 
+                                class="action-btn view" 
+                                title="Ver Detalles"
+                            >
+                                <i class="bi bi-eye-fill"></i>
+                            </button>
+
+                            <template v-if="sensor.mi_rol === 'Propietario' || sensor.mi_rol === 'Colaborador'">
+                                <button 
+                                    @click.stop="openEditSensorModal(sensor)" 
+                                    class="action-btn edit" 
+                                    title="Editar"
+                                >
+                                    <i class="bi bi-pencil-fill"></i>
+                                </button>
+                                
+                                <button 
+                                    @click.stop="confirmarEliminacionSensor(sensor.id, sensor.nombre)" 
+                                    class="action-btn delete" 
+                                    title="Eliminar"
+                                >
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </template>
+
+                        </div>
+                        
+                    </div>
               </div>
             </div>
-          </section>
+          </div>
         </div>
+
+        <div class="pagination-controls" v-if="totalPages > 1 && !loading">
+            <button class="btn-page" :disabled="page === 1" @click="changePage(page - 1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="page-info">Página {{ page }} de {{ totalPages }}</span>
+            <button class="btn-page" :disabled="page === totalPages" @click="changePage(page + 1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+
       </div>
     </div>
-    <!-- Modales -->
-     </div> <ModalEditarSensor 
-        v-if="mostrarModalEditarSensor"
-        :sensor-id="sensorSeleccionado" 
-        @sensor-actualizado="handleSensorUpdated"
-        @close="closeEditSensorModal"
-    />
-<ModalEliminarSensor 
- v-if="mostrarModalEliminarSensor"
- :sensor-id="sensorEliminarId"
- :sensor-nombre="sensorEliminarNombre"
- @cancelar="cancelarEliminacionSensor"
- @confirmar="ejecutarEliminacionSensor(sensorEliminarId)"
- />
+    
+    <ModalEditarSensor v-if="mostrarModalEditarSensor" :sensor-id="sensorSeleccionado" @sensor-actualizado="handleSensorUpdated" @close="closeEditSensorModal" />
+    <ModalEliminarSensor v-if="mostrarModalEliminarSensor" :sensor-id="sensorEliminarId" :sensor-nombre="sensorEliminarNombre" @cancelar="cancelarEliminacionSensor" @confirmar="ejecutarEliminacionSensor(sensorEliminarId)" />
+  </div>
 </template>
 
 <script>
@@ -110,6 +147,7 @@ import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 // Importamos los modales si los vamos a usar aquí
 import ModalEditarSensor from './ModalEditarSensor.vue'; 
 import ModalEliminarSensor from './ModalEliminarSensor.vue';
+import debounce from 'lodash/debounce';
 // const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
@@ -135,16 +173,21 @@ export default {
             mostrarModalEliminarSensor: false,
             sensorEliminarId: null,
             sensorEliminarNombre: null,
+
+            searchQuery: '',
+            page: 1,
+            limit: 10, 
+            totalRecords: 0,
         };
+
     },
     computed: {
         //  Agrupación Doble (Proyecto -> Dispositivo -> Sensores)
         sensoresAgrupados() {
             const grupos = {};
-
             for (const sensor of this.sensores) {
-                const proyecto = sensor.nombre_proyecto || 'Proyecto Desconocido';
-                const dispositivo = sensor.nombre_dispositivo || 'Dispositivo Desconocido';
+                const proyecto = sensor.nombre_proyecto || 'Sin Proyecto';
+                const dispositivo = sensor.nombre_dispositivo || 'Sin Dispositivo';
 
                 if (!grupos[proyecto]) {
                     grupos[proyecto] = { nombre: proyecto, dispositivos: {} };
@@ -158,6 +201,11 @@ export default {
             }
             return grupos;
         }
+    },created() {
+        this.debouncedSearch = debounce(() => {
+            this.page = 1;
+            this.cargarSensoresGlobales();
+        }, 500);
     },
     mounted() {
         this.cargarSensoresGlobales();
@@ -172,29 +220,50 @@ export default {
         }
     },
     methods: {
+        onSearchInput() {
+            this.debouncedSearch();
+        },
+
+        changePage(newPage) {
+            if (newPage >= 1 && newPage <= this.totalPages) {
+                this.page = newPage;
+                this.cargarSensoresGlobales();
+                // Scroll suave al inicio
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        },
+        
         async cargarSensoresGlobales() {
             this.loading = true;
             this.error = null;
             const token = localStorage.getItem('accessToken');
-            
             if (!token) { this.$router.push('/'); return; }
 
+            const params = new URLSearchParams({
+                page: this.page,
+                limit: this.limit,
+                search: this.searchQuery
+            });
+
             try {
-                const response = await fetch(`${API_BASE_URL}/api/sensores/todos`, {
+                const response = await fetch(`${API_BASE_URL}/api/sensores/todos?${params}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                const data = await response.json();
-
                 if (!response.ok) {
-                    throw new Error(data.detail || 'Fallo al obtener la lista global de sensores.');
+                     const err = await response.json();
+                     throw new Error(err.detail || 'Fallo al obtener sensores.');
                 }
                 
-                // Mapeo (la API ya envía los datos procesados por la consulta)
-                this.sensores = data;
+                const respuesta = await response.json();
+                // { data, total, total_pages }
+                this.sensores = respuesta.data;
+                this.totalRecords = respuesta.total;
+                this.totalPages = respuesta.total_pages;
 
             } catch (err) {
-                this.error = err.message || 'Error al cargar los sensores globales.';
+                this.error = err.message;
+                this.sensores = [];
             } finally {
                 this.loading = false;
             }
@@ -233,21 +302,18 @@ export default {
             const token = localStorage.getItem('accessToken');
             try {
                 const response = await fetch(`${API_BASE_URL}/api/sensores/${sensorId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` },
+                    method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
                 });
-
                 if (!response.ok) {
-                    const data = await response.json();
-                    throw new Error(data.message || data.detail || 'Fallo al eliminar el sensor.');
+                     const err = await response.json();
+                     if (response.status === 403) throw new Error(err.detail || "No tienes permiso para eliminar este sensor.");
+                     throw new Error(err.message || 'Fallo al eliminar.');
                 }
-                
-                alert('Sensor eliminado exitosamente.');
+                alert('Sensor eliminado.');
                 this.cancelarEliminacionSensor();
-                this.cargarSensoresGlobales(); // Recargar la vista
-
+                this.cargarSensoresGlobales(); 
             } catch (err) {
-                alert('Error al eliminar: ' + err.message);
+                alert('Error: ' + err.message);
                 this.cancelarEliminacionSensor();
             }
         },
@@ -265,168 +331,238 @@ export default {
     }
 };
 </script>
-
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES
-// ----------------------------------------
-// $WIDTH-SIDEBAR: 280px; 
-// $WIDTH-CLOSED: 80px; 
-// $WHITE-SOFT: #F7F9FC; 
-// $DARK-BG-CONTRAST: #1E1E30; 
-// $LIGHT-TEXT: #E4E6EB;
-// $DARK-TEXT: #333333;
-// $SUBTLE-BG-DARK: #2B2B40; 
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $ERROR-COLOR: #E74C3C;
-// $GRAY-COLD: #99A2AD;
-// $BLUE-MIDNIGHT: #1A1A2E; 
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-
-// // ----------------------------------------
-// // LAYOUT
-// // ----------------------------------------
-// .plataforma-layout {
-//     display: flex;
-//     min-height: 100vh;
-//     transition: background-color 0.3s;
-// }
-// .plataforma-contenido {
-//     margin-left: $WIDTH-CLOSED;
-//     flex-grow: 1;
-//     padding: 0; 
-//     transition: margin-left 0.3s ease-in-out;
-//     &.shifted { margin-left: $WIDTH-SIDEBAR; }
-// }
-.sensores-general-contenido {
-    padding: 20px 40px 40px 40px; 
+.sensores-general-contenido { 
+    padding: 0 40px 40px 40px; 
 }
 
-// ----------------------------------------
-// ESTILOS DE AGRUPACIÓN (NUEVO)
-// ----------------------------------------
-.proyecto-seccion {
-    margin-bottom: 35px;
-    .proyecto-titulo {
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin-bottom: 10px;
-        padding-bottom: 5px;
-        border-bottom: 2px solid $PRIMARY-PURPLE;
-        display: inline-block;
+// ------------------------------------------------
+// CONTROLES Y BUSCADOR
+// ------------------------------------------------
+.controls-header {
+    display: flex; justify-content: space-between; align-items: center; 
+    margin-bottom: 40px; flex-wrap: wrap; gap: 15px;
+    
+    .total-info { 
+        font-size: 1.1rem; font-weight: 500; color: $GRAY-COLD; 
+        .count-badge { 
+            background-color: $PRIMARY-PURPLE; color: $WHITE; 
+            padding: 2px 10px; border-radius: 12px; 
+            font-weight: 700; margin-right: 5px; 
+        }
     }
-}
-
-.dispositivo-subseccion {
-    margin-bottom: 20px;
-    padding-left: 15px;
-    .dispositivo-titulo {
-        font-size: 1.3rem;
-        font-weight: 600;
-        margin-bottom: 15px;
-        color: $GRAY-COLD;
-        i {
-            font-size: 1.1rem;
-            margin-right: 8px;
+    
+    .search-box { 
+        position: relative; 
+        .search-input { 
+            padding: 10px 15px 10px 40px; border-radius: 12px; 
+            border: 1px solid transparent; 
+            width: 250px; outline: none; font-size: 0.95rem;
+            transition: all 0.3s ease;
+            
+            &:focus { 
+                width: 300px; 
+                border-color: $PRIMARY-PURPLE; 
+                box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.1);
+            } 
+        }
+        .search-icon { 
+            position: absolute; left: 15px; top: 50%; 
+            transform: translateY(-50%); color: $GRAY-COLD; 
         }
     }
 }
 
-// ----------------------------------------
-// ESTILOS DE LISTA INTERACTIVA (Reutilizado)
-// ----------------------------------------
-.lista-sensores-container {
-    background-color: $SUBTLE-BG-LIGHT;
-    border-radius: 10px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-    overflow: hidden;
-    border: 1px solid #eee;
+// ------------------------------------------------
+// ESTRUCTURA DE LISTA
+// ------------------------------------------------
+.proyecto-bloque {
+    margin-bottom: 40px;
 }
 
-// Definición de las columnas (Grid)
-.lista-header, .lista-fila {
+.proyecto-titulo {
+    font-size: 1.2rem; font-weight: 700; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+    
+    .marker {
+        width: 4px; height: 20px; background-color: $PRIMARY-PURPLE;
+        border-radius: 2px; display: inline-block;
+    }
+}
+
+.dispositivo-group {
+    margin-bottom: 25px;
+    padding-left: 15px; 
+    border-left: 1px solid rgba($GRAY-COLD, 0.2); 
+}
+
+.dispositivo-titulo {
+    font-size: 0.95rem; font-weight: 600; color: $GRAY-COLD;
+    margin-bottom: 15px; padding-left: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+.sensors-stack {
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+// ------------------------------------------------
+// SENSOR STRIP (Elemento Individual)
+// ------------------------------------------------
+.sensor-strip {
     display: grid;
-    // 5 columnas: Sensor, Tipo, Campos, Estado, Acciones
-    grid-template-columns: 1.5fr 1fr 0.5fr 0.5fr 0.5fr; 
+    grid-template-columns: 50px 2fr 1fr 1fr auto; 
     align-items: center;
-    padding: 12px 20px;
-    gap: 15px;
-}
-
-.lista-header {
-    background-color: $BLUE-MIDNIGHT; 
-    color: $GRAY-COLD;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.lista-fila {
-    font-size: 0.95rem;
-    border-bottom: 1px solid #eee; 
-    transition: background-color 0.2s ease-out;
-
-    .col-acciones {
-        justify-self: end;
-        opacity: 0;
-        transition: opacity 0.2s ease-out;
-    }
+    padding: 15px 20px;
+    border-radius: 12px; 
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    border: 1px solid transparent;
+    
     &:hover {
-        .col-acciones { opacity: 1; }
+        transform: translateX(5px); 
+        .strip-actions { opacity: 1; pointer-events: auto; }
     }
 }
-.lista-body .lista-fila:last-child {
-    border-bottom: none;
+
+.strip-icon {
+    font-size: 1.5rem; color: $PRIMARY-PURPLE;
+    display: flex; justify-content: center; align-items: center;
 }
 
-// --- Columnas ---
-.col-sensor { font-weight: 600; }
-.col-tipo { font-style: italic; color: $GRAY-COLD; }
-.col-campos { font-weight: 700; text-align: center; }
-
-.status-badge {
-    font-size: 0.75rem;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-weight: 600;
-    &.active { background-color: rgba($SUCCESS-COLOR, 0.2); color: $SUCCESS-COLOR; }
-    &.inactive { background-color: rgba($ERROR-COLOR, 0.2); color: $ERROR-COLOR; }
-}
-.btn-action {
-    background: none; border: none;
-    color: $GRAY-COLD;
-    font-size: 1rem;
-    margin-left: 10px;
-    &:hover { color: $PRIMARY-PURPLE; }
+.strip-info {
+    display: flex; flex-direction: column;
+    .sensor-name { font-weight: 600; font-size: 1rem; margin-bottom: 2px; }
+    .sensor-type { font-size: 0.8rem; opacity: 0.7; }
 }
 
-
-// ----------------------------------------
-// TEMAS
-// ----------------------------------------
-.theme-light {
-    background-color: $WHITE-SOFT; 
-    color: $DARK-TEXT; 
+.strip-meta {
+    display: flex; flex-direction: column; align-items: flex-start;
+    .meta-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; }
+    .meta-value { font-weight: 700; font-size: 1.1rem; }
 }
+
+.strip-status {
+    .status-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 20px;
+        font-size: 0.8rem; font-weight: 600;
+        
+        &.status-on { background-color: rgba($SUCCESS-COLOR, 0.1); color: $SUCCESS-COLOR; }
+        &.status-off { background-color: rgba($GRAY-COLD, 0.1); color: $GRAY-COLD; }
+    }
+}
+.strip-actions {
+    display: flex; gap: 10px;
+    opacity: 0.6; // Semi-transparente por defecto
+    transition: opacity 0.2s;
+
+    .action-btn {
+        background: none; border: none; cursor: pointer;
+        width: 35px; height: 35px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem; transition: background 0.2s;
+        
+        // 🚨 NUEVO: Estilo para el botón Ver
+        &.view { 
+            color: $PRIMARY-PURPLE; 
+            &:hover { background-color: rgba($PRIMARY-PURPLE, 0.1); } 
+        }
+        
+        // Estilos existentes
+        &.edit { 
+            color: $INFO-COLOR; 
+            &:hover { background-color: rgba($INFO-COLOR, 0.1); } 
+        }
+        &.delete { 
+            color: $DANGER-COLOR; 
+            &:hover { background-color: rgba($DANGER-COLOR, 0.1); } 
+        }
+    }
+}
+.sensor-strip:hover .strip-actions { opacity: 1; pointer-events: auto; }
+// ------------------------------------------------
+// PAGINACIÓN
+// ------------------------------------------------
+.pagination-controls { 
+    display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 40px; 
+    .btn-page { 
+        background: none; border: 1px solid $PRIMARY-PURPLE; 
+        color: $PRIMARY-PURPLE; padding: 8px 18px; border-radius: 8px; 
+        font-weight: 600; cursor: pointer; transition: all 0.2s;
+        
+        &:hover:not(:disabled) { background-color: $PRIMARY-PURPLE; color: $WHITE; }
+        &:disabled { border-color: $GRAY-COLD; color: $GRAY-COLD; cursor: not-allowed; opacity: 0.5; }
+    }
+    .page-info { font-weight: 500; color: $GRAY-COLD; }
+}
+
+// ------------------------------------------------
+// TEMAS (CORREGIDOS)
+// ------------------------------------------------
+
+// TEMA OSCURO
 .theme-dark {
-    background-color: $DARK-BG-CONTRAST; 
+      background-color: $DARK-BG-CONTRAST; 
     color: $LIGHT-TEXT;
     
-    .plataforma-contenido { background-color: $DARK-BG-CONTRAST; }
-    .proyecto-titulo { border-bottom-color: $PRIMARY-PURPLE; }
-    .dispositivo-titulo { color: $GRAY-COLD; }
+    .search-input { 
+        background-color: $DARK-INPUT-BG; 
+        border-color: rgba($WHITE, 0.1); 
+        color: $LIGHT-TEXT; 
+    }
+    
+    .proyecto-titulo { color: $LIGHT-TEXT; }
+    
+    .sensor-strip {
+        background-color: $SUBTLE-BG-DARK; // Usar variable global oscura
+        border-bottom: 1px solid rgba($WHITE, 0.05); 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2); // Sombra oscura sutil
+        
+        &:hover { background-color: lighten($SUBTLE-BG-DARK, 5%); }
+        
+        .sensor-name { color: $LIGHT-TEXT; }
+        .sensor-type { color: $GRAY-COLD; }
+        .meta-value { color: $LIGHT-TEXT; }
+        .meta-label { color: $GRAY-COLD; }
+    }
 
-    .lista-sensores-container {
-        background-color: $SUBTLE-BG-DARK;
-        border-color: rgba($LIGHT-TEXT, 0.1);
+    .alert-info, .alert-empty { color: $GRAY-COLD; text-align: center; margin-top: 30px; }
+}
+
+// TEMA CLARO
+.theme-light {
+    .search-input { 
+        background-color: $LIGHT-INPUT-BG; 
+        border-color: $LIGHT-BORDER; 
+        color: $DARK-TEXT; 
     }
-    .lista-fila {
-        border-bottom-color: rgba($LIGHT-TEXT, 0.1);
-        color: $LIGHT-TEXT;
-        &:hover { background-color: rgba($LIGHT-TEXT, 0.05); }
+    
+    .proyecto-titulo { color: $DARK-TEXT; }
+    
+    .sensor-strip {
+        background-color: $WHITE; 
+        border: 1px solid $LIGHT-BORDER; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.03); 
+        
+        &:hover { 
+            border-color: $PRIMARY-PURPLE; 
+            box-shadow: 0 4px 12px rgba($PRIMARY-PURPLE, 0.15);
+        }
+
+        .sensor-name { color: $DARK-TEXT; }
+        .sensor-type { color: $GRAY-COLD; }
+        .meta-value { color: $DARK-TEXT; }
+        .meta-label { color: $GRAY-COLD; }
     }
-    .col-tipo { color: $GRAY-COLD; }
-    .btn-action { color: $GRAY-COLD; }
+
+    .alert-info, .alert-empty { color: $GRAY-COLD; text-align: center; margin-top: 30px; }
+}
+
+// Responsive
+@media (max-width: 768px) {
+    .sensor-strip {
+        grid-template-columns: 1fr auto; gap: 15px; padding: 15px;
+        .strip-icon, .strip-meta { display: none; }
+    }
 }
 </style>

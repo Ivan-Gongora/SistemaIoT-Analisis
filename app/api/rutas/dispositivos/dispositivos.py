@@ -15,6 +15,29 @@ from app.servicios.servicio_permisos import verificar_permiso_proyecto, obtener_
 router_dispositivo = APIRouter()
 
 # -----------------------------------------------------------
+#0.1  OBTENER TODOS LOS DISPOSITIVOS (GLOBAL - VISTA GENERAL)
+# -----------------------------------------------------------
+@router_dispositivo.get("/dispositivos/todos")
+async def obtener_todos_los_dispositivos(
+    page: int = Query(1, ge=1, description="Número de página"),
+    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
+    search: str = Query("", description="Término de búsqueda"),
+    current_user_id: int = Depends(get_current_user_id)
+):
+   
+    try:
+      
+        resultado = await obtener_dispositivos_globales_paginado_db(
+            current_user_id, page, limit, search
+        )
+        return resultado
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener lista global: {str(e)}") 
+
+# -----------------------------------------------------------
 # 1. CREAR DISPOSITIVO (POST)
 # -----------------------------------------------------------
 @router_dispositivo.post("/dispositivos/")
@@ -22,7 +45,7 @@ async def crear_Dispositivo(
     datos: DispositivoCrear,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 VERIFICACIÓN DE SEGURIDAD
+ 
     # El usuario debe tener permiso 'CRUD_HARDWARE' en el proyecto donde quiere crear el dispositivo.
     await verificar_permiso_proyecto(current_user_id, datos.proyecto_id, 'CRUD_HARDWARE')
 
@@ -54,7 +77,7 @@ async def eliminar_dispositivo_endpoint(
     current_user_id: int = Depends(get_current_user_id) 
 ) -> Dict:
     
-    # 🚨 VERIFICACIÓN DE SEGURIDAD
+
     # Validamos que el usuario tenga permiso sobre el proyecto entero antes de borrar nada.
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'CRUD_HARDWARE')
 
@@ -67,35 +90,6 @@ async def eliminar_dispositivo_endpoint(
         raise HTTPException(status_code=500, detail=f"Error al eliminar dispositivo(s): {str(e)}")
 
 
-
-# NUEVO ENDPOINT PROTEGIDO
-@router_dispositivo.get("/dispositivos/{dispositivo_id}/resumen")
-async def get_dispositivo_resumen(
-    dispositivo_id: int,
-    current_user_id: int = Depends(get_current_user_id)
-):
-    """
-    Obtiene un resumen de métricas clave para un dispositivo específico.
-    """
-    try:
-        # CORRECCIÓN: Llamar a la función de servicio
-        resumen = await get_resumen_dispositivo_db(dispositivo_id)
-        
-        if not resumen:
-            # Si la función de DB no devuelve nada, o devuelve un error, se maneja aquí.
-            raise HTTPException(status_code=404, detail="Resumen no encontrado o dispositivo no existe.")
-            
-        return resumen
-        
-    except HTTPException:
-        # Esto captura los errores 404/403 lanzados desde dentro o antes de la función de DB
-        raise
-    except Exception as e:
-        # Esto captura los errores 500 lanzados desde la función de DB
-        print(f"Error en el endpoint /dispositivos/{dispositivo_id}/resumen: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno al procesar el resumen: {str(e)}")   
-
-
 # -----------------------------------------------------------
 # 3. ACTUALIZAR DISPOSITIVO (PUT)
 # -----------------------------------------------------------
@@ -105,8 +99,7 @@ async def endpoint_actualizar_dispositivo(
     datos: DispositivoActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 VERIFICACIÓN DE SEGURIDAD COMPLEJA
-    # Como el PUT solo recibe el ID del dispositivo, primero debemos averiguar de qué proyecto es.
+
     
     # 1. Obtenemos el ID del proyecto dueño del dispositivo
     proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
@@ -149,37 +142,69 @@ async def endpoint_actualizar_dispositivo(
 
 # app/api/rutas/dispositivos/dispositivos.py (ENDPOINT ACTUALIZADO)
 
-# Obtener todos los dispositivos de un proyecto (RUTA QUE LLAMA VUE)
-@router_dispositivo.get("/dispositivos/proyecto/{proyecto_id}", response_model=List[Dispositivo])
-async def get_dispositivos_por_proyecto(
+# -----------------------------------------------------------
+# 1. OBTENER DISPOSITIVOS POR PROYECTO (PAGINADO Y CON BÚSQUEDA)
+# -----------------------------------------------------------
+@router_dispositivo.get("/dispositivos/proyecto/{proyecto_id}")
+async def obtener_dispositivos_por_proyecto(
     proyecto_id: int,
-    current_user_id: int = Depends(get_current_user_id) # PROTEGIDO
+    page: int = Query(1, ge=1, description="Número de página"),
+    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
+    search: str = Query("", description="Término de búsqueda (nombre o tipo)"),
+    current_user_id: int = Depends(get_current_user_id)
 ):
-    # Nota: Aquí se debería verificar que el current_user_id tenga acceso al proyecto_id.
+    # 1. Seguridad: Verificar que el usuario puede VER este proyecto
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
     
-    # CAMBIO CRÍTICO: Llamamos a la función integrada
     try:
-        dispositivos = await obtener_dispositivos_por_proyecto_db(proyecto_id) 
-        
-        if not dispositivos:
-            raise HTTPException(status_code=404, detail="No se encontraron dispositivos para este proyecto.")
-        
-        return dispositivos
-        
+        # 2. Llamar al servicio paginado
+        resultado = await obtener_dispositivos_por_proyecto_paginado_db(
+            proyecto_id, page, limit, search
+        )
+        return resultado
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener dispositivos: {str(e)}")
 
-# Obtener un dispositivo por ID
+
+# -----------------------------------------------------------
+# 2. OBTENER RESUMEN DE DISPOSITIVO
+# -----------------------------------------------------------
+@router_dispositivo.get("/dispositivos/{dispositivo_id}/resumen")
+async def get_dispositivo_resumen(
+    dispositivo_id: int,
+    current_user_id: int = Depends(get_current_user_id)
+):
+    # 1. Seguridad (Necesitamos saber el proyecto)
+    proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
+    try:
+        resumen = await get_resumen_dispositivo_db(dispositivo_id)
+        if not resumen:
+            raise HTTPException(status_code=404, detail="Resumen no encontrado.")
+        return resumen
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+# -----------------------------------------------------------
+# 3. OBTENER UN DISPOSITIVO POR ID
 @router_dispositivo.get("/dispositivos/{dispositivo_id}", response_model=Dispositivo)
 async def get_dispositivo_por_id(
     dispositivo_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
+    # 1. Seguridad
+    proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
     conn = None
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-    
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -187,31 +212,28 @@ async def get_dispositivo_por_id(
         dispositivo = cursor.fetchone()
 
         if not dispositivo:
-            raise HTTPException(status_code=404, detail=f"Dispositivo con ID '{dispositivo_id}' no encontrado.")
+            raise HTTPException(status_code=404, detail=f"Dispositivo no encontrado.")
         
-        # CORRECCIÓN CRÍTICA: Convertir datetime a string ANTES de retornar
+        # Conversión de fecha y bool
         if 'fecha_creacion' in dispositivo and isinstance(dispositivo['fecha_creacion'], datetime):
             dispositivo['fecha_creacion'] = dispositivo['fecha_creacion'].strftime(DATE_FORMAT)
+        if 'habilitado' in dispositivo:
+             dispositivo['habilitado'] = bool(dispositivo['habilitado'])
 
-        # Nota: Aquí se debería verificar que el usuario tenga acceso al dispositivo
         return dispositivo
 
-    except pymysql.MySQLError as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar el dispositivo: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al consultar dispositivo: {str(e)}")
     finally:
         if conn: conn.close()
-     
-
- 
-# app/api/rutas/dispositivos/dispositivos.py (ENDPOINT MODIFICADO)
-
-# app/api/rutas/dispositivos/dispositivos.py (Fragmento de la ruta principal)
 
 
 # ------------------------------------------------------------------
 # 3. FUNCIONES DE BASE DE DATOS (SERVICIO DE DATOS BASE)
 # ------------------------------------------------------------------
-# 3. AÑADE 'usuario_id' A LOS PARÁMETROS DE LA FUNCIÓN
+
 async def set_dispositivo(datos: DispositivoCrear, usuario_id: int) -> List[Dict[str, Any]]:
     procesado = []
     conn = None
@@ -416,7 +438,126 @@ async def eliminar_dispositivo_db(id: Optional[int], proyecto_id: int, usuario_i
         if conn: conn.close()
         
         
+# =============================================================================
+# FUNCIONES DE SERVICIO (DB)
+# =============================================================================
 
+async def obtener_dispositivos_por_proyecto_paginado_db(
+    proyecto_id: int, 
+    page: int = 1, 
+    limit: int = 10, 
+    search: str = ""
+) -> Dict[str, Any]:
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
+    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 1. Consulta Base con Filtros
+        # Nota: No incluimos 'SELECT *' aquí, solo el FROM y WHERE
+        sql_base = """
+        FROM dispositivos 
+        WHERE proyecto_id = %s 
+          AND (nombre LIKE %s OR tipo LIKE %s)
+        """
+        params_count = [proyecto_id, search_pattern, search_pattern]
+        
+        # 2. Obtener Total (para el paginador)
+        cursor.execute(f"SELECT COUNT(*) as total {sql_base}", params_count)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Obtener Datos Paginados
+        sql_final = f"SELECT * {sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
+        # Creamos una nueva lista de params para esta consulta
+        params_data = [proyecto_id, search_pattern, search_pattern, limit, offset]
+        
+        cursor.execute(sql_final, params_data)
+        dispositivos = cursor.fetchall()
+        
+        # 4. Procesar datos (Fechas y Booleanos)
+        for disp in dispositivos:
+            if 'habilitado' in disp:
+                disp['habilitado'] = bool(disp['habilitado'])
+            
+            if 'fecha_creacion' in disp and isinstance(disp['fecha_creacion'], datetime):
+                disp['fecha_creacion'] = disp['fecha_creacion'].strftime(DATE_FORMAT)
+            
+            if disp.get('latitud') is not None: disp['latitud'] = float(disp['latitud'])
+            if disp.get('longitud') is not None: disp['longitud'] = float(disp['longitud'])
+        
+        return {
+            "data": dispositivos,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+        }
+
+    except Exception as e:
+        print(f"Error DB dispositivos paginados: {e}")
+        raise e
+    finally:
+        if conn: conn.close()
+
+
+async def get_resumen_dispositivo_db(dispositivo_id: int) -> Dict[str, Any]:
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor) 
+        
+        # 1. Obtener la Última Conexión
+        sql_ultima_conexion = """
+        SELECT MAX(v.fecha_hora_lectura) AS ultima_conexion_dt
+        FROM valores v
+        JOIN campos_sensores cs ON v.campo_id = cs.id
+        JOIN sensores s ON cs.sensor_id = s.id
+        WHERE s.dispositivo_id = %s;
+        """
+        cursor.execute(sql_ultima_conexion, (dispositivo_id,))
+        resultado_conexion = cursor.fetchone()
+        ultima_conexion = resultado_conexion['ultima_conexion_dt'] if resultado_conexion else None
+        
+        # 2. Obtener Campos Activos
+        sql_campos_activos = """
+        SELECT COUNT(DISTINCT cs.id) AS count_campos_activos
+        FROM campos_sensores cs
+        JOIN sensores s ON cs.sensor_id = s.id
+        WHERE s.dispositivo_id = %s
+          AND cs.id IN (SELECT DISTINCT campo_id FROM valores);
+        """
+        cursor.execute(sql_campos_activos, (dispositivo_id,))
+        resultado_campos = cursor.fetchone()
+        campos_activos_count = resultado_campos['count_campos_activos'] if resultado_campos else 0
+
+        # 3. Obtener Totales
+        sql_totales = """
+        SELECT 
+            (SELECT COUNT(*) FROM dispositivos WHERE proyecto_id = 
+                (SELECT proyecto_id FROM dispositivos WHERE id = %s)) AS total_dispositivos,
+            (SELECT COUNT(*) FROM sensores WHERE dispositivo_id = %s) AS total_sensores;
+        """
+        cursor.execute(sql_totales, (dispositivo_id, dispositivo_id))
+        totales_dict = cursor.fetchone()
+
+        return {
+            "ultima_conexion": ultima_conexion.isoformat() if ultima_conexion else None,
+            "total_dispositivos": totales_dict['total_dispositivos'] if totales_dict else 0,
+            "total_sensores": totales_dict['total_sensores'] if totales_dict else 0,
+            "campos_activos": campos_activos_count,
+            "estado_dispositivo": "Activo" 
+        }
+
+    except Exception as e:
+        print(f"Error al obtener resumen de dispositivo: {e}")
+        raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+    finally:
+        if conn: conn.close()
 
 async def obtener_dispositivos_por_proyecto_db(proyecto_id: int) -> List[Dict[str, Any]]:
     conn = None
@@ -454,134 +595,149 @@ async def obtener_dispositivos_por_proyecto_db(proyecto_id: int) -> List[Dict[st
             conn.close()
 
 
-
-async def obtener_dispositivos_globales_db(current_user_id: int) -> List[Dict[str, Any]]:
-    conn = None
+async def obtener_dispositivos_globales_paginado_db(
+    current_user_id: int,
+    page: int = 1,
+    limit: int = 10,
+    search: str = ""
+) -> Dict[str, Any]:
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 🚨 CONSULTA CRÍTICA: La misma consulta que funciona (filtrada por usuario)
-        sql = """
-        SELECT 
-        DISTINCT d.id, d.nombre, d.descripcion, d.tipo, d.latitud, d.longitud, d.habilitado, d.fecha_creacion, d.proyecto_id, 
-        p.nombre AS nombre_proyecto, p.usuario_id AS propietario_id
-        FROM 
-            dispositivos d
-        JOIN 
-            proyectos p ON d.proyecto_id = p.id
-        LEFT JOIN 
-            proyecto_usuarios pu ON p.id = pu.proyecto_id
-        WHERE 
-            p.usuario_id = %s OR pu.usuario_id = %s;
+        # 1. Construir la consulta base (FROM y WHERE)
+        # Filtrar por usuario (Dueño O Invitado) Y por búsqueda
+        sql_base = """
+        FROM dispositivos d
+        JOIN proyectos p ON d.proyecto_id = p.id
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+        WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
+          AND (d.nombre LIKE %s OR d.tipo LIKE %s OR p.nombre LIKE %s)
         """
         
-        cursor.execute(sql, (current_user_id, current_user_id)) 
+        # 2. Obtener el Total (COUNT)
+        # (Para esto necesitamos COUNT(DISTINCT d.id) porque el JOIN puede duplicar si hay roles)
+        params_count = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
+        cursor.execute(f"SELECT COUNT(DISTINCT d.id) as total {sql_base}", params_count)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Obtener los Datos Paginados
+        # Seleccionamos DISTINCT d.id para evitar duplicados
+        sql_final = f"""
+        SELECT DISTINCT d.id, d.nombre, d.descripcion, d.tipo, d.latitud, d.longitud, d.habilitado, d.fecha_creacion, d.proyecto_id, 
+               p.nombre AS nombre_proyecto, p.usuario_id AS propietario_id
+        {sql_base}
+        ORDER BY d.id DESC
+        LIMIT %s OFFSET %s
+        """
+        params_data = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern, limit, offset]
+        
+        cursor.execute(sql_final, params_data)
         dispositivos = cursor.fetchall()
         
+        # 4. Procesar Datos (Fechas y Booleanos)
         for disp in dispositivos:
-            # 1. Convertir habilitado (0/1) a booleano (CORRECTO)
             if 'habilitado' in disp:
-                disp['habilitado'] = int(disp['habilitado']) == 1 
+                disp['habilitado'] = bool(disp['habilitado'])
             
-            # 2. CONVERSIÓN DE FECHA (datetime -> str)
-            # 🚨 CRÍTICO: Comprobar el tipo de objeto explícitamente.
             if 'fecha_creacion' in disp and isinstance(disp['fecha_creacion'], datetime):
                 disp['fecha_creacion'] = disp['fecha_creacion'].strftime(DATE_FORMAT)
-
-            # 3. Mapeo de Nulos para Double (latitud/longitud)
-            # Aseguramos que los valores nulos que la DB devuelve sean None si no son números.
-            if disp.get('latitud') is not None:
-                disp['latitud'] = float(disp['latitud']) 
-            if disp.get('longitud') is not None:
-                disp['longitud'] = float(disp['longitud'])
-
-
-        return dispositivos
-
-    except Exception as e:
-        print(f"Error en DB al obtener dispositivos globales: {e}")
-        # 🚨 Retornamos el 500 con detalle para el usuario si es un fallo de DB
-        raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
-        
-    finally:
-        if conn:
-            conn.close()
-
-async def get_resumen_dispositivo_db(dispositivo_id: int) -> Dict[str, Any]:
-#esa es la forma que debe devolver el resumen 
-#     {
-#     "ultima_conexion": "2025-10-23T17:15:18",
-#     "total_dispositivos": 2,
-#     "total_sensores": 4,
-#     "campos_activos": 7,
-#     "estado_dispositivo": "Activo"
-# }
-    conn = None
-    try:
-        conn = get_db_connection()
-        # 🚨 CORRECCIÓN: Usar DictCursor para todas las consultas
-        cursor = conn.cursor(pymysql.cursors.DictCursor) 
-        
-        # 1. Obtener la Última Conexión
-        sql_ultima_conexion = """
-        SELECT MAX(v.fecha_hora_lectura) AS ultima_conexion_dt
-        FROM valores v
-        JOIN campos_sensores cs ON v.campo_id = cs.id
-        JOIN sensores s ON cs.sensor_id = s.id
-        WHERE s.dispositivo_id = %s;
-        """
-        cursor.execute(sql_ultima_conexion, (dispositivo_id,))
-        resultado_conexion = cursor.fetchone()
-        # 🚨 CORRECCIÓN: Manejar el caso de que no haya conexión (resultado None)
-        ultima_conexion = resultado_conexion['ultima_conexion_dt'] if resultado_conexion else None
-        
-        # 2. Obtener Campos Activos
-        sql_campos_activos = """
-        SELECT COUNT(DISTINCT cs.id) AS count_campos_activos
-        FROM campos_sensores cs
-        JOIN sensores s ON cs.sensor_id = s.id
-        WHERE s.dispositivo_id = %s
-          AND cs.id IN (SELECT DISTINCT campo_id FROM valores);
-        """
-        cursor.execute(sql_campos_activos, (dispositivo_id,))
-        # 🚨 CORRECCIÓN: Manejar el caso de que no haya campos (resultado None)
-        resultado_campos = cursor.fetchone()
-        campos_activos_count = resultado_campos['count_campos_activos'] if resultado_campos else 0
-
-        # 3. Obtener Totales
-        sql_totales = """
-        SELECT 
-            (SELECT COUNT(*) FROM dispositivos WHERE proyecto_id = 
-                (SELECT proyecto_id FROM dispositivos WHERE id = %s)) AS total_dispositivos,
-            (SELECT COUNT(*) FROM sensores WHERE dispositivo_id = %s) AS total_sensores;
-        """
-        cursor.execute(sql_totales, (dispositivo_id, dispositivo_id))
-        totales_dict = cursor.fetchone() # Ahora sí es un diccionario
-
-        # 4. Formatear el resultado
+            
+            if disp.get('latitud') is not None: disp['latitud'] = float(disp['latitud'])
+            if disp.get('longitud') is not None: disp['longitud'] = float(disp['longitud'])
+            
         return {
-            "ultima_conexion": ultima_conexion.isoformat() if ultima_conexion else None,
-            "total_dispositivos": totales_dict['total_dispositivos'] if totales_dict else 0,
-            "total_sensores": totales_dict['total_sensores'] if totales_dict else 0,
-            "campos_activos": campos_activos_count,
-            "estado_dispositivo": "Activo" # Placeholder
+            "data": dispositivos,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
         }
 
     except Exception as e:
-        print(f"Error al obtener resumen de dispositivo: {e}")
-        # Lanzar la excepción para que el endpoint la maneje como 500
+        print(f"Error en DB al obtener dispositivos globales: {e}")
         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
     finally:
         if conn: conn.close()
+# async def get_resumen_dispositivo_db(dispositivo_id: int) -> Dict[str, Any]:
+# #esa es la forma que debe devolver el resumen 
+# #     {
+# #     "ultima_conexion": "2025-10-23T17:15:18",
+# #     "total_dispositivos": 2,
+# #     "total_sensores": 4,
+# #     "campos_activos": 7,
+# #     "estado_dispositivo": "Activo"
+# # }
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         # 🚨 CORRECCIÓN: Usar DictCursor para todas las consultas
+#         cursor = conn.cursor(pymysql.cursors.DictCursor) 
+        
+#         # 1. Obtener la Última Conexión
+#         sql_ultima_conexion = """
+#         SELECT MAX(v.fecha_hora_lectura) AS ultima_conexion_dt
+#         FROM valores v
+#         JOIN campos_sensores cs ON v.campo_id = cs.id
+#         JOIN sensores s ON cs.sensor_id = s.id
+#         WHERE s.dispositivo_id = %s;
+#         """
+#         cursor.execute(sql_ultima_conexion, (dispositivo_id,))
+#         resultado_conexion = cursor.fetchone()
+#         # 🚨 CORRECCIÓN: Manejar el caso de que no haya conexión (resultado None)
+#         ultima_conexion = resultado_conexion['ultima_conexion_dt'] if resultado_conexion else None
+        
+#         # 2. Obtener Campos Activos
+#         sql_campos_activos = """
+#         SELECT COUNT(DISTINCT cs.id) AS count_campos_activos
+#         FROM campos_sensores cs
+#         JOIN sensores s ON cs.sensor_id = s.id
+#         WHERE s.dispositivo_id = %s
+#           AND cs.id IN (SELECT DISTINCT campo_id FROM valores);
+#         """
+#         cursor.execute(sql_campos_activos, (dispositivo_id,))
+#         # 🚨 CORRECCIÓN: Manejar el caso de que no haya campos (resultado None)
+#         resultado_campos = cursor.fetchone()
+#         campos_activos_count = resultado_campos['count_campos_activos'] if resultado_campos else 0
+
+#         # 3. Obtener Totales
+#         sql_totales = """
+#         SELECT 
+#             (SELECT COUNT(*) FROM dispositivos WHERE proyecto_id = 
+#                 (SELECT proyecto_id FROM dispositivos WHERE id = %s)) AS total_dispositivos,
+#             (SELECT COUNT(*) FROM sensores WHERE dispositivo_id = %s) AS total_sensores;
+#         """
+#         cursor.execute(sql_totales, (dispositivo_id, dispositivo_id))
+#         totales_dict = cursor.fetchone() # Ahora sí es un diccionario
+
+#         # 4. Formatear el resultado
+#         return {
+#             "ultima_conexion": ultima_conexion.isoformat() if ultima_conexion else None,
+#             "total_dispositivos": totales_dict['total_dispositivos'] if totales_dict else 0,
+#             "total_sensores": totales_dict['total_sensores'] if totales_dict else 0,
+#             "campos_activos": campos_activos_count,
+#             "estado_dispositivo": "Activo" # Placeholder
+#         }
+
+#     except Exception as e:
+#         print(f"Error al obtener resumen de dispositivo: {e}")
+#         # Lanzar la excepción para que el endpoint la maneje como 500
+#         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+#     finally:
+#         if conn: conn.close()
         
         
         
         
         
         
-        # @router_dispositivo.post("/dispositivos/")
+#         # @router_dispositivo.post("/dispositivos/")
 
 
 

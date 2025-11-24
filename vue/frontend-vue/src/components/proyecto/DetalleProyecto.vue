@@ -1,31 +1,21 @@
 <template>
-    <div class="plataforma-layout" :class="{ 'theme-dark': isDark, 'theme-light': !isDark }">
-        
-        <BarraLateralPlataforma :is-open="isSidebarOpen" />
-        
-        <div class="plataforma-contenido" :class="{ 'shifted': isSidebarOpen }">
-            
-            <EncabezadoPlataforma 
-                :titulo="proyecto.nombre || 'Cargando Proyecto...'"
-                :subtitulo="proyecto.descripcion_corta || 'Monitoreo en tiempo real de tu infraestructura IoT'"
-                @toggle-sidebar="toggleSidebar" 
-                :is-sidebar-open="isSidebarOpen"
-            >
-                <template #title-prefix>
-                    <button @click="goBack" class="btn-back" title="Volver a Mis Proyectos">
-                        <i class="bi bi-arrow-left-circle-fill"></i>
-                    </button>
-                </template>
-            </EncabezadoPlataforma>
+  <div class="plataforma-layout" :class="{ 'theme-dark': isDark, 'theme-light': !isDark }">
+    <BarraLateralPlataforma :is-open="isSidebarOpen" />
+    <div class="plataforma-contenido" :class="{ 'shifted': isSidebarOpen }">
+      
+      <EncabezadoPlataforma 
+        :titulo="proyecto.nombre || 'Cargando...'"
+        :subtitulo="proyecto.descripcion || 'Monitoreo IoT'"
+        @toggle-sidebar="toggleSidebar" :is-sidebar-open="isSidebarOpen"
+      >
+        <template #title-prefix>
+            <button @click="goBack" class="btn-back"><i class="bi bi-arrow-left-circle-fill"></i></button>
+        </template>
+      </EncabezadoPlataforma>
 
-            <div class="proyecto-detalle-contenido">
-                
-                <div v-if="loading" class="alert-info">Cargando detalles del proyecto...</div>
-                <div v-else-if="error" class="alert-error">{{ error }}</div>
-                
-                <div v-else>
-                    
-                    <div class="summary-cards-container">
+      <div class="proyecto-detalle-contenido">
+        
+        <div class="summary-cards-container">
                         <TarjetaResumen 
                             v-for="card in summaryCards" 
                             :key="card.title" 
@@ -34,26 +24,55 @@
                         />
                     </div>
                     
-                    <div class="dispositivos-header">
-                        <h2>Dispositivos del Proyecto ({{ dispositivos.length }})</h2>
-                        <div class="actions-group">
-                            <input type="text" placeholder="Buscar dispositivos..." class="form-control-search">
-                            <button @click="openAddDeviceModal" class="btn-add-device"> 
-                                <i class="bi bi-plus-circle-fill"></i> Agregar Dispositivo
-                            </button>
-                        </div>
-                    </div>
+        <div class="dispositivos-header">
+            <h2>Dispositivos del Proyecto ({{ totalRecords }})</h2>
+            
+            <div class="actions-group">
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input 
+                        type="text" 
+                        v-model="searchQuery" 
+                        @input="onSearchInput" 
+                        placeholder="Buscar dispositivo..." 
+                        class="form-control-search"
+                    >
+                </div>
 
-                    <div class="dispositivos-grid">
-                        <TarjetaDispositivo 
-                            v-for="dispositivo in dispositivos"
-                            :key="dispositivo.id" 
-                            :dispositivo="dispositivo"
-                            :is-dark="isDark"
-                            @edit-device="openEditDeviceModal"
-                            @open-delete-modal="openDeleteDeviceModal"
-                        />
-                    </div>
+                <button 
+                    v-if="miRol === 'Propietario' || miRol === 'Colaborador'"
+                    @click="openAddDeviceModal" 
+                    class="btn-add-device"
+                > 
+                    <i class="bi bi-plus-circle-fill"></i> Nuevo Dispositivo
+                </button>
+            </div>
+        </div>
+
+        <div v-if="loading" class="alert-info">Cargando dispositivos...</div>
+        <div v-else-if="dispositivos.length === 0" class="alert-empty-data">No se encontraron dispositivos.</div>
+        
+        <div v-else class="dispositivos-grid">
+            <TarjetaDispositivo 
+                v-for="dispositivo in dispositivos"
+                :key="dispositivo.id" 
+                :dispositivo="dispositivo"
+                :is-dark="isDark"
+                :mi-rol="miRol" 
+                @edit-device="openEditDeviceModal"
+                @open-delete-modal="openDeleteDeviceModal"
+            />
+        </div>
+
+        <div class="pagination-controls" v-if="totalPages > 1">
+            <button class="btn-page" :disabled="page === 1" @click="changePage(page - 1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="page-info">Pág {{ page }} de {{ totalPages }}</span>
+            <button class="btn-page" :disabled="page === totalPages" @click="changePage(page + 1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        
                     
                 </div>
             </div>
@@ -94,7 +113,7 @@ import TarjetaDispositivo from './TarjetaDispositivo.vue';
 import ModalCrearDispositivo from '../dispositivos/ModalCrearDispositivo.vue'; 
 import ModalEditarDispositivo from '../dispositivos/ModalEditarDispositivo.vue'; 
 import ModalEliminarDispositivo from '../dispositivos/ModalEliminarDispositivo.vue'; 
-
+import debounce from 'lodash/debounce'; // npm install lodash
 // const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
@@ -115,6 +134,7 @@ export default {
             loading: true,
             error: null,
             proyecto: {},
+            miRol: '',
             dispositivos: [],
             // Estados de Modales
             mostrarModalCrearDispositivo: false,
@@ -124,7 +144,14 @@ export default {
             mostrarModalEliminarDispositivo: false,
             dispositivoEliminarId: null,
             dispositivoEliminarNombre: null,
+            
 
+            searchQuery: '',
+            page: 1,
+            limit: 6, // 6 tarjetas se ven bien
+            totalPages: 1,
+            totalRecords: 0,
+            loading: true,
             resumenMetricas: {},
         };
     },
@@ -149,8 +176,15 @@ export default {
                 // { title: 'Campos de Medición', value: resumen.campos_activos || 0, icon: 'bi bi-speedometer', color: '#FF5733' },
             ];
         }
+    },created() {
+        // Debounce para la búsqueda
+        this.debouncedSearch = debounce(() => {
+            this.page = 1;
+            this.cargarDispositivos();
+        }, 500);
     },
     mounted() {
+        this.cargarDatosIniciales();
         this.cargarDetallesProyecto();
         this.detectarTemaSistema();
         if (window.matchMedia) {
@@ -166,6 +200,71 @@ export default {
         // -----------------------------------------------------
         // LÓGICA DE CARGA Y RECARGA
         // -----------------------------------------------------
+         async cargarDatosIniciales() {
+            await this.cargarProyecto();
+            await this.cargarDispositivos();
+        },
+
+        async cargarProyecto() {
+            const token = localStorage.getItem('accessToken');
+            if (!token) return;
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/proyectos/${this.$route.params.id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    this.proyecto = data;
+                    this.miRol = data.mi_rol; // Guardamos el rol
+                }
+            } catch (e) { console.error(e); }
+        },
+
+        // 2. Cargar Dispositivos (Paginados)
+        async cargarDispositivos() {
+            this.loading = true;
+            const token = localStorage.getItem('accessToken');
+            
+            // Construir URL con params
+            const params = new URLSearchParams({
+                page: this.page,
+                limit: this.limit,
+                search: this.searchQuery
+            });
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.$route.params.id}?${params}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    // La API ahora devuelve { data, total, total_pages }
+                    this.dispositivos = data.data.map(d => ({
+                        ...d,
+                        habilitado: d.habilitado === 1 || d.habilitado === true,
+                        // ... (otros mapeos) ...
+                    }));
+                    this.totalRecords = data.total;
+                    this.totalPages = data.total_pages;
+                } else {
+                    this.dispositivos = [];
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        onSearchInput() { this.debouncedSearch(); },
+        
+        changePage(newPage) {
+            if (newPage >= 1 && newPage <= this.totalPages) {
+                this.page = newPage;
+                this.cargarDispositivos();
+            }
+        },
         async cargarDetallesProyecto() {
             this.loading = true;
             this.error = null;
@@ -239,7 +338,7 @@ export default {
         closeAddDeviceModal() { this.mostrarModalCrearDispositivo = false; },
         handleDeviceCreated() {
             this.closeAddDeviceModal();
-            this.cargarDetallesProyecto(); 
+            this.cargarDatosIniciales(); 
         },
         
         // Edición
@@ -253,13 +352,13 @@ export default {
         },
         handleDeviceUpdated() {
             this.closeEditDeviceModal();
-            this.cargarDetallesProyecto();
+            this.cargarDatosIniciales();
         },
 
         // Toggle Habilitado (Simulación)
         handleToggleHabilitado(dispositivoId, nuevoEstado) {
             console.log(`Simulando cambio de estado para ID ${dispositivoId} a ${nuevoEstado}`);
-            this.cargarDetallesProyecto(); 
+            this.cargarDatosIniciales(); 
         },
         
         // 🚨 FUNCIÓN LLAMADA POR EL BOTÓN DE LA PAPELERA (TarjetaDispositivo)
@@ -315,7 +414,7 @@ export default {
                 this.closeDeleteDeviceModal();
                 
                 // Recargar la lista para que la tarjeta desaparezca
-                this.cargarDetallesProyecto(); 
+                this.cargarDatosIniciales(); 
 
             } catch (err) {
                 alert('Error al eliminar: ' + err.message);
@@ -488,7 +587,56 @@ export default {
     box-shadow: 0 3px 6px rgba($SUCCESS-COLOR, 0.3);
     i { margin-right: 5px; }
 }
-
+.actions-group {
+    display: flex; gap: 10px; align-items: center;
+    
+    .search-box {
+        position: relative;
+        input {
+            padding: 8px 10px 8px 35px; border-radius: 20px; border: 1px solid #ddd;
+            font-size: 0.9rem; width: 200px; transition: width 0.3s;
+            &:focus { width: 250px; border-color: #8A2BE2; }
+        }
+        i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #999; }
+    }
+}
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    margin-top: 40px;
+    padding-bottom: 20px;
+    
+    .btn-page {
+        background-color: transparent;
+        border: 1px solid #8A2BE2;
+        color: #8A2BE2;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        
+        &:hover:not(:disabled) {
+            background-color: #8A2BE2;
+            color: white;
+        }
+        &:disabled {
+            border-color: #ccc;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+    }
+    
+    .page-info {
+        font-weight: 500;
+        color: #99A2AD;
+    }
+}
 // ------------------------------------
 // SECCIÓN 3: GRID DE DISPOSITIVOS
 // ------------------------------------

@@ -11,7 +11,7 @@ from app.configuracion import configuracion
 from app.servicios.servicio_simulacion import get_db_connection, simular_datos_json
 
 # Importaciones de Modelos
-from app.api.modelos.proyectos import ProyectoCrear, ProyectoActualizar, Proyecto 
+from app.api.modelos.proyectos import ProyectoCrear, ProyectoActualizar, Proyecto,ProyectoConRol,RespuestaPaginadaProyectos 
 from app.api.modelos.simulacion import DatosSimulacion
 from app.servicios import servicio_simulacion as servicio_simulacion
 
@@ -38,38 +38,52 @@ async def get_proyectos(
     return proyectos
 
 
-# Obtener los proyectos por usuario_id (PROTEGIDO)
-@router_proyecto.get("/proyectos/usuario/{usuario_id}", response_model=List[Proyecto])
+@router_proyecto.get("/proyectos/usuario/{usuario_id}", response_model=RespuestaPaginadaProyectos) # 👈 Cambio de modelo
 async def obtener_proyectos_por_usuario(
     usuario_id: int,
+    # 🚨 NUEVOS PARÁMETROS (Query Params)
+    page: int = Query(1, ge=1, description="Número de página"),
+    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
+    search: str = Query("", description="Término de búsqueda (nombre o descripción)"),
     current_user_id: int = Depends(get_current_user_id)
 ):
+    # Validación básica de identidad
     if usuario_id != current_user_id:
-        raise HTTPException(status_code=403, detail="No autorizado para acceder a estos proyectos.")
+        raise HTTPException(status_code=403, detail="No autorizado para ver estos proyectos.")
         
     try:
-        proyectos = await servicio_simulacion.obtener_proyectos_por_usuario(usuario_id)
-        if not proyectos:
-            raise HTTPException(status_code=404, detail="No se encontraron proyectos para este usuario.")
-        return proyectos
+        # 🚨 LLAMADA A LA FUNCIÓN ACTUALIZADA CON PARÁMETROS
+        resultados_paginados = await servicio_simulacion.obtener_proyectos_con_rol_db(
+            usuario_id=usuario_id,
+            page=page,
+            limit=limit,
+            search=search
+        )
+        
+        # La función de servicio ya devuelve el diccionario con la estructura correcta:
+        # { "data": [...], "total": 50, "page": 1, ... }
+        return resultados_paginados
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
 
 
-# Obtener los proyectos por id (PROTEGIDO)
-@router_proyecto.get("/proyectos/{id}", response_model=Proyecto)
+@router_proyecto.get("/proyectos/{id}", response_model=ProyectoConRol) # 👈 Usamos el modelo con Rol
 async def obtener_proyecto_por_id(
     id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
     try:
-        proyecto = await servicio_simulacion.obtener_proyecto_por_id(id)
+        # Usamos la nueva función que calcula el rol
+        proyecto = await  servicio_simulacion.obtener_proyecto_con_rol_por_id_db(id, current_user_id)
+        
         if not proyecto:
-            raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado o no tienes acceso.")
+            
         return proyecto
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener proyecto: {str(e)}")
-
 
 # Crear Proyectos (PROTEGIDO)
 @router_proyecto.post("/crear_proyecto/")

@@ -1,6 +1,6 @@
 # app/api/rutas/sensores/sensores.py (Fragmento)
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status,Query
 from fastapi.responses import JSONResponse
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -15,9 +15,70 @@ from app.servicios.servicio_permisos import verificar_permiso_proyecto,obtener_p
 from app.servicios.servicio_actividad import registrar_actividad_db
 router_sensor = APIRouter()
 
-# ----------------------------------------------------------------------
-# ENDPOINT DE CREACIÓN
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------
+# 1. OBTENER SENSORES POR DISPOSITIVO (PAGINADO)
+# -----------------------------------------------------------
+@router_sensor.get("/sensores/dispositivo/{dispositivo_id}")
+async def get_sensores_por_dispositivo(
+    dispositivo_id: int,
+    page: int = Query(1, ge=1, description="Número de página"),
+    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
+    search: str = Query("", description="Búsqueda por nombre o tipo"),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    # 🚨 SEGURIDAD: Verificar permiso sobre el proyecto
+    proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
+    try:
+        # Llamada a la nueva función paginada
+        return await obtener_sensores_por_dispositivo_paginado_db(
+            dispositivo_id, page, limit, search
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")
+
+
+# -----------------------------------------------------------
+# 2. OBTENER TODOS LOS SENSORES (GLOBAL - PAGINADO)
+# -----------------------------------------------------------
+@router_sensor.get("/sensores/todos")
+async def get_all_sensores_general(
+    page: int = Query(1, ge=1, description="Número de página"),
+    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
+    search: str = Query("", description="Búsqueda global"),
+    current_user_id: int = Depends(get_current_user_id) 
+):
+    try:
+        # Esta función ya filtra por usuario (Dueño o Invitado)
+        return await obtener_sensores_globales_paginado_db(
+            current_user_id, page, limit, search
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener sensores globales: {str(e)}")
+
+
+# -----------------------------------------------------------
+# 3. OBTENER SENSOR POR ID (INDIVIDUAL)
+# -----------------------------------------------------------
+@router_sensor.get("/sensores/{id}", response_model=Sensor)
+async def get_sensor_por_id(
+    id: int,
+    current_user_id: int = Depends(get_current_user_id)
+):
+    # 🚨 SEGURIDAD: Verificar permiso sobre el proyecto del sensor
+    proyecto_id = await obtener_proyecto_id_desde_sensor(id)
+    await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
+    try:
+        sensor = await obtener_sensor_por_id_db(id)
+        if not sensor:
+            raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+        return sensor
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener sensor: {str(e)}")
 # -----------------------------------------------------------
 # 1. CREAR SENSOR (POST)
 # -----------------------------------------------------------
@@ -43,71 +104,17 @@ async def crear_sensor_endpoint(
         return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})
     
     
-# GET: Obtener todos los sensores accesibles para el usuario (propietario o miembro)
-@router_sensor.get("/sensores/todos", response_model=List[SensorGeneral])
-async def get_all_sensores_general(
-    current_user_id: int = Depends(get_current_user_id) 
-):
-  
-    try:
-        sensores = await obtener_sensores_globales_db(current_user_id) 
-        
-        if not sensores:
-            raise HTTPException(status_code=404, detail="No se encontraron sensores para este usuario.")
-        
-        return sensores
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener sensores globales: {str(e)}")
-
-# GET: Obtener Sensor por ID (Requiere JWT)
-@router_sensor.get("/sensores/{id}", response_model=Sensor)
-async def get_sensor_por_id(
-    id: int,
-    current_user_id: int = Depends(get_current_user_id)
-):
-    try:
-        sensor = await obtener_sensor_por_id_db(id)
-        if not sensor:
-            raise HTTPException(status_code=404, detail="Sensor no encontrado.")
-        # Nota: Aquí se debería verificar que el usuario tenga acceso al dispositivo/proyecto.
-        
-        return sensor
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener sensor: {str(e)}")
-    
-
-# GET: Obtener Sensores por Dispositivo (Requiere JWT)
-@router_sensor.get("/sensores/dispositivo/{dispositivo_id}", response_model=List[Sensor])
-async def get_sensores_por_dispositivo(
-    dispositivo_id: int,
-    current_user_id: int = Depends(get_current_user_id) # 🚨 AUTENTICACIÓN
-):
-    # Nota: Aquí se debería verificar que el usuario tenga acceso al dispositivo/proyecto.
-    
-    try:
-        sensores = await obtener_sensores_por_dispositivo_db(dispositivo_id)
-        if not sensores:
-            raise HTTPException(status_code=404, detail="No se encontraron sensores para este dispositivo.")
-        return sensores
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")
+# 
 
 # -----------------------------------------------------------
 # 2. ACTUALIZAR SENSOR (PUT)
-# -----------------------------------------------------------
 @router_sensor.put("/sensores/{id}")
 async def actualizar_sensor_endpoint(
     id: int,
     datos: SensorActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 VERIFICACIÓN DE SEGURIDAD
+   
     # 1. Averiguar el proyecto usando el ID del sensor
     proyecto_id = await obtener_proyecto_id_desde_sensor(id)
     
@@ -247,50 +254,6 @@ async def set_sensor(datos: SensorCrear,usuario_id: int) -> Dict[str, Any]:
         if conn: conn.close()
 
 
-# GET: Obtener Sensores por Dispositivo (Requiere JWT)
-async def obtener_sensores_por_dispositivo_db(dispositivo_id: int) -> List[Dict[str, Any]]:
-    conn = None
-    DATE_FORMAT = "%Y-%m-%d %H:%M:%S" 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
-        # 🚨 CONSULTA CRÍTICA: Añadir el SUBQUERY para contar los campos
-        sql = """
-        SELECT 
-            s.*, -- Selecciona todas las columnas base del sensor
-            (
-                SELECT COUNT(cs.id) 
-                FROM campos_sensores cs 
-                WHERE cs.sensor_id = s.id
-            ) AS total_campos -- 👈 CRÍTICO: El contador
-        FROM sensores s 
-        WHERE s.dispositivo_id = %s;
-        """
-        
-        cursor.execute(sql, (dispositivo_id,))
-        sensores = cursor.fetchall()
-        
-        # 🚨 PROCESAMIENTO DE DATOS (Asegurar que total_campos sea int)
-        for sensor in sensores:
-            if 'habilitado' in sensor:
-                sensor['habilitado'] = int(sensor['habilitado']) == 1 
-            if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
-                sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
-            
-            # 🚨 Asegurar que el campo se castee a entero
-            if 'total_campos' in sensor:
-                # Se asegura de que se pase como int, no como string o Decimal
-                sensor['total_campos'] = int(sensor['total_campos'])
-
-        return sensores
-        
-    except Exception as e:
-        print(f"Error al obtener sensores por dispositivo: {e}") 
-        raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
-        
-    finally:
-        if conn: conn.close()
 
 # PUT: Actualizar un sensor
 async def actualizar_sensor_db(
@@ -366,41 +329,7 @@ async def actualizar_sensor_db(
         raise HTTPException(status_code=500, detail=f"DB Error al actualizar sensor: {str(e)}")
     finally:
         if conn: conn.close()
-# async def actualizar_sensor_db(id: int, datos: SensorActualizar) -> Dict[str, Any]:
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-        
-#         # 1. Validación de existencia
-#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (id,))
-#         if not cursor.fetchone():
-#             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
 
-#         # 2. Construcción de UPDATE dinámico
-#         campos = []
-#         valores = []
-        
-#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
-#         if datos.tipo is not None: campos.append("tipo = %s"); valores.append(datos.tipo)
-#         if datos.habilitado is not None: campos.append("habilitado = %s"); valores.append(datos.habilitado)
-        
-#         if not campos:
-#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
-             
-#         valores.append(id)
-#         sql = f"UPDATE sensores SET {', '.join(campos)} WHERE id = %s"
-#         cursor.execute(sql, valores)
-#         conn.commit()
-        
-#         return {"status": "success", "rows_affected": cursor.rowcount}
-#     except Exception as e:
-#         if conn: conn.rollback()
-#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar sensor: {str(e)}")
-#     finally:
-#         if conn: conn.close()
-
-# DELETE: Eliminar un sensor (Y sus campos/datos)
 async def eliminar_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
     conn = None
     try:
@@ -474,6 +403,318 @@ async def eliminar_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
     finally:
         if conn: conn.close()
+
+
+
+# GET: Obtener un sensor por ID
+async def obtener_sensor_por_id_db(sensor_id: int) -> Dict[str, Any] | None:
+    conn = None
+    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 🚨 CONSULTA: Obtener todos los detalles del sensor
+        cursor.execute("SELECT * FROM sensores WHERE id = %s", (sensor_id,))
+        sensor = cursor.fetchone()
+        
+        if sensor:
+            # 🚨 Conversión de tipos (CRÍTICO para Pydantic)
+            if 'habilitado' in sensor:
+                sensor['habilitado'] = int(sensor['habilitado']) == 1
+            if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
+                sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
+        return sensor
+    except Exception as e:
+        print(f"Error al obtener sensor por ID: {e}")
+        return None
+    finally:
+        if conn: conn.close()
+
+
+async def obtener_sensores_por_dispositivo_paginado_db(
+    dispositivo_id: int, 
+    page: int = 1, 
+    limit: int = 10, 
+    search: str = ""
+) -> Dict[str, Any]:
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
+    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 1. Consulta Base
+        sql_base = """
+        FROM sensores 
+        WHERE dispositivo_id = %s 
+          AND (nombre LIKE %s OR tipo LIKE %s)
+        """
+        params = [dispositivo_id, search_pattern, search_pattern]
+        
+        # 2. Total
+        cursor.execute(f"SELECT COUNT(*) as total {sql_base}", params)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Paginación
+        sql_final = f"SELECT * {sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        cursor.execute(sql_final, params)
+        sensores = cursor.fetchall()
+        
+        # Formateo
+        for s in sensores:
+            if 'habilitado' in s: s['habilitado'] = bool(s['habilitado'])
+            if 'fecha_creacion' in s and isinstance(s['fecha_creacion'], datetime):
+                s['fecha_creacion'] = s['fecha_creacion'].strftime(DATE_FORMAT)
+                
+        return {
+            "data": sensores,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+        }
+    except Exception as e:
+        print(f"Error DB sensores paginados: {e}")
+        raise e
+    finally:
+        if conn: conn.close()
+
+async def obtener_sensores_globales_paginado_db(
+    current_user_id: int,
+    page: int = 1,
+    limit: int = 10,
+    search: str = ""
+) -> Dict[str, Any]:
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
+    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 1. Definir el WHERE común (Filtros de seguridad y búsqueda)
+        where_clause = """
+            WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
+              AND (s.nombre LIKE %s OR s.tipo LIKE %s OR d.nombre LIKE %s)
+        """
+        params_base = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
+
+        # 2. Obtener Total (COUNT)
+        sql_count = f"""
+            SELECT COUNT(DISTINCT s.id) as total
+            FROM sensores s
+            JOIN dispositivos d ON s.dispositivo_id = d.id
+            JOIN proyectos p ON d.proyecto_id = p.id
+            LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+            {where_clause}
+        """
+        # Nota: Añadimos current_user_id extra para el JOIN del count
+        cursor.execute(sql_count, [current_user_id] + params_base)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Obtener Datos Paginados (CON CAMPOS y ROL)
+        # 🚨 AQUÍ ESTÁ LA MAGIA: Agregamos 'total_campos' y 'mi_rol'
+        sql_data = f"""
+            SELECT DISTINCT 
+                s.*, 
+                d.nombre as nombre_dispositivo, 
+                p.nombre as nombre_proyecto, 
+                p.usuario_id as propietario_id,
+                
+                -- Subconsulta para contar campos
+                (SELECT COUNT(*) FROM campos_sensores cs WHERE cs.sensor_id = s.id) as total_campos,
+                
+                -- Lógica para determinar el ROL en este proyecto
+                CASE 
+                    WHEN p.usuario_id = %s THEN 'Propietario'
+                    ELSE r.nombre_rol
+                END as mi_rol
+
+            FROM sensores s
+            JOIN dispositivos d ON s.dispositivo_id = d.id
+            JOIN proyectos p ON d.proyecto_id = p.id
+            LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+            LEFT JOIN roles r ON pu.rol_id = r.id
+            {where_clause}
+            ORDER BY s.id DESC 
+            LIMIT %s OFFSET %s
+        """
+        
+        # Params: [user_id (case), user_id (join)] + [user_id, user_id, search...] (where) + [limit, offset]
+        params_data = [current_user_id, current_user_id] + params_base + [limit, offset]
+        
+        cursor.execute(sql_data, params_data)
+        sensores = cursor.fetchall()
+        
+        # 4. Formateo (Fechas y Booleanos)
+        for s in sensores:
+            if 'habilitado' in s: s['habilitado'] = bool(s['habilitado'])
+            if 'fecha_creacion' in s and isinstance(s['fecha_creacion'], datetime):
+                s['fecha_creacion'] = s['fecha_creacion'].strftime(DATE_FORMAT)
+            # Asegurar que mi_rol tenga un valor por defecto si falla algo
+            if not s.get('mi_rol'): s['mi_rol'] = 'Observador' 
+                
+        return {
+            "data": sensores,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+        }
+
+    except Exception as e:
+        print(f"Error DB sensores globales: {e}")
+        raise e
+    finally:
+        if conn: conn.close()
+
+
+
+# # GET: Obtener Sensores por Dispositivo (Requiere JWT)
+# async def obtener_sensores_por_dispositivo_db(dispositivo_id: int) -> List[Dict[str, Any]]:
+#     conn = None
+#     DATE_FORMAT = "%Y-%m-%d %H:%M:%S" 
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         sql = """
+#         SELECT 
+#             s.*, -- Selecciona todas las columnas base del sensor
+#             (
+#                 SELECT COUNT(cs.id) 
+#                 FROM campos_sensores cs 
+#                 WHERE cs.sensor_id = s.id
+#             ) AS total_campos 
+#         FROM sensores s 
+#         WHERE s.dispositivo_id = %s;
+#         """
+        
+#         cursor.execute(sql, (dispositivo_id,))
+#         sensores = cursor.fetchall()
+        
+#         for sensor in sensores:
+#             if 'habilitado' in sensor:
+#                 sensor['habilitado'] = int(sensor['habilitado']) == 1 
+#             if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
+#                 sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
+            
+#             if 'total_campos' in sensor:
+#                 # Se asegura de que se pase como int, no como string o Decimal
+#                 sensor['total_campos'] = int(sensor['total_campos'])
+
+#         return sensores
+        
+#     except Exception as e:
+#         print(f"Error al obtener sensores por dispositivo: {e}") 
+#         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+        
+#     finally:
+#         if conn: conn.close()
+
+# # GET: Obtener todos los sensores accesibles para el usuario (propietario o miembro)
+# async def obtener_sensores_globales_db(current_user_id: int) -> List[Dict[str, Any]]:
+#     """
+#     Obtiene todos los sensores a los que un usuario tiene acceso (como propietario o miembro),
+#     incluyendo los nombres del dispositivo y proyecto.
+#     """
+#     conn = None
+#     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 🚨 CONSULTA CRÍTICA: JOIN de 3 niveles (Sensor -> Dispositivo -> Proyecto)
+#         # Filtra por el usuario actual
+#         sql = """
+#         SELECT 
+#             DISTINCT 
+#             s.id, s.nombre, s.tipo, s.habilitado, s.fecha_creacion, s.dispositivo_id,
+#             d.nombre AS nombre_dispositivo,
+#             p.nombre AS nombre_proyecto,
+#             p.id AS proyecto_id,
+#             (SELECT COUNT(cs.id) FROM campos_sensores cs WHERE cs.sensor_id = s.id) AS total_campos
+#         FROM 
+#             sensores s
+#         JOIN 
+#             dispositivos d ON s.dispositivo_id = d.id
+#         JOIN 
+#             proyectos p ON d.proyecto_id = p.id
+#         LEFT JOIN 
+#             proyecto_usuarios pu ON p.id = pu.proyecto_id
+#         WHERE 
+#             p.usuario_id = %s OR pu.usuario_id = %s;
+#         """
+        
+#         cursor.execute(sql, (current_user_id, current_user_id)) 
+#         sensores = cursor.fetchall()
+        
+#         # Procesamiento de tipos (Booleano y Fecha)
+#         for sensor in sensores:
+#             if 'habilitado' in sensor:
+#                 sensor['habilitado'] = int(sensor['habilitado']) == 1 
+#             if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
+#                 sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
+#             if 'total_campos' in sensor:
+#                 sensor['total_campos'] = int(sensor['total_campos'])
+
+#         return sensores
+
+#     except Exception as e:
+#         print(f"Error en DB al obtener sensores globales: {e}")
+#         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+#     finally:
+#         if conn:
+#             conn.close()
+
+
+
+# async def actualizar_sensor_db(id: int, datos: SensorActualizar) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # 1. Validación de existencia
+#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+
+#         # 2. Construcción de UPDATE dinámico
+#         campos = []
+#         valores = []
+        
+#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
+#         if datos.tipo is not None: campos.append("tipo = %s"); valores.append(datos.tipo)
+#         if datos.habilitado is not None: campos.append("habilitado = %s"); valores.append(datos.habilitado)
+        
+#         if not campos:
+#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
+             
+#         valores.append(id)
+#         sql = f"UPDATE sensores SET {', '.join(campos)} WHERE id = %s"
+#         cursor.execute(sql, valores)
+#         conn.commit()
+        
+#         return {"status": "success", "rows_affected": cursor.rowcount}
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar sensor: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+# DELETE: Eliminar un sensor (Y sus campos/datos)
+
 # async def eliminar_sensor_db(id: int) -> Dict[str, Any]:
 #     conn = None
 #     try:
@@ -503,82 +744,57 @@ async def eliminar_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
 #     finally:
 #         if conn: conn.close()
 
-# GET: Obtener un sensor por ID
-async def obtener_sensor_por_id_db(sensor_id: int) -> Dict[str, Any] | None:
-    conn = None
-    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
-        # 🚨 CONSULTA: Obtener todos los detalles del sensor
-        cursor.execute("SELECT * FROM sensores WHERE id = %s", (sensor_id,))
-        sensor = cursor.fetchone()
-        
-        if sensor:
-            # 🚨 Conversión de tipos (CRÍTICO para Pydantic)
-            if 'habilitado' in sensor:
-                sensor['habilitado'] = int(sensor['habilitado']) == 1
-            if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
-                sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
-        return sensor
-    except Exception as e:
-        print(f"Error al obtener sensor por ID: {e}")
-        return None
-    finally:
-        if conn: conn.close()
 
 # GET: Obtener todos los sensores accesibles para el usuario (propietario o miembro)
-async def obtener_sensores_globales_db(current_user_id: int) -> List[Dict[str, Any]]:
-    """
-    Obtiene todos los sensores a los que un usuario tiene acceso (como propietario o miembro),
-    incluyendo los nombres del dispositivo y proyecto.
-    """
-    conn = None
-    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+# @router_sensor.get("/sensores/todos", response_model=List[SensorGeneral])
+# async def get_all_sensores_general(
+#     current_user_id: int = Depends(get_current_user_id) 
+# ):
+  
+#     try:
+#         sensores = await obtener_sensores_globales_db(current_user_id) 
         
-        # 🚨 CONSULTA CRÍTICA: JOIN de 3 niveles (Sensor -> Dispositivo -> Proyecto)
-        # Filtra por el usuario actual
-        sql = """
-        SELECT 
-            DISTINCT 
-            s.id, s.nombre, s.tipo, s.habilitado, s.fecha_creacion, s.dispositivo_id,
-            d.nombre AS nombre_dispositivo,
-            p.nombre AS nombre_proyecto,
-            p.id AS proyecto_id,
-            (SELECT COUNT(cs.id) FROM campos_sensores cs WHERE cs.sensor_id = s.id) AS total_campos
-        FROM 
-            sensores s
-        JOIN 
-            dispositivos d ON s.dispositivo_id = d.id
-        JOIN 
-            proyectos p ON d.proyecto_id = p.id
-        LEFT JOIN 
-            proyecto_usuarios pu ON p.id = pu.proyecto_id
-        WHERE 
-            p.usuario_id = %s OR pu.usuario_id = %s;
-        """
+#         if not sensores:
+#             raise HTTPException(status_code=404, detail="No se encontraron sensores para este usuario.")
         
-        cursor.execute(sql, (current_user_id, current_user_id)) 
-        sensores = cursor.fetchall()
-        
-        # Procesamiento de tipos (Booleano y Fecha)
-        for sensor in sensores:
-            if 'habilitado' in sensor:
-                sensor['habilitado'] = int(sensor['habilitado']) == 1 
-            if 'fecha_creacion' in sensor and isinstance(sensor['fecha_creacion'], datetime):
-                sensor['fecha_creacion'] = sensor['fecha_creacion'].strftime(DATE_FORMAT)
-            if 'total_campos' in sensor:
-                sensor['total_campos'] = int(sensor['total_campos'])
+#         return sensores
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener sensores globales: {str(e)}")
 
-        return sensores
-
-    except Exception as e:
-        print(f"Error en DB al obtener sensores globales: {e}")
-        raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
-    finally:
-        if conn:
-            conn.close()
+# # GET: Obtener Sensor por ID (Requiere JWT)
+# @router_sensor.get("/sensores/{id}", response_model=Sensor)
+# async def get_sensor_por_id(
+#     id: int,
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     try:
+#         sensor = await obtener_sensor_por_id_db(id)
+#         if not sensor:
+#             raise HTTPException(status_code=404, detail="Sensor no encontrado.")
+#         # Nota: Aquí se debería verificar que el usuario tenga acceso al dispositivo/proyecto.
+        
+#         return sensor
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener sensor: {str(e)}")
+    
+# # GET: Obtener Sensores por Dispositivo (Requiere JWT)
+# @router_sensor.get("/sensores/dispositivo/{dispositivo_id}", response_model=List[Sensor])
+# async def get_sensores_por_dispositivo(
+#     dispositivo_id: int,
+#     current_user_id: int = Depends(get_current_user_id) # 🚨 AUTENTICACIÓN
+# ):
+#     # Nota: Aquí se debería verificar que el usuario tenga acceso al dispositivo/proyecto.
+    
+#     try:
+#         sensores = await obtener_sensores_por_dispositivo_db(dispositivo_id)
+#         if not sensores:
+#             raise HTTPException(status_code=404, detail="No se encontraron sensores para este dispositivo.")
+#         return sensores
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")

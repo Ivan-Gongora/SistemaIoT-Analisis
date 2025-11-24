@@ -119,6 +119,111 @@ async def obtener_proyectos_por_usuario(usuario_id: int) -> List[Dict[str, Any]]
     finally:
         if conn:
             conn.close()
+            
+
+async def obtener_proyectos_con_rol_db(
+    usuario_id: int, 
+    page: int = 1, 
+    limit: int = 10, 
+    search: str = ""
+) -> Dict[str, Any]: # 👈 Ahora devuelve un Dict con 'data' y 'total'
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 1. Consulta Base (CTE o Subquery para simplificar el conteo y filtrado)
+        # Nota: Usamos SQL dinámico simple para el WHERE
+        where_clause = "WHERE (p.nombre LIKE %s OR p.descripcion LIKE %s)"
+        
+        sql_base = f"""
+        (
+            SELECT p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id, 'Propietario' as mi_rol
+            FROM proyectos p
+            {where_clause} AND p.usuario_id = %s
+        )
+        UNION
+        (
+            SELECT p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id, r.nombre_rol as mi_rol
+            FROM proyectos p
+            JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+            JOIN roles r ON pu.rol_id = r.id
+            {where_clause} AND pu.usuario_id = %s AND p.usuario_id != %s
+        )
+        """
+        
+        # Parámetros para la consulta de datos (search, search, uid, search, search, uid, uid)
+        params_data = [search_pattern, search_pattern, usuario_id, search_pattern, search_pattern, usuario_id, usuario_id]
+        
+        # 2. Obtener Total de Registros (Para el paginador)
+        count_sql = f"SELECT COUNT(*) as total FROM ({sql_base}) as subquery"
+        cursor.execute(count_sql, params_data)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Obtener Datos Paginados
+        final_sql = f"{sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
+        params_data.extend([limit, offset]) # Añadir limit y offset al final
+        
+        cursor.execute(final_sql, params_data)
+        proyectos = cursor.fetchall()
+        
+        return {
+            "data": proyectos,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit
+        }
+        
+    except Exception as e:
+        print(f"Error DB: {e}")
+        raise e
+    finally:
+        if conn: conn.close()          
+            
+
+async def obtener_proyecto_con_rol_por_id_db(proyecto_id: int, usuario_id: int) -> Dict[str, Any]:
+    """
+    Obtiene un proyecto específico y calcula el rol del usuario solicitante.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # Esta consulta determina tu rol en un solo paso
+        sql = """
+        SELECT 
+            p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id,
+            CASE 
+                WHEN p.usuario_id = %s THEN 'Propietario' -- Si soy el creador
+                ELSE r.nombre_rol                         -- Si soy invitado, toma el nombre del rol
+            END as mi_rol
+        FROM proyectos p
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+        LEFT JOIN roles r ON pu.rol_id = r.id
+        WHERE p.id = %s
+        """
+        
+        cursor.execute(sql, (usuario_id, usuario_id, proyecto_id))
+        proyecto = cursor.fetchone()
+        
+        # Validación de seguridad: Si no devuelve nada o mi_rol es NULL, no tengo acceso
+        if not proyecto or not proyecto['mi_rol']:
+            return None
+            
+        return proyecto
+
+    except Exception as e:
+        print(f"Error DB obtener_proyecto_con_rol: {e}")
+        raise e
+    finally:
+        if conn: conn.close()
+
 # # --- Funcion para la consulta GET para proyectos por id
 # async def obtener_proyecto_por_id(proyecto_id: int) -> Dict[str, Any] | None:
 #     conn = None
