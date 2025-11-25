@@ -332,6 +332,7 @@ export default {
 };
 </script>
 <style scoped lang="scss">
+@use "sass:color";
 .sensores-general-contenido { 
     padding: 0 40px 40px 40px; 
 }
@@ -518,7 +519,7 @@ export default {
         border-bottom: 1px solid rgba($WHITE, 0.05); 
         box-shadow: 0 2px 4px rgba(0,0,0,0.2); // Sombra oscura sutil
         
-        &:hover { background-color: lighten($SUBTLE-BG-DARK, 5%); }
+        &:hover { background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); }
         
         .sensor-name { color: $LIGHT-TEXT; }
         .sensor-type { color: $GRAY-COLD; }

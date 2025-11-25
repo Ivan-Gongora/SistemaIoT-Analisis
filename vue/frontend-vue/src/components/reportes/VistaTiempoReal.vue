@@ -5,66 +5,161 @@
     <div class="plataforma-contenido" :class="{ 'shifted': isSidebarOpen }">
       <EncabezadoPlataforma 
         titulo="Monitor en Tiempo Real"
-        subtitulo="Visualización de datos cada 5 segundos (una vez seleccionado el dispositivo y campos)"
+        subtitulo="Supervisión crítica de infraestructura. Visualización de telemetría en vivo con detección de anomalías y alertas preventivas."
         @toggle-sidebar="toggleSidebar" 
         :is-sidebar-open="isSidebarOpen"
       />
 
-      <div class="reportes-contenido"> <div class="selector-container" :class="{ 'theme-dark': isDark }">
-          <div class="form-group">
-            <label>1. Seleccione un Proyecto:</label>
-            <select v-model="proyectoSeleccionadoId" @change="cargarDispositivos" class="form-control">
-              <option :value="null" disabled>
-                {{ loadingProyectos ? 'Cargando proyectos...' : 'Seleccione un proyecto' }}
-              </option>
-              <option v-for="p in proyectos" :key="p.id" :value="p.id">{{ p.nombre }}</option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label>2. Seleccione un Dispositivo:</label>
-            <select v-model="dispositivoSeleccionadoId" @change="cargarCampos" class="form-control" :disabled="!proyectoSeleccionadoId || loadingDispositivos">
-              <option :value="null" disabled>
-                {{ loadingDispositivos ? 'Cargando...' : 'Seleccione un proyecto' }}
-              </option>
-              <option v-for="d in dispositivos" :key="d.id" :value="d.id">{{ d.nombre }}</option>
-            </select>
-          </div>
+      <div class="reportes-contenido">
+        
+        <!-- PANEL DE CONTROL UNIFICADO -->
+        <div class="control-panel" :class="{ 'theme-dark': isDark }">
+            
+            <!-- SECCIÓN 1: CONEXIÓN -->
+            <div class="control-section">
+                <h4 class="section-title"><i class="bi bi-hdd-network"></i> Conexión</h4>
+                
+                <div class="form-group">
+                    <label>Proyecto</label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-folder2-open input-icon"></i>
+                        <select v-model="proyectoSeleccionadoId" @change="cargarDispositivos" class="form-control">
+                            <option :value="null" disabled>
+                                {{ loadingProyectos ? 'Conectando...' : 'Seleccionar...' }}
+                            </option>
+                            <option v-for="p in proyectos" :key="p.id" :value="p.id">{{ p.nombre }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Dispositivo</label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-cpu input-icon"></i>
+                        <select v-model="dispositivoSeleccionadoId" @change="cargarCampos" class="form-control" :disabled="!proyectoSeleccionadoId || loadingDispositivos">
+                            <option :value="null" disabled>
+                                {{ loadingDispositivos ? 'Escaneando...' : 'Seleccionar...' }}
+                            </option>
+                            <option v-for="d in dispositivos" :key="d.id" :value="d.id">{{ d.nombre }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: VENTANA DE TIEMPO -->
+            <div class="control-section config-section">
+                <h4 class="section-title"><i class="bi bi-clock-history"></i> Ventana de Tiempo</h4>
+                
+                <div class="form-group">
+                    <label>Duración Visual</label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-hourglass-split input-icon"></i>
+                        <select v-model="ventanaTiempo" class="form-control" :disabled="!dispositivoSeleccionadoId">
+                            <option value="5">Últimos 5 minutos (Live)</option>
+                            <option value="60">Última 1 hora (Histórico)</option>
+                            <option value="1440">Últimas 24 horas (Histórico)</option>
+                        </select>
+                    </div>
+                    <div class="status-pill" :class="ventanaTiempo <= 5 ? 'live' : 'history'">
+                        <i class="bi" :class="ventanaTiempo <= 5 ? 'bi-broadcast' : 'bi-database-check'"></i>
+                        <span>{{ ventanaTiempo <= 5 ? 'Transmisión en Vivo' : 'Consulta Histórica' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 3: ANÁLISIS Y RENDIMIENTO -->
+            <div class="control-section config-section">
+                <h4 class="section-title"><i class="bi bi-activity"></i> Inteligencia</h4>
+                
+                <!-- Toggle de Análisis en Tiempo Real -->
+                <div class="form-group switch-group">
+                    <label>Análisis de Datos</label>
+                    <div class="toggle-wrapper">
+                        <label class="switch">
+                            <input type="checkbox" v-model="analisisActivo" :disabled="!dispositivoSeleccionadoId">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="switch-label" :class="{ 'active': analisisActivo }">
+                            {{ analisisActivo ? 'Activado' : 'Desactivado' }}
+                        </span>
+                    </div>
+                    <small class="info-text" v-if="analisisActivo">
+                        <i class="bi bi-robot"></i> Detectando picos anómalos...
+                    </small>
+                </div>
+
+                <!-- Selector de Método de Carga -->
+                <div class="form-group mt-2">
+                    <label>Modo de Carga</label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-lightning-charge input-icon"></i>
+                        <select v-model="metodoCarga" class="form-control" :disabled="!dispositivoSeleccionadoId">
+                            <option value="optimizado">Optimizado (WebSockets/Light)</option>
+                            <option value="puro">Datos Crudos (Polling)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
         </div>
          
-        
-        <div class="campo-selector-container" :class="{ 'theme-dark': isDark }" v-if="campos.length > 0">
-            <h4 class="selector-titulo">3. Seleccione los campos a graficar (1 o más)</h4>
-            <div v-if="loadingCampos" class="loading-message">Cargando campos...</div>
-            <div class="checkbox-grid">
-                <div v-for="c in campos" :key="c.id" class="checkbox-item">
-                    <input type="checkbox" :id="'campo-' + c.id" :value="c.id" v-model="camposSeleccionadosIds">
-                    
-                    <label :for="'campo-' + c.id">
-                        <i :class="getIcon(c.magnitud_tipo)"></i> {{ c.nombre }} ({{ c.simbolo_unidad || 'N/A' }}) </label>
+        <!-- SELECTOR DE VARIABLES -->
+        <div class="variables-panel" v-if="campos.length > 0">
+            <div class="panel-header">
+                <h4><i class="bi bi-check2-square"></i> Variables Disponibles</h4>
+                <span class="subtitle">Seleccione las métricas a monitorear en el tablero</span>
+            </div>
+            
+            <div v-if="loadingCampos" class="loading-state">
+                <div class="spinner"></div> Cargando configuración...
+            </div>
 
+            <div class="variables-grid">
+                <div 
+                    v-for="c in campos" 
+                    :key="c.id" 
+                    class="selectable-card"
+                    :class="{ 'selected': camposSeleccionadosIds.includes(c.id) }"
+                    @click="toggleCampo(c.id)"
+                >
+                    <div class="card-icon">
+                        <i :class="getIcon(c.magnitud_tipo)"></i>
+                    </div>
+                    <div class="card-info">
+                        <!-- 🚨 AQUI: Color Morado Aplicado -->
+                        <span class="var-name">{{ c.nombre }}</span>
+                        <span class="var-unit">{{ c.simbolo_unidad || '-' }}</span>
+                    </div>
+                    <div class="check-indicator">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
                 </div>
             </div>
         </div>
         
-
-
-        <div v-if="loadingCampos" class="alert-info">Cargando campos del dispositivo...</div>
-        <div v-else-if="errorCampos" class="alert-error">{{ errorCampos }}</div>
+        <!-- MENSAJES DE ESTADO -->
+        <div v-if="loadingCampos" class="alert-info">
+            <i class="bi bi-arrow-clockwise fa-spin"></i> Estableciendo conexión segura...
+        </div>
+        <div v-else-if="errorCampos" class="alert-box error">
+            <i class="bi bi-exclamation-triangle"></i> {{ errorCampos }}
+        </div>
+        <div v-else-if="!loadingCampos && dispositivoSeleccionadoId && campos.length === 0" class="alert-box empty">
+            <i class="bi bi-inbox"></i> Este dispositivo no reporta métricas activas.
+        </div>
         
-       <div class="charts-grid-realtime" v-if="camposFiltrados.length > 0">
+        <!-- GRID DE GRÁFICOS -->
+        <div class="charts-grid-realtime" v-if="camposFiltrados.length > 0">
             <GraficoEnTiempoReal
                 v-for="campo in camposFiltrados"
                 :key="campo.id"
                 :campo-id="campo.id"
                 :titulo="campo.nombre"
                 :is-dark="isDark"
-                :simbolo-unidad="campo.simbolo_unidad || 'N/A' "
+                :simbolo-unidad="campo.simbolo_unidad || ''"
+                :metodo-carga="metodoCarga" 
+                :ventana-tiempo="parseInt(ventanaTiempo)"
+                :analisis-activo="analisisActivo"
             />  
-            </div>
-                
-        <div v-if="!loadingCampos && dispositivoSeleccionadoId && campos.length === 0" class="alert-empty-data">
-          Este dispositivo no tiene campos de medición registrados.
         </div>
         
       </div>
@@ -73,12 +168,11 @@
 </template>
 
 <script>
-// Componentes de Layout
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
-// Componente hijo (El que hicimos en el prompt anterior)
 import GraficoEnTiempoReal from '../graficos/GraficoEnTiempoReal.vue'; 
 
+const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
   name: 'VistaTiempoReal',
@@ -91,12 +185,19 @@ export default {
     return {
       isDark: false, 
       isSidebarOpen: true, 
+      
       proyectos: [],
       dispositivos: [],
-      campos: [], // Todos los campos disponibles
-      camposSeleccionadosIds: [], // 👈 AÑADIDO: Array para checkboxes
+      campos: [], 
+      
       proyectoSeleccionadoId: null,
       dispositivoSeleccionadoId: null,
+      camposSeleccionadosIds: [],
+      
+      // Configuración
+      metodoCarga: 'optimizado', 
+      ventanaTiempo: '5', 
+      analisisActivo: true, // 🚨 Por defecto activo
 
       loadingProyectos: true,
       loadingDispositivos: false,
@@ -123,42 +224,44 @@ export default {
     }
   },
   methods: {
-    // --- Carga de Dropdowns (Exactamente igual a VistaReportes) ---
+    toggleCampo(id) {
+        const index = this.camposSeleccionadosIds.indexOf(id);
+        if (index === -1) {
+            this.camposSeleccionadosIds.push(id);
+        } else {
+            this.camposSeleccionadosIds.splice(index, 1);
+        }
+    },
+    
+    // --- CARGA DE DATOS ---
     async cargarProyectos() {
       this.loadingProyectos = true;
-      this.error = null;
       const token = localStorage.getItem('accessToken');
-      let usuarioId = null;
-      const resultadoString = localStorage.getItem('resultado');
-      
-      if (resultadoString) {
-        const resultado = JSON.parse(resultadoString);
-        if (resultado && resultado.usuario && resultado.usuario.id) {
-          usuarioId = resultado.usuario.id;
-        }
-      }
+      const resultado = JSON.parse(localStorage.getItem('resultado') || '{}');
+      const usuarioId = resultado.usuario?.id;
+
       if (!token || !usuarioId) { 
-        this.error = "Error de autenticación. No se pudo encontrar el ID de usuario.";
-        this.loadingProyectos = false;
-        this.$router.push('/');
-        return; 
+        this.$router.push('/'); return; 
       }
 
+      const params = new URLSearchParams({ page: 1, limit: 100 });
+
       try {
-        const response = await fetch(`${API_BASE_URL}/api/proyectos/usuario/${usuarioId}`, { 
+        const response = await fetch(`${API_BASE_URL}/api/proyectos/usuario/${usuarioId}?${params}`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
-        if (response.status === 404) { this.proyectos = []; }
-        if (!response.ok) { throw new Error('Fallo al cargar proyectos.'); }
         
-        this.proyectos = await response.json();
-        
-        if (this.proyectos.length > 0) {
-          this.proyectoSeleccionadoId = this.proyectos[0].id;
-          await this.cargarDispositivos(); 
+        if (response.ok) {
+            const jsonResponse = await response.json();
+            this.proyectos = jsonResponse.data || [];
+            
+            if (this.proyectos.length > 0) {
+                this.proyectoSeleccionadoId = this.proyectos[0].id;
+                await this.cargarDispositivos(); 
+            }
         }
       } catch (err) {
-        this.error = err.message;
+        console.error(err);
       } finally {
         this.loadingProyectos = false;
       }
@@ -169,19 +272,22 @@ export default {
       this.dispositivos = []; 
       this.campos = [];
       this.dispositivoSeleccionadoId = null;
+      this.camposSeleccionadosIds = [];
       
       const token = localStorage.getItem('accessToken');
-      if (!this.proyectoSeleccionadoId || !token) {
-        this.loadingDispositivos = false;
-        return;
-      }
+      if (!this.proyectoSeleccionadoId) return;
       
+      const params = new URLSearchParams({ page: 1, limit: 100 });
+
       try {
-        const response = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.proyectoSeleccionadoId}`, { 
+        const response = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.proyectoSeleccionadoId}?${params}`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
-        if (response.status === 404) { this.dispositivos = []; } 
-        else if (response.ok) { this.dispositivos = await response.json(); }
+        
+        if (response.ok) { 
+            const jsonResponse = await response.json();
+            this.dispositivos = jsonResponse.data || []; 
+        }
         
         if (this.dispositivos.length > 0) {
           this.dispositivoSeleccionadoId = this.dispositivos[0].id;
@@ -194,27 +300,28 @@ export default {
       }
     },
     
-    // Carga la lista de campos (Idéntico a VistaReportes)
     async cargarCampos() {
       this.loadingCampos = true;
       this.errorCampos = null;
       this.campos = [];
+      this.camposSeleccionadosIds = [];
       
       const token = localStorage.getItem('accessToken');
-      if (!this.dispositivoSeleccionadoId || !token) {
-        this.loadingCampos = false;
-         return; 
-      }
+      if (!this.dispositivoSeleccionadoId) return;
 
       try {
-        const sensoresResponse = await fetch(`${API_BASE_URL}/api/sensores/dispositivo/${this.dispositivoSeleccionadoId}`, { 
+        const params = new URLSearchParams({ page: 1, limit: 50 });
+        const sensoresResponse = await fetch(`${API_BASE_URL}/api/sensores/dispositivo/${this.dispositivoSeleccionadoId}?${params}`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
-        if (sensoresResponse.status === 404) { this.campos = []; this.loadingCampos = false; return; }
         
-        const sensores = await sensoresResponse.json();
-        let todosLosCampos = [];
+        let sensores = [];
+        if (sensoresResponse.ok) {
+            const sensoresData = await sensoresResponse.json();
+            sensores = Array.isArray(sensoresData) ? sensoresData : (sensoresData.data || []);
+        }
 
+        let todosLosCampos = [];
         for (const sensor of sensores) {
           const camposResponse = await fetch(`${API_BASE_URL}/api/sensores/${sensor.id}/campos`, { 
             headers: { 'Authorization': `Bearer ${token}` } 
@@ -222,36 +329,32 @@ export default {
           
           if (camposResponse.ok) {
             const camposData = await camposResponse.json();
-            todosLosCampos.push(...camposData); 
+            const listaCampos = camposData.campos || (Array.isArray(camposData) ? camposData : []);
+            todosLosCampos.push(...listaCampos); 
           }
         }
-        this.campos = todosLosCampos; 
+        
+        this.campos = todosLosCampos;
         
       } catch (err) {
-        console.error("Error al cargar campos:", err);
-        this.errorCampos = 'Error al cargar los campos del dispositivo.';
+        console.error("Error cargando campos:", err);
+        this.errorCampos = 'Error al cargar configuración.';
       } finally {
         this.loadingCampos = false;
       }
     },
-       getIcon(magnitudTipo) {
-            if (!magnitudTipo) return 'bi bi-question-lg';
-            const lowerMag = magnitudTipo.toLowerCase();
-            
-            if (lowerMag.includes('temperatura')) return 'bi bi-thermometer-half';
-            if (lowerMag.includes('humedad')) return 'bi bi-droplet-half';
-            if (lowerMag.includes('electricidad')) return 'bi bi-lightning-charge-fill';
-            if (lowerMag.includes('potencia')) return 'bi bi-lightning';
-            if (lowerMag.includes('energía')) return 'bi bi-battery-charging';
-            if (lowerMag.includes('iluminación')) return 'bi bi-sun';
-            if (lowerMag.includes('movimiento')) return 'bi bi-person-walking';
-            
-            return 'bi bi-speedometer2'; 
-        },    
-    // --- Layout y Tema ---
+
+    getIcon(magnitudTipo) {
+        if (!magnitudTipo) return 'bi bi-speedometer2';
+        const lowerMag = magnitudTipo.toLowerCase();
+        if (lowerMag.includes('temperatura')) return 'bi bi-thermometer-half';
+        if (lowerMag.includes('humedad')) return 'bi bi-droplet-half';
+        if (lowerMag.includes('voltaje') || lowerMag.includes('eléctrico')) return 'bi bi-lightning-charge';
+        return 'bi bi-activity'; 
+    },    
+
     toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
     handleThemeChange(event) { this.isDark = event.matches; },
-    
     detectarTemaSistema() {
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         this.isDark = true;
@@ -264,111 +367,303 @@ export default {
 </script>
 
 <style scoped lang="scss">
-/* Reutilizamos los estilos de VistaReportes */
+@use "sass:color";
+
+// VARIABLES
+$PRIMARY-PURPLE: #8A2BE2;
+$SUCCESS: #1ABC9C;
+$DANGER: #E74C3C;
+$WARNING: #c69a13;
+$GRAY: #99A2AD;
+$WHITE: #FFFFFF;
+$DARK-BG-CONTRAST: #1E1E30;
+$SUBTLE-BG-DARK: #2B2B40;
+$BLUE-MIDNIGHT: #1A1A2E;
+$LIGHT-TEXT: #E4E6EB;
+$DARK-TEXT: #333333;
+$LIGHT-BORDER: #E0E0E0;
+$DARK-BORDER: #44475A;
+$DARK-INPUT-BG: #3C3C55;
 
 .reportes-contenido {
-    padding: 0 40px 40px 40px;
+    padding: 30px 40px;
+    max-width: 1600px;
+    margin: 0 auto;
 }
-.campo-selector-container {
-    background-color: #FFFFFF; /* Fondo claro por defecto */
-    padding: 20px 25px;
-    border-radius: 12px;
-    margin-bottom: 30px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    
-    .selector-titulo {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 15px;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 10px;
-    }
-}
-.selector-container {
+
+// 1. PANEL DE CONTROL
+.control-panel {
+    background-color: $WHITE;
+    border-radius: 16px;
+    padding: 25px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
     display: grid;
-    /* 2 columnas (Proyecto y Dispositivo) */
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
-    gap: 20px;
-    padding: 25px; 
-    border-radius: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
     margin-bottom: 30px;
-    transition: background-color 0.3s;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    border: 1px solid transparent;
 }
-.form-group {
-    label { 
-        font-weight: 600; 
-        margin-bottom: 8px; 
-        display: block; 
+
+.control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    position: relative;
+    
+    .section-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: $GRAY;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        i { color: $PRIMARY-PURPLE; font-size: 1.1rem; }
     }
-    .form-control {
-        width: 100%;
-        padding: 10px 15px;
-        border-radius: 8px;
-        font-size: 1rem;
+}
+
+.mt-2 { margin-top: 1rem; }
+
+// INPUTS Y TOGGLES
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    
+    label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: $DARK-TEXT;
+    }
+    
+    .input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        
+        .input-icon {
+            position: absolute;
+            left: 12px;
+            color: $GRAY;
+            pointer-events: none;
+            font-size: 1rem;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px 15px 10px 40px; 
+            border-radius: 10px;
+            border: 1px solid $LIGHT-BORDER;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            background-color: $WHITE;
+            appearance: none; 
+            color: $DARK-TEXT;
+            
+            &:focus {
+                border-color: $PRIMARY-PURPLE;
+                box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.1);
+                outline: none;
+            }
+            &:disabled {
+                background-color: #f5f5f5;
+                cursor: not-allowed;
+                opacity: 0.7;
+            }
+        }
+    }
+    .info-text { color: $SUCCESS; font-size: 0.8rem; margin-top: 4px; i { margin-right: 4px; } }
+}
+
+// ESTILOS DEL SWITCH (TOGGLE)
+.toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 46px;
+        height: 24px;
+        
+        input { opacity: 0; width: 0; height: 0; }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+            
+            &:before {
+                position: absolute;
+                content: "";
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+        }
+        
+        input:checked + .slider { background-color: $PRIMARY-PURPLE; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        input:disabled + .slider { background-color: #eee; cursor: not-allowed; }
+    }
+    
+    .switch-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: $GRAY;
+        &.active { color: $PRIMARY-PURPLE; }
+    }
+}
+
+// STATUS PILL
+.status-pill {
+    margin-top: 5px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    
+    &.live { color: $SUCCESS; }
+    &.history { color: $PRIMARY-PURPLE; }
+    &.warning { color: $WARNING; }
+}
+
+// 2. VARIABLES PANEL
+.variables-panel {
+    margin-bottom: 30px;
+    
+    .panel-header {
+        margin-bottom: 15px;
+        h4 { font-size: 1.1rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .subtitle { font-size: 0.85rem; color: $GRAY; }
+        i { color: $PRIMARY-PURPLE; }
+    }
+    
+    .variables-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 15px;
+    }
+    
+    .selectable-card {
+        background-color: $WHITE;
+        border: 1px solid $LIGHT-BORDER;
+        border-radius: 12px;
+        padding: 12px 15px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+        
+        &:hover { transform: translateY(-2px); border-color: $PRIMARY-PURPLE; }
+        
+        &.selected {
+            background-color: rgba($PRIMARY-PURPLE, 0.08);
+            border-color: $PRIMARY-PURPLE;
+            
+            .card-icon i { color: $PRIMARY-PURPLE; }
+            .check-indicator { opacity: 1; transform: scale(1); }
+        }
+        
+        .card-icon {
+            width: 32px; height: 32px;
+            background-color: rgba($GRAY, 0.1);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            i { font-size: 1.1rem; color: $GRAY; transition: color 0.2s; }
+        }
+        
+        .card-info {
+            display: flex; flex-direction: column;
+            // 🚨 TEXTO MORADO
+            .var-name { font-weight: 600; font-size: 0.9rem; color: $PRIMARY-PURPLE; }
+            .var-unit { font-size: 0.75rem; color: $GRAY; }
+        }
+        
+        .check-indicator {
+            position: absolute; top: 8px; right: 8px;
+            color: $PRIMARY-PURPLE;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.2s;
+        }
     }
 }
 
 .charts-grid-realtime {
     display: grid;
-    /* 2 gráficos por fila */
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 30px;
 }
 
-/* ----------------------------------------
-   TEMAS
-   ---------------------------------------- */
-
-/* TEMA CLARO */
-.theme-light {
-    background-color: $WHITE-SOFT; /* Fondo de la página */
-    .selector-container {
-        background-color: $SUBTLE-BG-LIGHT;
-        color: $DARK-TEXT;
-    }
-    .form-control {
-        background-color: $SUBTLE-BG-LIGHT;
-        color: $DARK-TEXT;
-        border: 1px solid #ccc;
-    }
+// ALERTAS
+.alert-box {
+    padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    
+    &.empty { background-color: rgba($GRAY, 0.1); color: #555; }
+    &.error { background-color: rgba($DANGER, 0.1); color: $DANGER; }
 }
+.alert-info { background-color: rgba($GRAY, 0.1); color: $DARK-TEXT; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
 
-/* TEMA OSCURO */
+// TEMAS
 .theme-dark {
-    /* 🚨 CRÍTICO: Aplicar el fondo principal a toda el área de contenido */
     background-color: $DARK-BG-CONTRAST; 
     color: $LIGHT-TEXT;
 
-    .plataforma-contenido {
-        /* Asegura que el contenido también use el fondo principal */
-        background-color: $DARK-BG-CONTRAST;
+    .control-panel {
+        background-color: $SUBTLE-BG-DARK;
+        border-color: rgba($WHITE, 0.05);
     }
-    :global(.user-profile-card) { 
-        background-color: $SUBTLE-BG-DARK !important;
-        color: $LIGHT-TEXT !important;
-        box-shadow: none;
-    }
-    .selector-container {
-        background-color: $SUBTLE-BG-DARK; 
-        color: $LIGHT-TEXT;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-
-        .form-group label {
-            color: $LIGHT-TEXT; 
-        }
+    
+    .form-group label { color: $LIGHT-TEXT; }
+    
+    .form-control {
+        background-color: $DARK-INPUT-BG !important;
+        border-color: $DARK-BORDER !important;
+        color: $WHITE !important;
         
-        .form-control {
-            background-color: $BLUE-MIDNIGHT; 
-            color: $LIGHT-TEXT;
-            border: 1px solid rgba($LIGHT-TEXT, 0.2); 
-            /* Reajustar la flecha para el modo oscuro */
-            background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23{$LIGHT-TEXT}%22%20d%3D%22M6%209L0%203h12z%22%2F%3E%3C%2Fsvg%3E');
-        }
-        .loading-message, .no-data-message {
-            color: $GRAY-COLD;
-        }
+        &:focus { border-color: $PRIMARY-PURPLE !important; }
+        &:disabled { background-color: rgba(0,0,0,0.2) !important; }
     }
+    
+    .section-title { color: $WHITE; }
+    
+    .selectable-card {
+        background-color: $SUBTLE-BG-DARK;
+        border-color: $DARK-BORDER;
+        
+        .var-name { color: $PRIMARY-PURPLE; } 
+        .card-icon { background-color: rgba($WHITE, 0.05); }
+        
+        &:hover { border-color: $PRIMARY-PURPLE; background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); }
+        &.selected { background-color: rgba($PRIMARY-PURPLE, 0.15); }
+    }
+    
+    .alert-box.empty { background-color: rgba($WHITE, 0.05); color: $LIGHT-TEXT; }
+    .alert-info { background-color: rgba($WHITE, 0.05); color: $LIGHT-TEXT; }
 }
-/* ... (Importa tus estilos de tema .theme-dark y .theme-light) ... */
+
+.theme-light {
+    background-color: $WHITE-SOFT;
+    .control-panel { border-color: $LIGHT-BORDER; }
+    // En light mode también aseguramos el morado
+    .selectable-card { .var-name { color: $PRIMARY-PURPLE; } } 
+}
 </style>

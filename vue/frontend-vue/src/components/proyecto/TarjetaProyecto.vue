@@ -189,7 +189,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-
+@use "sass:color";
 // ----------------------------------------
 // TARJETA BASE (Ajustado para más espacio inferior)
 // ----------------------------------------
@@ -444,6 +444,6 @@ export default {
         .count { color: $LIGHT-TEXT; }
     }
     
-    &:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5); background-color: lighten($SUBTLE-BG-DARK, 2%); }
+    &:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5); background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%);}
 }
 </style>

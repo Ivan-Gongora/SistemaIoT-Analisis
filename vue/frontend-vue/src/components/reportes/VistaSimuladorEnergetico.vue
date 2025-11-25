@@ -97,10 +97,14 @@
               <h3 class="panel-titulo">
                   Proyección de Costos: Escenario Base vs. Simulado
                   
-                  <i class="bi bi-info-circle-fill info-icon"
-                     data-bs-toggle="popover"
-                     data-bs-trigger="hover focus" data-bs-html="true" data-bs-placement="top" data-bs-title="Análisis de Proyección" data-bs-content="&lt;p&gt;Esta gráfica ilustra la evolución mensual de tus costos energéticos.&lt;/p&gt;&lt;p&gt;La línea &lt;strong&gt;&quot;Costo Base (Sin cambios)&quot;&lt;/strong&gt; (generalmente punteada) muestra lo que pagarías si no aplicaras ninguna estrategia de optimización o ajuste a los parámetros.&lt;/p&gt;&lt;p&gt;La línea &lt;strong&gt;&quot;Costo Simulado&quot;&lt;/strong&gt; (generalmente sólida) te presenta tus costos esperados al aplicar los parámetros de simulación (inflación, crecimiento de consumo, reducción por eficiencia) que has configurado.&lt;/p&gt;&lt;p&gt;Observa la diferencia entre ambas líneas: un espacio por debajo de la línea base indica ahorro, mientras que un espacio por encima muestra un gasto adicional proyectado.&lt;/p&gt;">
-                  </i>
+                    <i class="bi bi-info-circle-fill info-icon"
+                      data-bs-toggle="popover"
+                      data-bs-trigger="hover focus"
+                      data-bs-html="true"
+                      data-bs-placement="top"
+                      :data-bs-title="popoverTitle"
+                      :data-bs-content="popoverContent">
+                    </i>
               </h3>
               
               <GraficoSimulacionECharts
@@ -167,6 +171,13 @@ export default {
       errorApi: null,
       
       _themeMediaQuery: null,
+       popoverTitle: "Análisis de Proyección",
+      popoverContent: `
+        <p>Esta gráfica ilustra la evolución mensual de tus costos energéticos.</p>
+        <p>La línea <strong>"Costo Base (Sin cambios)"</strong> (generalmente punteada) muestra lo que pagarías si no aplicaras ninguna estrategia de optimización o ajuste a los parámetros.</p>
+        <p>La línea <strong>"Costo Simulado"</strong> (generalmente sólida) te presenta tus costos esperados al aplicar los parámetros de simulación (inflación, crecimiento de consumo, reducción por eficiencia).</p>
+        <p>Observa la diferencia entre ambas líneas: un espacio por debajo de la línea base indica ahorro, mientras que un espacio por encima muestra un gasto adicional proyectado.</p>
+      `
     };
   },
   mounted() {

@@ -147,7 +147,7 @@ export default {
 
 <style scoped lang="scss">
 
-
+@use "sass:color";
 // ----------------------------------------
 // BASE DE LA TARJETA
 // ----------------------------------------
