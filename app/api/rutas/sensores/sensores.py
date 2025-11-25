@@ -9,7 +9,7 @@ import pymysql
 #  Modelos y Utilidades
 from app.servicios.auth_utils import get_current_user_id # Solo autenticación
 from app.servicios.servicio_simulacion import get_db_connection
-from app.api.modelos.sensores import SensorCrear,Sensor, SensorActualizar, SensorGeneral
+from app.api.modelos.sensores import SensorCrear,Sensor, SensorActualizar, SensorGeneral,RespuestaPaginadaSensores
 from app.servicios.servicio_permisos import verificar_permiso_proyecto,obtener_proyecto_id_desde_dispositivo, obtener_proyecto_id_desde_sensor
 
 from app.servicios.servicio_actividad import registrar_actividad_db
@@ -26,14 +26,14 @@ async def get_sensores_por_dispositivo(
     search: str = Query("", description="Búsqueda por nombre o tipo"),
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 SEGURIDAD: Verificar permiso sobre el proyecto
+   
     proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
 
     try:
         # Llamada a la nueva función paginada
         return await obtener_sensores_por_dispositivo_paginado_db(
-            dispositivo_id, page, limit, search
+            dispositivo_id, current_user_id,page, limit, search
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")
@@ -42,7 +42,7 @@ async def get_sensores_por_dispositivo(
 # -----------------------------------------------------------
 # 2. OBTENER TODOS LOS SENSORES (GLOBAL - PAGINADO)
 # -----------------------------------------------------------
-@router_sensor.get("/sensores/todos")
+@router_sensor.get("/sensores/todos",response_model=RespuestaPaginadaSensores)
 async def get_all_sensores_general(
     page: int = Query(1, ge=1, description="Número de página"),
     limit: int = Query(10, ge=1, le=100, description="Registros por página"),
@@ -66,7 +66,7 @@ async def get_sensor_por_id(
     id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 SEGURIDAD: Verificar permiso sobre el proyecto del sensor
+   
     proyecto_id = await obtener_proyecto_id_desde_sensor(id)
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
 
@@ -434,6 +434,7 @@ async def obtener_sensor_por_id_db(sensor_id: int) -> Dict[str, Any] | None:
 
 async def obtener_sensores_por_dispositivo_paginado_db(
     dispositivo_id: int, 
+    usuario_id: int,
     page: int = 1, 
     limit: int = 10, 
     search: str = ""
@@ -448,26 +449,51 @@ async def obtener_sensores_por_dispositivo_paginado_db(
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 1. Consulta Base
-        sql_base = """
-        FROM sensores 
-        WHERE dispositivo_id = %s 
-          AND (nombre LIKE %s OR tipo LIKE %s)
+        # 1. Obtener proyecto_id (necesario para verificar roles)
+        cursor.execute("SELECT proyecto_id FROM dispositivos WHERE id = %s", (dispositivo_id,))
+        proyecto_row = cursor.fetchone()
+        if not proyecto_row:
+             # Si no existe dispositivo, devolvemos vacío o error (tu decides)
+             return {"data": [], "total": 0, "page": 1, "limit": limit, "total_pages": 0}
+        proyecto_id = proyecto_row['proyecto_id']
+
+        # 2. Consulta de Datos con ROL calculado
+        sql_data = f"""
+            SELECT 
+                s.*,
+                (SELECT COUNT(*) FROM campos_sensores cs WHERE cs.sensor_id = s.id) as total_campos,
+                
+                -- Lógica de Rol
+                CASE 
+                    WHEN p.usuario_id = %s THEN 'Propietario'
+                    ELSE IFNULL(r.nombre_rol, 'Observador')
+                END as mi_rol
+
+            FROM sensores s
+            JOIN dispositivos d ON s.dispositivo_id = d.id
+            JOIN proyectos p ON d.proyecto_id = p.id
+            LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+            LEFT JOIN roles r ON pu.rol_id = r.id
+            
+            WHERE s.dispositivo_id = %s
+              AND (s.nombre LIKE %s OR s.tipo LIKE %s)
+            
+            ORDER BY s.id DESC 
+            LIMIT %s OFFSET %s
         """
-        params = [dispositivo_id, search_pattern, search_pattern]
         
-        # 2. Total
-        cursor.execute(f"SELECT COUNT(*) as total {sql_base}", params)
-        total_records = cursor.fetchone()['total']
+        # Params: [user_id, user_id, dispositivo_id, search, search, limit, offset]
+        params = [usuario_id, usuario_id, dispositivo_id, search_pattern, search_pattern, limit, offset]
         
-        # 3. Paginación
-        sql_final = f"SELECT * {sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-        
-        cursor.execute(sql_final, params)
+        cursor.execute(sql_data, params)
         sensores = cursor.fetchall()
         
-        # Formateo
+        # 3. Obtener Total (para paginación)
+        sql_count = "SELECT COUNT(*) as total FROM sensores WHERE dispositivo_id = %s AND (nombre LIKE %s OR tipo LIKE %s)"
+        cursor.execute(sql_count, [dispositivo_id, search_pattern, search_pattern])
+        total_records = cursor.fetchone()['total']
+        
+        # 4. Formateo
         for s in sensores:
             if 'habilitado' in s: s['habilitado'] = bool(s['habilitado'])
             if 'fecha_creacion' in s and isinstance(s['fecha_creacion'], datetime):
@@ -480,6 +506,7 @@ async def obtener_sensores_por_dispositivo_paginado_db(
             "limit": limit,
             "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
         }
+
     except Exception as e:
         print(f"Error DB sensores paginados: {e}")
         raise e
@@ -503,13 +530,16 @@ async def obtener_sensores_globales_paginado_db(
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # 1. Definir el WHERE común (Filtros de seguridad y búsqueda)
+        # El usuario debe ser el DUEÑO del proyecto (p.usuario_id) 
+        # O estar invitado en el proyecto (pu.usuario_id)
         where_clause = """
             WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
               AND (s.nombre LIKE %s OR s.tipo LIKE %s OR d.nombre LIKE %s)
         """
+        # Params para el WHERE: [user, user, search, search, search]
         params_base = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
 
-        # 2. Obtener Total (COUNT)
+        # 2. Obtener Total (COUNT) para la paginación
         sql_count = f"""
             SELECT COUNT(DISTINCT s.id) as total
             FROM sensores s
@@ -518,12 +548,11 @@ async def obtener_sensores_globales_paginado_db(
             LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
             {where_clause}
         """
-        # Nota: Añadimos current_user_id extra para el JOIN del count
+        # Necesitamos pasar current_user_id extra para el LEFT JOIN del count
         cursor.execute(sql_count, [current_user_id] + params_base)
         total_records = cursor.fetchone()['total']
         
         # 3. Obtener Datos Paginados (CON CAMPOS y ROL)
-        # 🚨 AQUÍ ESTÁ LA MAGIA: Agregamos 'total_campos' y 'mi_rol'
         sql_data = f"""
             SELECT DISTINCT 
                 s.*, 
@@ -531,38 +560,45 @@ async def obtener_sensores_globales_paginado_db(
                 p.nombre as nombre_proyecto, 
                 p.usuario_id as propietario_id,
                 
-                -- Subconsulta para contar campos
+          
                 (SELECT COUNT(*) FROM campos_sensores cs WHERE cs.sensor_id = s.id) as total_campos,
                 
-                -- Lógica para determinar el ROL en este proyecto
+           
                 CASE 
                     WHEN p.usuario_id = %s THEN 'Propietario'
-                    ELSE r.nombre_rol
+                    ELSE IFNULL(r.nombre_rol, 'Observador') -- Si es null, fallback a Observador
                 END as mi_rol
 
             FROM sensores s
             JOIN dispositivos d ON s.dispositivo_id = d.id
             JOIN proyectos p ON d.proyecto_id = p.id
+            
+            -- Unimos para ver si es invitado
             LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
             LEFT JOIN roles r ON pu.rol_id = r.id
+            
             {where_clause}
+            
             ORDER BY s.id DESC 
             LIMIT %s OFFSET %s
         """
         
-        # Params: [user_id (case), user_id (join)] + [user_id, user_id, search...] (where) + [limit, offset]
+        # Params: 
+        # 1. current_user_id (para el CASE del rol)
+        # 2. current_user_id (para el LEFT JOIN de proyecto_usuarios)
+        # 3. params_base (para el WHERE)
+        # 4. limit, offset (para paginación)
         params_data = [current_user_id, current_user_id] + params_base + [limit, offset]
         
         cursor.execute(sql_data, params_data)
         sensores = cursor.fetchall()
         
-        # 4. Formateo (Fechas y Booleanos)
+        # 4. Formateo de datos (Fechas y Booleanos)
         for s in sensores:
-            if 'habilitado' in s: s['habilitado'] = bool(s['habilitado'])
+            if 'habilitado' in s: 
+                s['habilitado'] = bool(s['habilitado'])
             if 'fecha_creacion' in s and isinstance(s['fecha_creacion'], datetime):
                 s['fecha_creacion'] = s['fecha_creacion'].strftime(DATE_FORMAT)
-            # Asegurar que mi_rol tenga un valor por defecto si falla algo
-            if not s.get('mi_rol'): s['mi_rol'] = 'Observador' 
                 
         return {
             "data": sensores,
@@ -798,3 +834,59 @@ async def obtener_sensores_globales_paginado_db(
 #         raise
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Error al obtener sensores: {str(e)}")
+
+
+
+# async def obtener_sensores_por_dispositivo_paginado_db(
+#     dispositivo_id: int, 
+#     page: int = 1, 
+#     limit: int = 10, 
+#     search: str = ""
+# ) -> Dict[str, Any]:
+    
+#     offset = (page - 1) * limit
+#     search_pattern = f"%{search}%"
+#     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 1. Consulta Base
+#         sql_base = """
+#         FROM sensores 
+#         WHERE dispositivo_id = %s 
+#           AND (nombre LIKE %s OR tipo LIKE %s)
+#         """
+#         params = [dispositivo_id, search_pattern, search_pattern]
+        
+#         # 2. Total
+#         cursor.execute(f"SELECT COUNT(*) as total {sql_base}", params)
+#         total_records = cursor.fetchone()['total']
+        
+#         # 3. Paginación
+#         sql_final = f"SELECT * {sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
+#         params.extend([limit, offset])
+        
+#         cursor.execute(sql_final, params)
+#         sensores = cursor.fetchall()
+        
+#         # Formateo
+#         for s in sensores:
+#             if 'habilitado' in s: s['habilitado'] = bool(s['habilitado'])
+#             if 'fecha_creacion' in s and isinstance(s['fecha_creacion'], datetime):
+#                 s['fecha_creacion'] = s['fecha_creacion'].strftime(DATE_FORMAT)
+                
+#         return {
+#             "data": sensores,
+#             "total": total_records,
+#             "page": page,
+#             "limit": limit,
+#             "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+#         }
+#     except Exception as e:
+#         print(f"Error DB sensores paginados: {e}")
+#         raise e
+#     finally:
+#         if conn: conn.close()

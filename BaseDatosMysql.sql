@@ -91,6 +91,15 @@ CREATE TABLE valores (
   FOREIGN KEY (campo_id) REFERENCES campos_sensores(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE ultimo_valor_campo (
+    campo_id INT PRIMARY KEY,
+    ultimo_valor DECIMAL(15,6) NOT NULL,
+    fecha DATETIME NOT NULL,
+    FOREIGN KEY (campo_id) REFERENCES campos_sensores(id) ON DELETE CASCADE
+);
+
+
+
 -- -----------------------------------------------------------
 -- TRIGGER: set_fecha_registro_valores
 -- -----------------------------------------------------------
@@ -104,6 +113,22 @@ BEGIN
         SET NEW.fecha_hora_registro = NOW();
     END IF;
 END$$
+DELIMITER ;
+
+DELIMITER $$
+DROP TRIGGER IF EXISTS tg_valores_after_insert$$
+
+CREATE TRIGGER tg_valores_after_insert
+AFTER INSERT ON valores
+FOR EACH ROW
+BEGIN
+    INSERT INTO ultimo_valor_campo (campo_id, ultimo_valor, fecha)
+    VALUES (NEW.campo_id, NEW.valor, NEW.fecha_hora_lectura)
+    ON DUPLICATE KEY UPDATE 
+        ultimo_valor = NEW.valor,
+        fecha = NEW.fecha_hora_lectura;
+END$$
+
 DELIMITER ;
 
 -- -----------------------------------------------------------

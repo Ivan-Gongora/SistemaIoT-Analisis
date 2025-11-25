@@ -27,12 +27,14 @@
         </div>
 
         <div class="footer-actions">
+            <template v-if="sensor.mi_rol === 'Propietario' || sensor.mi_rol === 'Colaborador'">
             <button @click.stop="openEditModal(sensor)" class="btn-action btn-edit" title="Modificar Sensor">
                 <i class="bi bi-pencil"></i>
             </button>
             <button @click.stop="confirmarEliminacion(sensor.id, sensor.nombre)" class="btn-action btn-delete" title="Eliminar Sensor">
                 <i class="bi bi-trash"></i>
             </button>
+            </template>
         </div>
     </div>
     
@@ -73,12 +75,10 @@ export default {
         // viewFields(sensorId) {
         //      this.$router.push(`/detalle-sensor/${sensorId}`);
         // },
-        // 🚨 CRÍTICO: El botón de Modificar debe EMITIR el evento
         openEditModal(sensor) {
             this.$emit('edit-sensor', sensor); // Emite el evento que el padre escucha
         },
         
-        // 🚨 CRÍTICO: El botón de Eliminar debe EMITIR el evento
         confirmarEliminacion(id, nombre) {
             this.$emit('delete-sensor', id, nombre); // Emite el evento que el padre escucha
         },

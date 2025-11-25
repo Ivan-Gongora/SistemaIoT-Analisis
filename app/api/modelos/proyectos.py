@@ -28,8 +28,8 @@ class ProyectoConRol(BaseModel):
     descripcion: Optional[str] = None
     tipo_industria: str
     usuario_id: int # ID del dueño original
-    mi_rol: str     # 👈 EL CAMPO NUEVO (Ej: "Propietario", "Observador")
-
+    mi_rol: str     # EL CAMPO NUEVO (Ej: "Propietario", "Observador")
+    # mis_permisos: List[str] = [] #  AÑADIR ESTO
     class Config:
         from_attributes = True
 # Modelo con ID, para respuestas

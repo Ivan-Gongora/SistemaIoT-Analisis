@@ -25,20 +25,26 @@
         
         <div class="campos-header">
             <h3>Campos Registrados ({{ campos.length }})</h3>
-            <button @click="openCreateCampoModal" class="btn-primary-action">
+           <button 
+                v-if="puedeEditar" 
+                @click="openCreateCampoModal" 
+                class="btn-primary-action"
+            >
                 <i class="bi bi-plus-circle-fill"></i> Crear Campo
             </button>
         </div>
         
        <div class="campos-grid">
-    <TarjetaCampoSensor
-        v-for="campo in campos" 
-        :key="campo.id"
-        :campo="campo"
-        :is-dark="isDark"
-        @edit-campo="openEditCampoModal"
-        @delete-campo="confirmarEliminacionCampo"
-    />
+<TarjetaCampoSensor
+    v-for="campo in campos"
+    :key="campo.id"
+    :campo="campo"
+    :is-dark="isDark"
+    :rol="rolUsuario"  
+    :editable="puedeEditar"
+    @edit-campo="openEditCampoModal"
+    @delete-campo="confirmarEliminacionCampo"
+/>
 </div>
         
         <div v-if="campos.length === 0" class="alert-empty-data">
@@ -79,93 +85,126 @@
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 
-// 🚨 COMPONENTES HIJOS (Aún no los creamos, pero los importaremos)
-import ModalCampoSensor from './ModalCampoSensor.vue'; 
-// 🚨 CORRECCIÓN CRÍTICA: Importar el componente de la tarjeta de CAMPO
+import ModalCampoSensor from './ModalCampoSensor.vue';
 import TarjetaCampoSensor from './TarjetaCampoSensor.vue';
 import ModalEliminarBase from './ModalEliminarBase.vue';
-// const API_BASE_URL = 'http://127.0.0.1:8001';
+
 
 export default {
     name: 'DetalleSensor',
     components: {
         BarraLateralPlataforma,
         EncabezadoPlataforma,
-        TarjetaCampoSensor, // 🚨 REGISTRAR EL COMPONENTE CORRECTO
+        TarjetaCampoSensor,
         ModalCampoSensor,
         ModalEliminarBase,
     },
+
     data() {
         return {
-            isDark: false, 
-            isSidebarOpen: true, 
-            loading: true, 
+            isDark: false,
+            isSidebarOpen: true,
+            loading: true,
             error: null,
-            dispositivoIdPadre: null, // Para el botón "Volver"
-            sensor: {}, // Datos del sensor actual (para el encabezado)
-            campos: [], // Lista de campos de medición
-            
-            // Estados de Modales (los conectaremos después)
+
+            dispositivoIdPadre: null,
+            sensor: {},
+            campos: [],
+
             mostrarModalCrearCampo: false,
             mostrarModalEditarCampo: false,
             campoSeleccionado: null,
+
             mostrarModalEliminarCampo: false,
             campoEliminarId: null,
             campoEliminarNombre: null,
 
-            pollingInterval: null, // 🚨 NUEVO: Variable para guardar el temporizador
+            rolUsuario: null,   // <-- Aquí guardaremos el rol REAL
+                    rol: null,   // 🔥 ahora sí existe para pasar al hijo
+
+            pollingInterval: null
         };
     },
+
     computed: {
-        sensorId() { 
-            // Obtiene el ID del sensor desde la URL (router params)
-            return this.$route.params.id; 
+        sensorId() {
+            return this.$route.params.id;
+        },
+
+        // Ahora sí funciona con los valores reales del backend
+        puedeEditar() {
+            return (
+                this.rolUsuario === 'PROPIETARIO' ||
+                this.rolUsuario === 'COLABORADOR'|| this.rolUsuario === 'Colaborador' || this.rolUsuario === 'Propietario'
+            );
         }
     },
+
     mounted() {
         this.cargarDetalles();
         this.detectarTemaSistema();
+
         if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.handleThemeChange);
+            window.matchMedia('(prefers-color-scheme: dark)')
+                .addEventListener('change', this.handleThemeChange);
         }
-        // 🚨 CRÍTICO: Iniciar el polling (recarga automática)
+
         this.pollingInterval = setInterval(() => {
-            // Solo recarga los campos, no toda la página
-            this.cargarCampos(); 
-        }, 10000); // Recarga cada 10 segundos
+            this.cargarCampos();
+        }, 10000);
     },
-    beforeUnmount() { 
+
+    beforeUnmount() {
         if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.handleThemeChange);
+            window.matchMedia('(prefers-color-scheme: dark)')
+                .removeEventListener('change', this.handleThemeChange);
         }
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-        }
+        if (this.pollingInterval) clearInterval(this.pollingInterval);
     },
+
     methods: {
-        // -----------------------------------------------------
-        // CONSUMO DE API: Cargar Detalles y Campos
-        // -----------------------------------------------------
         async cargarDetalles() {
-            this.loading = true; this.error = null;
+            this.loading = true;
+            this.error = null;
+
             const token = localStorage.getItem('accessToken');
-            if (!token || !this.sensorId) { this.$router.push('/'); return; }
+            if (!token || !this.sensorId) {
+                this.$router.push('/');
+                return;
+            }
 
             try {
-                // 1. Obtener detalles del sensor
-                const sensorResponse = await fetch(`${API_BASE_URL}/api/sensores/${this.sensorId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!sensorResponse.ok) { throw new Error('Sensor no encontrado.'); }
+                const sensorResponse = await fetch(
+                    `${API_BASE_URL}/api/sensores/${this.sensorId}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+
+                if (!sensorResponse.ok) throw new Error('Sensor no encontrado.');
                 this.sensor = await sensorResponse.json();
-                
-                this.dispositivoIdPadre = this.sensor.dispositivo_id; 
-                
-                // 2. Obtener lista de campos de medición
-                const camposResponse = await fetch(`${API_BASE_URL}/api/sensores/${this.sensorId}/campos`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (camposResponse.status === 404) { this.campos = []; } 
-                else if (!camposResponse.ok) { throw new Error('Fallo al obtener campos.'); }
-                else {
-                    this.campos = await camposResponse.json();
-                }
+                this.dispositivoIdPadre = this.sensor.dispositivo_id;
+
+                const camposResponse = await fetch(
+                    `${API_BASE_URL}/api/sensores/${this.sensorId}/campos`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+
+                if (!camposResponse.ok) throw new Error('Fallo al obtener campos.');
+
+                const responseJSON = await camposResponse.json();
+                const camposRaw = responseJSON.campos || [];
+
+                this.campos = camposRaw.map(c => ({
+                    id: c.id,
+                    nombre: c.nombre,
+                    tipo_valor: c.tipo_valor,
+                    simbolo_unidad: c.simbolo_unidad || "",
+                    magnitud_tipo: c.magnitud_tipo || "",
+                    ultimo_valor: c.ultimo_valor ?? "N/A",
+                    fecha_ultimo_valor: c.fecha_ultimo_valor || null
+                }));
+
+                // 🔥 CORREGIDO: antes guardabas this.rol
+                this.rolUsuario = responseJSON.rol;
 
             } catch (err) {
                 this.error = err.message || 'Error al cargar los detalles.';
@@ -173,84 +212,102 @@ export default {
                 this.loading = false;
             }
         },
-        // 🚨 NUEVA FUNCIÓN: Carga solo los campos (para el polling)
+
         async cargarCampos() {
-            const token = localStorage.getItem('accessToken');
-            if (!token || !this.sensorId) return;
+                    const token = localStorage.getItem('accessToken');
+                    if (!token || !this.sensorId) return;
 
-            try {
-                const camposResponse = await fetch(`${API_BASE_URL}/api/sensores/${this.sensorId}/campos`, { 
-                    headers: { 'Authorization': `Bearer ${token}` } 
-                });
-                
-                if (camposResponse.status === 404) { this.campos = []; } 
-                else if (!camposResponse.ok) { throw new Error('Fallo al refrescar campos.'); }
-                else {
-                    // 🚨 Sobrescribe la data de campos con los valores más recientes
-                    this.campos = await camposResponse.json(); 
-                }
-            } catch (err) {
-                // No mostramos error en el polling para no molestar al usuario
-                console.error("Error en polling de campos:", err.message);
-            }
-        },
+                    try {
+                        const camposResponse = await fetch(
+                            `${API_BASE_URL}/api/sensores/${this.sensorId}/campos`,
+                            { headers: { Authorization: `Bearer ${token}` } }
+                        );
+
+                        if (!camposResponse.ok) return;
+
+                        const responseJSON = await camposResponse.json();
+
+                        // 🔥 Guardamos el rol del backend
+                        this.rol = responseJSON.rol;
+
+                        const camposRaw = responseJSON.campos || [];
+
+                        this.campos = camposRaw.map(c => ({
+                            id: c.id,
+                            nombre: c.nombre,
+                            tipo_valor: c.tipo_valor,
+                            simbolo_unidad: c.simbolo_unidad || "",
+                            magnitud_tipo: c.magnitud_tipo || "",
+                            ultimo_valor: c.ultimo_valor ?? "N/A",
+                            fecha_ultimo_valor: c.fecha_ultimo_valor || null
+                        }));
+
+                    } catch (err) {
+                        console.warn("Error en polling:", err.message);
+                    }
+                },
 
 
-        // -----------------------------------------------------
-        // LÓGICA DE GESTIÓN (MODALES Y NAVEGACIÓN)
-        // -----------------------------------------------------
-        goBack() { 
+        // ---------------------- OTROS MÉTODOS ----------------------
+
+        goBack() {
             if (this.dispositivoIdPadre) {
-                 this.$router.push(`/detalle-dispositivo/${this.dispositivoIdPadre}`);
+                this.$router.push(`/detalle-dispositivo/${this.dispositivoIdPadre}`);
             } else {
-                 this.$router.back(); // Opción de fallback
+                this.$router.back();
             }
         },
-        toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
-        
 
-       // --- CREACIÓN --- 🚨 (Lógica que faltaba)
-        openCreateCampoModal() { this.mostrarModalCrearCampo = true; },
-        closeCreateCampoModal() { this.mostrarModalCrearCampo = false; },
-        
-        // --- EDICIÓN --- 🚨 (Lógica que faltaba)
-        openEditCampoModal(campo) { 
+        toggleSidebar() {
+            this.isSidebarOpen = !this.isSidebarOpen;
+        },
+
+        openCreateCampoModal() {
+            this.mostrarModalCrearCampo = true;
+        },
+
+        closeCreateCampoModal() {
+            this.mostrarModalCrearCampo = false;
+        },
+
+        openEditCampoModal(campo) {
             this.campoSeleccionado = campo;
             this.mostrarModalEditarCampo = true;
         },
+
         closeEditCampoModal() {
             this.mostrarModalEditarCampo = false;
             this.campoSeleccionado = null;
         },
 
-        // --- ELIMINACIÓN --- 🚨 (Lógica que faltaba)
-        confirmarEliminacionCampo(id, nombre) { 
+        confirmarEliminacionCampo(id, nombre) {
             this.campoEliminarId = id;
             this.campoEliminarNombre = nombre;
             this.mostrarModalEliminarCampo = true;
         },
+
         cancelarEliminacionCampo() {
             this.mostrarModalEliminarCampo = false;
             this.campoEliminarId = null;
             this.campoEliminarNombre = null;
         },
+
         async ejecutarEliminacionCampo() {
             this.loading = true;
             const token = localStorage.getItem('accessToken');
-            
+
             try {
-                // 🚨 LLAMADA A LA API DELETE (Backend ya listo)
-                const response = await fetch(`${API_BASE_URL}/api/campos_sensores/${this.campoEliminarId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
+                const response = await fetch(
+                    `${API_BASE_URL}/api/campos_sensores/${this.campoEliminarId}`,
+                    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+                );
 
                 const data = await response.json();
-                if (!response.ok) { throw new Error(data.detail || data.message || 'Fallo al eliminar el campo.'); }
-                
+                if (!response.ok) throw new Error(data.detail || 'Fallo al eliminar.');
+
                 alert('Campo eliminado exitosamente.');
                 this.cancelarEliminacionCampo();
-                this.cargarDetalles(); // Recargar la lista
+                this.cargarDetalles();
 
             } catch (err) {
                 alert('Error al eliminar: ' + err.message);
@@ -260,26 +317,24 @@ export default {
             }
         },
 
-        // --- MANEJADOR DE EVENTO (Recarga) ---
         handleCampoGuardado() {
             this.closeCreateCampoModal();
             this.closeEditCampoModal();
-            this.cargarDetalles(); // Recargar la lista de campos
+            this.cargarDetalles();
         },
-        // -----------------------------------------------------
-        // LÓGICA DE LAYOUT (TEMA)
-        // -----------------------------------------------------
-        handleThemeChange(event) { this.isDark = event.matches; },
+
+        handleThemeChange(event) {
+            this.isDark = event.matches;
+        },
+
         detectarTemaSistema() {
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                this.isDark = true;
-            } else {
-                this.isDark = false;
-            }
+            this.isDark = window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches;
         }
     }
 };
 </script>
+
 
 <style scoped lang="scss">
 // ----------------------------------------

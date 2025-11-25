@@ -39,3 +39,24 @@ class SensorGeneral(Sensor):
     
     class Config:
         from_attributes = True
+        
+
+# Este incluye los campos extra que trae tu consulta SQL avanzada
+class SensorVistaGeneral(Sensor):
+    nombre_dispositivo: str
+    nombre_proyecto: str
+    propietario_id: int
+    
+    # 🚨 LOS CAMPOS QUE FALTABAN:
+    total_campos: int = 0
+    mi_rol: str = "Observador" 
+
+    class Config:
+        from_attributes = True
+        
+class RespuestaPaginadaSensores(BaseModel):
+    data: List[SensorVistaGeneral] # 👈 Usa el modelo enriquecido
+    total: int
+    page: int
+    limit: int
+    total_pages: int

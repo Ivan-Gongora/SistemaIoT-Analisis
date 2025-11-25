@@ -7,87 +7,102 @@
     </div>
 
     <div class="valor-principal">
-      {{ campo.ultimo_valor || 'N/A' }}
+      {{ campo.ultimo_valor ?? 'N/A' }}
       <span class="simbolo">{{ campo.simbolo_unidad }}</span>
     </div>
 
     <div class="card-footer">
       <span class="tipo-dato-badge">Tipo: {{ campo.tipo_valor }}</span>
-      
-      <div class="acciones">
+
+      <!-- Permiso según rol -->
+      <div class="acciones" v-if="usuarioPuedeEditar">
         <button @click.stop="$emit('edit-campo', campo)" class="btn-action" title="Modificar">
           <i class="bi bi-pencil"></i>
         </button>
+
         <button @click.stop="$emit('delete-campo', campo.id, campo.nombre)" class="btn-action btn-delete" title="Eliminar">
           <i class="bi bi-trash"></i>
         </button>
       </div>
+
     </div>
+
   </div>
 </template>
 
 <script>
 export default {
-    name: 'TarjetaCampoSensor',
-    props: {
-        campo: {
-            type: Object,
-            required: true,
-            // Proporciona un default seguro
-            default: () => ({ 
-                id: null, 
-                nombre: 'Cargando...', 
-                tipo_valor: 'N/A', 
-                ultimo_valor: 'N/A', 
-                simbolo_unidad: '',
-                magnitud_tipo: '' 
-            })
-        },
-        isDark: {
-            type: Boolean,
-            required: true
-        }
+  name: 'TarjetaCampoSensor',
+
+  props: {
+    campo: {
+      type: Object,
+      required: true,
+      default: () => ({
+        id: null,
+        nombre: 'Cargando...',
+        tipo_valor: 'N/A',
+        ultimo_valor: 'N/A',
+        simbolo_unidad: '',
+        magnitud_tipo: ''
+      })
     },
-    emits: ['edit-campo', 'delete-campo'],
-    methods: {
-        getIcon(magnitud) {
-            // Mapeo de iconos basado en la magnitud (de la tabla unidades_medida)
-            if (!magnitud) return 'bi bi-question-lg';
-            const lowerMag = magnitud.toLowerCase();
-                    
-                    // --- MAGNITUDES FÍSICAS COMUNES (YA EXISTENTES) ---
-            if (lowerMag.includes('temperatura')) return 'bi bi-thermometer-half';
-            if (lowerMag.includes('humedad')) return 'bi bi-droplet-half';
-            if (lowerMag.includes('electricidad')) return 'bi bi-lightning-charge-fill'; // Tensión/Corriente
-            
-            // --- NUEVAS MAGNITUDES AÑADIDAS ---
-            if (lowerMag.includes('energía')) return 'bi bi-battery-charging'; // Energía (Batería/Consumo)
-            if (lowerMag.includes('potencia')) return 'bi bi-lightning';       // Potencia (W)
-            if (lowerMag.includes('iluminación') || lowerMag.includes('luz')) return 'bi bi-sun'; // Luminosidad
-            if (lowerMag.includes('presión')) return 'bi bi-gauge';            // Presión (Bar, Pa)
-            if (lowerMag.includes('distancia') || lowerMag.includes('longitud')) return 'bi bi-rulers'; // Distancia/Nivel
-            if (lowerMag.includes('masa') || lowerMag.includes('peso')) return 'bi bi-box-seam'; // Masa (Peso)
-            if (lowerMag.includes('volumen')) return 'bi bi-box';              // Volumen (Litros, m³)
-            if (lowerMag.includes('flujo')) return 'bi bi-arrow-repeat';       // Flujo/Caudal
-            if (lowerMag.includes('frecuencia')) return 'bi bi-activity';      // Frecuencia (Hz)
-            if (lowerMag.includes('ángulo')) return 'bi bi-arrow-counterclockwise'; // Ángulo (Grados)
-            
-            // --- MAGNITUDES DE ESTADO Y TIEMPO ---
-            if (lowerMag.includes('estado')) return 'bi bi-toggle-on';         // Estado (Binario, ON/OFF)
-            if (lowerMag.includes('tiempo') || lowerMag.includes('segundo')) return 'bi bi-clock'; // Tiempo
-            
-            // --- MAGNITUDES DE CONCENTRACIÓN Y MEDIOAMBIENTALES ---
-            if (lowerMag.includes('concentración') || lowerMag.includes('ppm')) return 'bi bi-flask'; // Concentración (PPM)
-            if (lowerMag.includes('sonido') || lowerMag.includes('ruido')) return 'bi bi-volume-up';  // Sonido (dB)
-            
-            // --- MAGNITUDES DE CONTEO Y GENÉRICAS ---
-            if (lowerMag.includes('conteo')) return 'bi bi-hash';              // Conteo (Clicks, unidades)
-            
-            // Icono genérico (para cualquier cosa que no coincida)
-            return 'bi bi-speedometer2';
-        }
+
+    // TEMA
+    isDark: {
+      type: Boolean,
+      required: true
+    },
+
+    // 🔥 NUEVO: EL ROL DEL USUARIO (PROPIETARIO / COLABORADOR / INVITADO)
+    rol: {
+      type: String,
+      required: true,
+      default: "INVITADO"
     }
-}
+  },
+
+  emits: ['edit-campo', 'delete-campo'],
+
+  computed: {
+    usuarioPuedeEditar() {
+      // 🔥 Los roles ahora vienen en MAYÚSCULAS desde el backend
+      return this.rol === "PROPIETARIO" || this.rol === "COLABORADOR" || this.rol === 'Colaborador' || this.rol === 'Propietario';
+    }
+  },
+
+  methods: {
+    getIcon(magnitud) {
+      if (!magnitud) return 'bi bi-question-lg';
+      const lowerMag = magnitud.toLowerCase();
+
+      if (lowerMag.includes('temperatura')) return 'bi bi-thermometer-half';
+      if (lowerMag.includes('humedad')) return 'bi bi-droplet-half';
+      if (lowerMag.includes('electricidad')) return 'bi bi-lightning-charge-fill';
+
+      if (lowerMag.includes('energía')) return 'bi bi-battery-charging';
+      if (lowerMag.includes('potencia')) return 'bi bi-lightning';
+      if (lowerMag.includes('iluminación') || lowerMag.includes('luz')) return 'bi bi-sun';
+      if (lowerMag.includes('presión')) return 'bi bi-gauge';
+      if (lowerMag.includes('distancia') || lowerMag.includes('longitud')) return 'bi bi-rulers';
+      if (lowerMag.includes('masa') || lowerMag.includes('peso')) return 'bi bi-box-seam';
+      if (lowerMag.includes('volumen')) return 'bi bi-box';
+      if (lowerMag.includes('flujo')) return 'bi bi-arrow-repeat';
+      if (lowerMag.includes('frecuencia')) return 'bi bi-activity';
+      if (lowerMag.includes('ángulo')) return 'bi bi-arrow-counterclockwise';
+
+      if (lowerMag.includes('estado')) return 'bi bi-toggle-on';
+      if (lowerMag.includes('tiempo') || lowerMag.includes('segundo')) return 'bi bi-clock';
+
+      if (lowerMag.includes('concentración') || lowerMag.includes('ppm')) return 'bi bi-flask';
+      if (lowerMag.includes('sonido') || lowerMag.includes('ruido')) return 'bi bi-volume-up';
+
+      if (lowerMag.includes('conteo')) return 'bi bi-hash';
+
+      return 'bi bi-speedometer2';
+    }
+  }
+};
 </script>
 
 <style scoped lang="scss">

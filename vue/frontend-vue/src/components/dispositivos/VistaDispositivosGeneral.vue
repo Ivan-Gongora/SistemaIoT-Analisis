@@ -54,15 +54,18 @@
             </div>
 
             <div class="dispositivos-grid">
-              <TarjetaDispositivo 
-                v-for="dispositivo in dispositivos_lista"
-                :key="dispositivo.id"
-                :dispositivo="dispositivo"
-                :is-dark="isDark"
-                @open-delete-modal="openDeleteDeviceModal"
-                @edit-device="openEditDeviceModal"
-              />
-            </div>
+                    <TarjetaDispositivo 
+                        v-for="dispositivo in dispositivos_lista"
+                        :key="dispositivo.id"
+                        :dispositivo="dispositivo"
+                        :is-dark="isDark"
+                        
+                        :mi-rol="dispositivo.mi_rol || 'Observador'"
+
+                        @open-delete-modal="openDeleteDeviceModal"
+                        @edit-device="openEditDeviceModal"
+                    />
+                </div>
 
           </div>
         </div>
@@ -114,7 +117,6 @@ import TarjetaDispositivo from '../proyecto/TarjetaDispositivo.vue'; // 🚨 Rut
 import ModalEditarDispositivo from '../dispositivos/ModalEditarDispositivo.vue'; 
 import ModalEliminarDispositivo from '../dispositivos/ModalEliminarDispositivo.vue'; 
 import debounce from 'lodash/debounce'; // 🚨 Asegúrate de tener lodash instalado
-// const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
     name: 'VistaDispositivosGeneral',

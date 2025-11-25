@@ -157,9 +157,9 @@ async def obtener_dispositivos_por_proyecto(
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
     
     try:
-        # 2. Llamar al servicio paginado
+        # 2. Llamar al servicio paginado PASANDO EL ID DE USUARIO
         resultado = await obtener_dispositivos_por_proyecto_paginado_db(
-            proyecto_id, page, limit, search
+            proyecto_id, current_user_id, page, limit, search
         )
         return resultado
 
@@ -167,7 +167,6 @@ async def obtener_dispositivos_por_proyecto(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener dispositivos: {str(e)}")
-
 
 # -----------------------------------------------------------
 # 2. OBTENER RESUMEN DE DISPOSITIVO
@@ -194,12 +193,12 @@ async def get_dispositivo_resumen(
 
 # -----------------------------------------------------------
 # 3. OBTENER UN DISPOSITIVO POR ID
-@router_dispositivo.get("/dispositivos/{dispositivo_id}", response_model=Dispositivo)
+@router_dispositivo.get("/dispositivos/{dispositivo_id}") # Puedes crear un response_model específico si quieres
 async def get_dispositivo_por_id(
     dispositivo_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 1. Seguridad
+    # 1. Seguridad (Verificar acceso al proyecto)
     proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
 
@@ -208,7 +207,22 @@ async def get_dispositivo_por_id(
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT * FROM dispositivos WHERE id = %s", (dispositivo_id,))
+        
+        # 🚨 SQL MEJORADO: Obtiene el dispositivo Y calcula el rol del usuario
+        sql = """
+        SELECT d.*, 
+            CASE 
+                WHEN p.usuario_id = %s THEN 'Propietario'
+                ELSE IFNULL(r.nombre_rol, 'Observador')
+            END as mi_rol
+        FROM dispositivos d
+        JOIN proyectos p ON d.proyecto_id = p.id
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+        LEFT JOIN roles r ON pu.rol_id = r.id
+        WHERE d.id = %s
+        """
+        
+        cursor.execute(sql, (current_user_id, current_user_id, dispositivo_id))
         dispositivo = cursor.fetchone()
 
         if not dispositivo:
@@ -228,6 +242,40 @@ async def get_dispositivo_por_id(
         raise HTTPException(status_code=500, detail=f"Error al consultar dispositivo: {str(e)}")
     finally:
         if conn: conn.close()
+# @router_dispositivo.get("/dispositivos/{dispositivo_id}", response_model=Dispositivo)
+# async def get_dispositivo_por_id(
+#     dispositivo_id: int,
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     # 1. Seguridad
+#     proyecto_id = await obtener_proyecto_id_desde_dispositivo(dispositivo_id)
+#     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
+#     conn = None
+#     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+#         cursor.execute("SELECT * FROM dispositivos WHERE id = %s", (dispositivo_id,))
+#         dispositivo = cursor.fetchone()
+
+#         if not dispositivo:
+#             raise HTTPException(status_code=404, detail=f"Dispositivo no encontrado.")
+        
+#         # Conversión de fecha y bool
+#         if 'fecha_creacion' in dispositivo and isinstance(dispositivo['fecha_creacion'], datetime):
+#             dispositivo['fecha_creacion'] = dispositivo['fecha_creacion'].strftime(DATE_FORMAT)
+#         if 'habilitado' in dispositivo:
+#              dispositivo['habilitado'] = bool(dispositivo['habilitado'])
+
+#         return dispositivo
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al consultar dispositivo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
 
 
 # ------------------------------------------------------------------
@@ -559,40 +607,93 @@ async def get_resumen_dispositivo_db(dispositivo_id: int) -> Dict[str, Any]:
     finally:
         if conn: conn.close()
 
-async def obtener_dispositivos_por_proyecto_db(proyecto_id: int) -> List[Dict[str, Any]]:
+async def obtener_dispositivos_por_proyecto_paginado_db(
+    proyecto_id: int, 
+    usuario_id: int, # 👈 NUEVO PARÁMETRO
+    page: int = 1, 
+    limit: int = 10, 
+    search: str = ""
+) -> Dict[str, Any]:
+    
+    offset = (page - 1) * limit
+    search_pattern = f"%{search}%"
+    DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
     conn = None
-    DATE_FORMAT = "%Y-%m-%d %H:%M:%S" # Definir el formato de fecha
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        sql = """
-        SELECT id, nombre, descripcion, tipo, latitud, longitud, habilitado, fecha_creacion, proyecto_id
-        FROM dispositivos 
-        WHERE proyecto_id = %s
+        # 1. Definir filtros comunes (WHERE)
+        where_clause = "WHERE d.proyecto_id = %s AND (d.nombre LIKE %s OR d.tipo LIKE %s)"
+        params_base = [proyecto_id, search_pattern, search_pattern]
+        
+        # 2. Obtener Total (COUNT)
+        sql_count = f"SELECT COUNT(*) as total FROM dispositivos d {where_clause}"
+        cursor.execute(sql_count, params_base)
+        total_records = cursor.fetchone()['total']
+        
+        # 3. Obtener Datos Paginados (CON CÁLCULO DE ROL)
+        sql_data = f"""
+        SELECT 
+            d.*, 
+            
+            -- 🚨 LÓGICA PARA DETERMINAR EL ROL
+            CASE 
+                WHEN p.usuario_id = %s THEN 'Propietario'  -- Si soy el dueño
+                ELSE IFNULL(r.nombre_rol, 'Observador')    -- Si soy invitado
+            END as mi_rol
+
+        FROM dispositivos d
+        JOIN proyectos p ON d.proyecto_id = p.id
+        -- Unimos para ver si el usuario es invitado y qué rol tiene en este proyecto
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+        LEFT JOIN roles r ON pu.rol_id = r.id
+        
+        {where_clause}
+        
+        ORDER BY d.id DESC 
+        LIMIT %s OFFSET %s
         """
-        cursor.execute(sql, (proyecto_id,))
+        
+        # Params ordenados: 
+        # 1. usuario_id (para el CASE)
+        # 2. usuario_id (para el LEFT JOIN)
+        # 3. params_base (proyecto_id, search, search)
+        # 4. limit, offset
+        params_data = [usuario_id, usuario_id] + params_base + [limit, offset]
+        
+        cursor.execute(sql_data, params_data)
         dispositivos = cursor.fetchall()
         
-        # 🚨 CORRECCIÓN CRÍTICA: Iterar y convertir datetime a string
+        # 4. Procesar datos (Fechas y Booleanos)
         for disp in dispositivos:
-            # Convertir habilitado a booleano (si no lo hace el ORM)
-            if 'habilitado' in disp:
-                disp['habilitado'] = disp['habilitado'] == 1 
+            if 'habilitado' in disp: 
+                disp['habilitado'] = bool(disp['habilitado'])
             
-            # 🚨 CONVERSIÓN DE FECHA
             if 'fecha_creacion' in disp and isinstance(disp['fecha_creacion'], datetime):
                 disp['fecha_creacion'] = disp['fecha_creacion'].strftime(DATE_FORMAT)
-                
-        return dispositivos
+            
+            if disp.get('latitud') is not None: disp['latitud'] = float(disp['latitud'])
+            if disp.get('longitud') is not None: disp['longitud'] = float(disp['longitud'])
+
+            # Fallback de seguridad
+            if not disp.get('mi_rol'): disp['mi_rol'] = 'Observador'
         
+        return {
+            "data": dispositivos,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+        }
+
     except Exception as e:
-        print(f"Error al obtener dispositivos: {e}") 
-        raise HTTPException(status_code=500, detail=f"Error en DB: {str(e)}")
-        
+        print(f"Error DB dispositivos paginados: {e}")
+        raise e
     finally:
-        if conn:
-            conn.close()
+        if conn: conn.close()
+
 
 
 async def obtener_dispositivos_globales_paginado_db(
@@ -612,31 +713,45 @@ async def obtener_dispositivos_globales_paginado_db(
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # 1. Construir la consulta base (FROM y WHERE)
-        # Filtrar por usuario (Dueño O Invitado) Y por búsqueda
+        # Unimos con 'roles' para poder sacar el nombre del rol si es invitado
         sql_base = """
         FROM dispositivos d
         JOIN proyectos p ON d.proyecto_id = p.id
-        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+        LEFT JOIN roles r ON pu.rol_id = r.id
         WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
           AND (d.nombre LIKE %s OR d.tipo LIKE %s OR p.nombre LIKE %s)
         """
         
+        # Params para el COUNT y WHERE: 
+        # [user (join), user (where dueño), user (where invitado), search, search, search]
+        params_count = [current_user_id, current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
+        
         # 2. Obtener el Total (COUNT)
-        # (Para esto necesitamos COUNT(DISTINCT d.id) porque el JOIN puede duplicar si hay roles)
-        params_count = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
         cursor.execute(f"SELECT COUNT(DISTINCT d.id) as total {sql_base}", params_count)
         total_records = cursor.fetchone()['total']
         
-        # 3. Obtener los Datos Paginados
-        # Seleccionamos DISTINCT d.id para evitar duplicados
+        # 3. Obtener los Datos Paginados CON ROL
         sql_final = f"""
-        SELECT DISTINCT d.id, d.nombre, d.descripcion, d.tipo, d.latitud, d.longitud, d.habilitado, d.fecha_creacion, d.proyecto_id, 
-               p.nombre AS nombre_proyecto, p.usuario_id AS propietario_id
+        SELECT DISTINCT 
+            d.id, d.nombre, d.descripcion, d.tipo, d.latitud, d.longitud, d.habilitado, d.fecha_creacion, d.proyecto_id, 
+            p.nombre AS nombre_proyecto, 
+            p.usuario_id AS propietario_id,
+            
+            -- 🚨 CÁLCULO DEL ROL
+            CASE 
+                WHEN p.usuario_id = %s THEN 'Propietario'  -- Si soy el dueño del proyecto
+                ELSE IFNULL(r.nombre_rol, 'Observador')    -- Si soy invitado, tomo el rol
+            END as mi_rol
+
         {sql_base}
         ORDER BY d.id DESC
         LIMIT %s OFFSET %s
         """
-        params_data = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern, limit, offset]
+        
+        # Params para el SELECT final:
+        # [user (case), user (join), user (where dueño), user (where invitado), search, search, search, limit, offset]
+        params_data = [current_user_id] + params_count + [limit, offset]
         
         cursor.execute(sql_final, params_data)
         dispositivos = cursor.fetchall()
@@ -665,6 +780,80 @@ async def obtener_dispositivos_globales_paginado_db(
         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
     finally:
         if conn: conn.close()
+# async def obtener_dispositivos_globales_paginado_db(
+#     current_user_id: int,
+#     page: int = 1,
+#     limit: int = 10,
+#     search: str = ""
+# ) -> Dict[str, Any]:
+    
+#     offset = (page - 1) * limit
+#     search_pattern = f"%{search}%"
+#     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 1. Construir la consulta base (FROM y WHERE)
+#         # Filtrar por usuario (Dueño O Invitado) Y por búsqueda
+#         sql_base = """
+#         FROM dispositivos d
+#         JOIN proyectos p ON d.proyecto_id = p.id
+#         LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+#         WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
+#           AND (d.nombre LIKE %s OR d.tipo LIKE %s OR p.nombre LIKE %s)
+#         """
+        
+#         # 2. Obtener el Total (COUNT)
+#         # (Para esto necesitamos COUNT(DISTINCT d.id) porque el JOIN puede duplicar si hay roles)
+#         params_count = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern]
+#         cursor.execute(f"SELECT COUNT(DISTINCT d.id) as total {sql_base}", params_count)
+#         total_records = cursor.fetchone()['total']
+        
+#         # 3. Obtener los Datos Paginados
+#         # Seleccionamos DISTINCT d.id para evitar duplicados
+#         sql_final = f"""
+#         SELECT DISTINCT d.id, d.nombre, d.descripcion, d.tipo, d.latitud, d.longitud, d.habilitado, d.fecha_creacion, d.proyecto_id, 
+#                p.nombre AS nombre_proyecto, p.usuario_id AS propietario_id
+#         {sql_base}
+#         ORDER BY d.id DESC
+#         LIMIT %s OFFSET %s
+#         """
+#         params_data = [current_user_id, current_user_id, search_pattern, search_pattern, search_pattern, limit, offset]
+        
+#         cursor.execute(sql_final, params_data)
+#         dispositivos = cursor.fetchall()
+        
+#         # 4. Procesar Datos (Fechas y Booleanos)
+#         for disp in dispositivos:
+#             if 'habilitado' in disp:
+#                 disp['habilitado'] = bool(disp['habilitado'])
+            
+#             if 'fecha_creacion' in disp and isinstance(disp['fecha_creacion'], datetime):
+#                 disp['fecha_creacion'] = disp['fecha_creacion'].strftime(DATE_FORMAT)
+            
+#             if disp.get('latitud') is not None: disp['latitud'] = float(disp['latitud'])
+#             if disp.get('longitud') is not None: disp['longitud'] = float(disp['longitud'])
+            
+#         return {
+#             "data": dispositivos,
+#             "total": total_records,
+#             "page": page,
+#             "limit": limit,
+#             "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
+#         }
+
+#     except Exception as e:
+#         print(f"Error en DB al obtener dispositivos globales: {e}")
+#         raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+
+
+
 # async def get_resumen_dispositivo_db(dispositivo_id: int) -> Dict[str, Any]:
 # #esa es la forma que debe devolver el resumen 
 # #     {

@@ -52,12 +52,15 @@
             </div>
 
             <div class="acciones">
+                            <template v-if="dispositivo.mi_rol === 'Propietario' || dispositivo.mi_rol === 'Colaborador'">
+
                 <button @click="editDevice()" class="btn-accion" title="Editar Dispositivo">
                     <i class="bi bi-pencil"></i>
                 </button>
                 <button @click="deleteDevice(dispositivo.id)" class="btn-accion btn-delete" title="Eliminar Dispositivo">
                     <i class="bi bi-trash"></i>
                 </button>
+                            </template>
             </div>
         </div>
     </div>

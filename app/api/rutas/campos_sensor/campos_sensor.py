@@ -12,82 +12,49 @@ from app.api.modelos.campos_sensores import CampoSensor, CampoSensorCrear, Campo
 from app.servicios.servicio_permisos import (
     verificar_permiso_proyecto,
     obtener_proyecto_id_desde_sensor, # Para GET y POST (tenemos sensor_id)
+     obtener_rol_usuario_en_proyecto,
     obtener_proyecto_id_desde_campo   # Para PUT y DELETE (tenemos campo_id)
 )
 
 from app.servicios.servicio_actividad import registrar_actividad_db
 router_campos = APIRouter()
 
-# ----------------------------------------------------------------------
-# FUNCIONES DE SERVICIO DE BASE DE DATOS
-# ----------------------------------------------------------------------
-
-# GET: Obtener campos por sensor_id (con datos de unidad)
-# async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
-#         sql = """
-#         SELECT 
-#             cs.id, cs.nombre, cs.tipo_valor, cs.sensor_id, cs.unidad_medida_id, 
-#             um.nombre AS nombre_unidad, 
-#             um.simbolo AS simbolo_unidad,
-#             um.magnitud_tipo,
-#             (
-#                 SELECT v.valor 
-#                 FROM valores v 
-#                 WHERE v.campo_id = cs.id 
-#                 ORDER BY v.fecha_hora_lectura DESC 
-#                 LIMIT 1
-#             ) AS ultimo_valor
-#         FROM campos_sensores cs
-#         LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
-#         WHERE cs.sensor_id = %s;
-#         """
-#         cursor.execute(sql, (sensor_id,))
-#         return cursor.fetchall()
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"DB Error al obtener campos: {str(e)}")
-#     finally:
-#         if conn: conn.close()
-        # app/api/rutas/campos_sensor/campos_sensor.py (Función de servicio)
-#23/10/2025
-#lo que hay arriba es la version que si funciona con la vista de : TarjetaCampoSensor.vue,habra que actualizarlo para que funcione con la nueva version
-# app/api/rutas/campos_sensor/campos_sensor.py (Función de servicio)
 
 async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
+
         sql = """
-        SELECT 
-            cs.id, cs.nombre, cs.tipo_valor, cs.sensor_id, cs.unidad_medida_id, 
-            um.nombre AS nombre_unidad, 
+        SELECT
+            cs.id,
+            cs.nombre,
+            cs.tipo_valor,
+            cs.sensor_id,
+            cs.unidad_medida_id,
+            um.nombre AS nombre_unidad,
             um.simbolo AS simbolo_unidad,
             um.magnitud_tipo,
-            (
-                SELECT v.valor 
-                FROM valores v 
-                WHERE v.campo_id = cs.id 
-                ORDER BY v.fecha_hora_lectura DESC 
-                LIMIT 1
-            ) AS ultimo_valor  
+            uvc.ultimo_valor
         FROM campos_sensores cs
-        LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
-        WHERE cs.sensor_id = %s;
+        LEFT JOIN unidades_medida um 
+            ON cs.unidad_medida_id = um.id
+        LEFT JOIN ultimo_valor_campo uvc 
+            ON cs.id = uvc.campo_id
+        WHERE cs.sensor_id = %s
+        ORDER BY cs.id;
         """
+
         cursor.execute(sql, (sensor_id,))
-        
         return cursor.fetchall()
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB Error al obtener campos: {str(e)}")
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
+
         
 # POST: Crear un nuevo campo
 async def set_campo_sensor_db(datos: CampoSensorCrear, usuario_id: int) -> Dict[str, Any]:
@@ -156,35 +123,7 @@ async def set_campo_sensor_db(datos: CampoSensorCrear, usuario_id: int) -> Dict[
         raise HTTPException(status_code=500, detail=f"Error inesperado al insertar campo: {str(e)}")
     finally:
         if conn: conn.close()
-# # POST: Crear un nuevo campo
-# async def set_campo_sensor_db(datos: CampoSensorCrear) -> Dict[str, Any]:
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-        
-#         # Validaciones (Sensor padre y Unidad de medida)
-#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (datos.sensor_id,))
-#         if not cursor.fetchone():
-#             raise HTTPException(status_code=404, detail="Sensor padre no encontrado.")
-            
-#         cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
-#         if not cursor.fetchone():
-#             raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
 
-#         # Insertar el campo
-#         cursor.execute(
-#             "INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES (%s, %s, %s, %s)",
-#             (datos.nombre, datos.tipo_valor, datos.sensor_id, datos.unidad_medida_id)
-#         )
-#         conn.commit()
-#         return {"status": "success", "id_insertado": conn.insert_id(), "nombre": datos.nombre}
-    
-#     except Exception as e:
-#         if conn: conn.rollback()
-#         raise HTTPException(status_code=500, detail=f"Error al insertar campo: {str(e)}")
-#     finally:
-#         if conn: conn.close()
 
 # PUT: Actualizar un campo de sensor
 async def actualizar_campo_sensor_db(
@@ -266,35 +205,8 @@ async def actualizar_campo_sensor_db(
         raise HTTPException(status_code=500, detail=f"DB Error al actualizar campo: {str(e)}")
     finally:
         if conn: conn.close()
-# async def actualizar_campo_sensor_db(id: int, datos: CampoSensorActualizar) -> Dict[str, Any]:
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-        
-#         campos = []
-#         valores = []
-        
-#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
-#         if datos.tipo_valor is not None: campos.append("tipo_valor = %s"); valores.append(datos.tipo_valor)
-#         if datos.unidad_medida_id is not None: campos.append("unidad_medida_id = %s"); valores.append(datos.unidad_medida_id)
-        
-#         if not campos:
-#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
-             
-#         valores.append(id)
-#         sql = f"UPDATE campos_sensores SET {', '.join(campos)} WHERE id = %s"
-#         cursor.execute(sql, valores)
-#         conn.commit()
-        
-#         if cursor.rowcount == 0:
-#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
-        
-#         return {"status": "success", "rows_affected": cursor.rowcount}
-#     except pymysql.Error as e:
-#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar campo: {str(e)}")
-#     finally:
-#         if conn: conn.close()
+
+
 
 # DELETE: Eliminar un campo de sensor
 async def eliminar_campo_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
@@ -354,56 +266,33 @@ async def eliminar_campo_sensor_db(id: int, usuario_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
     finally:
         if conn: conn.close()
-# async def eliminar_campo_sensor_db(id: int) -> Dict[str, Any]:
-#     conn = None
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor()
-        
-#         # 1. Eliminar valores asociados (Hoja)
-#         cursor.execute("DELETE FROM valores WHERE campo_id = %s", (id,))
-        
-#         # 2. Eliminar el campo
-#         cursor.execute("DELETE FROM campos_sensores WHERE id = %s", (id,))
-#         conn.commit()
-        
-#         if cursor.rowcount == 0:
-#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
-            
-#         return {"status": "success", "message": "Campo de sensor eliminado exitosamente."}
-#     except pymysql.Error as e:
-#         if e.args[0] == 1451: # Error de FK (si valores falla)
-#              raise HTTPException(status_code=400, detail="No se puede eliminar: El campo aún tiene valores asociados.")
-#         raise HTTPException(status_code=500, detail=f"DB Error al eliminar campo: {str(e)}")
-#     finally:
-#         if conn: conn.close()
 
-# ----------------------------------------------------------------------
-# ENDPOINTS (Protegidos por JWT)
-# ----------------------------------------------------------------------
+
 # -----------------------------------------------------------
 # GET: Obtener Campos por Sensor (Lectura)
 # -----------------------------------------------------------
-@router_campos.get("/sensores/{sensor_id}/campos", response_model=List[CampoSensor])
+@router_campos.get("/sensores/{sensor_id}/campos")
 async def get_campos_por_sensor(
     sensor_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 1. Averiguar el proyecto al que pertenece el sensor
+    # 1. Obtener proyecto
     proyecto_id = await obtener_proyecto_id_desde_sensor(sensor_id)
-    
-    
-    # Esto permite que Propietarios, Colaboradores y Observadores vean los campos
+
+    # 2. Validar permiso
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
+
+    # 3. Obtener rol del usuario en ese proyecto
+    rol_usuario = await obtener_rol_usuario_en_proyecto(current_user_id, proyecto_id)
 
     try:
         campos = await obtener_campos_por_sensor_db(sensor_id)
-        if not campos:
-            # Devolver lista vacía es mejor práctica que 404 en listas, pero mantenemos tu lógica si prefieres
-            return [] 
-        return campos
-    except HTTPException:
-        raise
+
+        return {
+            "rol": rol_usuario,
+            "campos": campos or []
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener campos: {str(e)}")
 
@@ -477,3 +366,136 @@ async def eliminar_campo_sensor(
         raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": "Error inesperado", "details": str(e)})
+    
+    
+    
+# ----------------------------------------------------------------------
+# FUNCIONES DE SERVICIO DE BASE DE DATOS
+# ----------------------------------------------------------------------
+
+# GET: Obtener campos por sensor_id (con datos de unidad)
+# async def obtener_campos_por_sensor_db(sensor_id: int) -> List[Dict[str, Any]]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         sql = """
+#         SELECT 
+#             cs.id, cs.nombre, cs.tipo_valor, cs.sensor_id, cs.unidad_medida_id, 
+#             um.nombre AS nombre_unidad, 
+#             um.simbolo AS simbolo_unidad,
+#             um.magnitud_tipo,
+#             (
+#                 SELECT v.valor 
+#                 FROM valores v 
+#                 WHERE v.campo_id = cs.id 
+#                 ORDER BY v.fecha_hora_lectura DESC 
+#                 LIMIT 1
+#             ) AS ultimo_valor
+#         FROM campos_sensores cs
+#         LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+#         WHERE cs.sensor_id = %s;
+#         """
+#         cursor.execute(sql, (sensor_id,))
+#         return cursor.fetchall()
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"DB Error al obtener campos: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+        # app/api/rutas/campos_sensor/campos_sensor.py (Función de servicio)
+#23/10/2025
+#lo que hay arriba es la version que si funciona con la vista de : TarjetaCampoSensor.vue,habra que actualizarlo para que funcione con la nueva version
+# app/api/rutas/campos_sensor/campos_sensor.py (Función de servicio)
+
+# # POST: Crear un nuevo campo
+# async def set_campo_sensor_db(datos: CampoSensorCrear) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # Validaciones (Sensor padre y Unidad de medida)
+#         cursor.execute("SELECT id FROM sensores WHERE id = %s", (datos.sensor_id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Sensor padre no encontrado.")
+            
+#         cursor.execute("SELECT id FROM unidades_medida WHERE id = %s", (datos.unidad_medida_id,))
+#         if not cursor.fetchone():
+#             raise HTTPException(status_code=404, detail="Unidad de medida no encontrada.")
+
+#         # Insertar el campo
+#         cursor.execute(
+#             "INSERT INTO campos_sensores (nombre, tipo_valor, sensor_id, unidad_medida_id) VALUES (%s, %s, %s, %s)",
+#             (datos.nombre, datos.tipo_valor, datos.sensor_id, datos.unidad_medida_id)
+#         )
+#         conn.commit()
+#         return {"status": "success", "id_insertado": conn.insert_id(), "nombre": datos.nombre}
+    
+#     except Exception as e:
+#         if conn: conn.rollback()
+#         raise HTTPException(status_code=500, detail=f"Error al insertar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+
+
+# async def actualizar_campo_sensor_db(id: int, datos: CampoSensorActualizar) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         campos = []
+#         valores = []
+        
+#         if datos.nombre is not None: campos.append("nombre = %s"); valores.append(datos.nombre)
+#         if datos.tipo_valor is not None: campos.append("tipo_valor = %s"); valores.append(datos.tipo_valor)
+#         if datos.unidad_medida_id is not None: campos.append("unidad_medida_id = %s"); valores.append(datos.unidad_medida_id)
+        
+#         if not campos:
+#              return {"status": "warning", "message": "No se proporcionaron datos para actualizar"}
+             
+#         valores.append(id)
+#         sql = f"UPDATE campos_sensores SET {', '.join(campos)} WHERE id = %s"
+#         cursor.execute(sql, valores)
+#         conn.commit()
+        
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+        
+#         return {"status": "success", "rows_affected": cursor.rowcount}
+#     except pymysql.Error as e:
+#         raise HTTPException(status_code=500, detail=f"DB Error al actualizar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+
+
+# async def eliminar_campo_sensor_db(id: int) -> Dict[str, Any]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor()
+        
+#         # 1. Eliminar valores asociados (Hoja)
+#         cursor.execute("DELETE FROM valores WHERE campo_id = %s", (id,))
+        
+#         # 2. Eliminar el campo
+#         cursor.execute("DELETE FROM campos_sensores WHERE id = %s", (id,))
+#         conn.commit()
+        
+#         if cursor.rowcount == 0:
+#             raise HTTPException(status_code=404, detail="Campo de sensor no encontrado.")
+            
+#         return {"status": "success", "message": "Campo de sensor eliminado exitosamente."}
+#     except pymysql.Error as e:
+#         if e.args[0] == 1451: # Error de FK (si valores falla)
+#              raise HTTPException(status_code=400, detail="No se puede eliminar: El campo aún tiene valores asociados.")
+#         raise HTTPException(status_code=500, detail=f"DB Error al eliminar campo: {str(e)}")
+#     finally:
+#         if conn: conn.close()
+
+# ----------------------------------------------------------------------
+# ENDPOINTS (Protegidos por JWT)
+# ----------------------------------------------------------------------

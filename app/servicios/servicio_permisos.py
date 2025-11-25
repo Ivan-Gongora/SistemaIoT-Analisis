@@ -54,6 +54,47 @@ async def verificar_permiso_proyecto(usuario_id: int, proyecto_id: int, permiso_
     finally:
         if conn: conn.close()
 
+
+async def obtener_rol_usuario_en_proyecto(usuario_id: int, proyecto_id: int):
+    """
+    Devuelve el rol del usuario dentro del proyecto:
+    - PROPIETARIO (si es dueño)
+    - COLABORADOR / OBSERVADOR según proyecto_usuarios
+    - None si no tiene rol (pero sí podría ser PROPIETARIO)
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        sql = """
+        SELECT 
+            p.usuario_id AS propietario_id,
+            r.nombre_rol AS rol_nombre
+        FROM proyectos p
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
+        LEFT JOIN roles r ON pu.rol_id = r.id
+        WHERE p.id = %s
+        """
+
+
+        cursor.execute(sql, (usuario_id, proyecto_id))
+        data = cursor.fetchone()
+
+        if not data:
+            return None
+
+        # Dueño del proyecto
+        if data["propietario_id"] == usuario_id:
+            return "PROPIETARIO"
+
+        # Si es colaborador / observador
+        return data["rol_nombre"]
+
+    finally:
+        if conn:
+            conn.close()
+
 # ---------------------------------------------------------
 # 2. AYUDANTES PARA RESOLVER PROYECTO_ID
 # (Necesarios para endpoints de eliminar/editar sensor o dispositivo)
@@ -61,7 +102,7 @@ async def verificar_permiso_proyecto(usuario_id: int, proyecto_id: int, permiso_
 
 async def obtener_proyecto_id_desde_dispositivo(dispositivo_id: int) -> int:
     conn = get_db_connection()
-    # 🚨 Aseguramos que usamos DictCursor para consistencia
+    #  Aseguramos que usamos DictCursor para consistencia
     with conn.cursor(pymysql.cursors.DictCursor) as cursor:
         cursor.execute("SELECT proyecto_id FROM dispositivos WHERE id = %s", (dispositivo_id,))
         row = cursor.fetchone()
@@ -70,7 +111,7 @@ async def obtener_proyecto_id_desde_dispositivo(dispositivo_id: int) -> int:
     if not row: 
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
     
-    # 🚨 ACCESO POR CLAVE (Correcto para DictCursor)
+    #  ACCESO POR CLAVE (Correcto para DictCursor)
     return row['proyecto_id']
 
 async def obtener_proyecto_id_desde_sensor(sensor_id: int) -> int:
@@ -90,7 +131,7 @@ async def obtener_proyecto_id_desde_sensor(sensor_id: int) -> int:
     
     return row['proyecto_id']
 
-# 🚨 Corrección 3: Campos
+#  Corrección 3: Campos
 async def obtener_proyecto_id_desde_campo(campo_id: int) -> int:
     conn = get_db_connection()
     with conn.cursor(pymysql.cursors.DictCursor) as cursor:

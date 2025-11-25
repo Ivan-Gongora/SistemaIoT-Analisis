@@ -32,10 +32,14 @@
                         class="form-control-search"
                     >
                 </div>
-
-                <button @click="openCreateSensorModal" class="btn-primary-action">
-                    <i class="bi bi-plus-circle-fill"></i> Agregar Sensor
-                </button>
+                
+               <button 
+                    @click="openCreateSensorModal" 
+                    class="btn-primary-action" 
+                    v-if="miRol === 'Propietario' || miRol === 'Colaborador'"
+                    >
+                        <i class="bi bi-plus-circle-fill"></i> Agregar Sensor
+                    </button>
             </div>
         </div>
 
@@ -119,7 +123,8 @@ export default {
             mostrarModalEliminarSensor: false, 
             sensorEliminarId: null,
             sensorEliminarNombre: null,
-
+            
+            miRol: '',
             searchQuery: '',
             page: 1,
             limit: 8, // 8 sensores por página
@@ -183,7 +188,7 @@ export default {
         },
 
         // 2. Cargar Sensores (Paginados)
-        async cargarSensores() {
+     async cargarSensores() {
             this.loading = true;
             this.error = null;
             const token = localStorage.getItem('accessToken');
@@ -200,24 +205,29 @@ export default {
                 });
 
                 if (!response.ok) {
-                     // Si es 404 en búsqueda, es lista vacía, no error fatal
-                     if (response.status === 404) {
-                         this.sensores = [];
-                         this.totalRecords = 0;
-                         this.totalPages = 1;
-                         return;
-                     }
-                     throw new Error('Fallo al obtener sensores.'); 
+                    // Si es 404 en búsqueda, es lista vacía, no error fatal
+                    if (response.status === 404) {
+                        this.sensores = [];
+                        this.totalRecords = 0;
+                        this.totalPages = 1;
+                        this.miRol = '';
+                        return;
+                    }
+                    throw new Error('Fallo al obtener sensores.');
                 }
 
                 const respuesta = await response.json();
-                
+
+                // 👇 Nuevo: Guardar mi_rol (viene en cada sensor, pero basta con el primero)
+                this.miRol = respuesta.data[0]?.mi_rol || '';
+
                 // La API devuelve { data, total, total_pages }
                 this.sensores = respuesta.data.map(s => ({
                     ...s,
                     habilitado: s.habilitado === 1 || s.habilitado === true,
                     total_campos: s.total_campos || 0
                 }));
+
                 this.totalRecords = respuesta.total;
                 this.totalPages = respuesta.total_pages;
 
@@ -228,6 +238,7 @@ export default {
                 this.loading = false;
             }
         },
+
 
         onSearchInput() { this.debouncedSearch(); },
         
