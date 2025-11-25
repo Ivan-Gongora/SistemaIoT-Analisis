@@ -1,88 +1,94 @@
 <template>
-    <div class="proyecto-tarjeta" :class="{ 'theme-dark': isDark, 'theme-light': !isDark, 'active': proyecto.activo }">
+    <div 
+        class="proyecto-tarjeta" 
+        :class="{ 'theme-dark': isDark, 'theme-light': !isDark, 'active': proyecto.activo }"
+        @click="irAlDetalle"
+    >
         <div class="card-header">
             <div class="icon-box" :style="{ background: iconGradient }">
-                <i :class="proyecto.icono || 'fas fa-box'"></i>
+                <i :class="proyecto.icono || 'bi bi-box-seam'"></i>
             </div>
             
-            <span class="status-dot"></span>
+            <!-- Indicador de estado visual -->
+            <span class="status-dot" :class="{ 'online': proyecto.activo, 'offline': !proyecto.activo }"></span>
         </div>
 
         <div class="card-body">
-            <router-link :to="{ name: 'DetalleProyecto', params: { id: proyecto.id } }" style="text-decoration: none; color: inherit;">
-            <h2 class="proyecto-titulo"  style="cursor: pointer;">
-                {{ proyecto.nombre }}
-            </h2>
-            </router-link>
+            <h2 class="proyecto-titulo">{{ proyecto.nombre }}</h2>
+            
             <p class="proyecto-tipo-estado">
                 <span class="tag-tipo">{{ proyecto.tipo_industria || 'General' }}</span> 
-                <span class="tag-estado">{{ statusText }}</span>
+                <span class="tag-estado" :class="proyecto.activo ? 'text-active' : 'text-inactive'">
+                    {{ statusText }}
+                </span>
             </p>
-            <p class="proyecto-descripcion">{{ proyecto.descripcion }}</p>
+            
+            <p class="proyecto-descripcion">{{ proyecto.descripcion || 'Sin descripción disponible.' }}</p>
             
             <div class="metricas-container">
-                
                 <div class="metrica metrica-dispositivos">
-                    <i class="fas fa-tablet-alt"></i>
+                    <i class="bi bi-tablet"></i>
                     <span>Dispositivos</span>
-                    <span class="count">{{ dispositivos_count !== null ? dispositivos_count : 0 }}</span>
+                    <!-- Usamos valores seguros para evitar NaN -->
+                    <span class="count">{{ proyecto.dispositivos_count || 0 }}</span>
                 </div>
                 
                 <div class="metrica metrica-sensores">
-                    <i class="fas fa-signal"></i>
+                    <i class="bi bi-activity"></i>
                     <span>Sensores</span>
-                    <span class="count">{{ sensores_count !== null ? sensores_count : 0 }}</span>
+                    <span class="count">{{ proyecto.sensores_count || 0 }}</span>
                 </div>
             </div>
             
-           <div class="card-footer">
+            <div class="card-footer">
                 <span class="ultima-actualizacion">
-                    <i class="fas fa-clock"></i> Última actualización
-                    <span class="time-ago">{{ proyecto.ultima_actualizacion || 'N/A' }}</span>
+                    <i class="bi bi-clock"></i> 
+                    <span class="time-ago">{{ proyecto.ultima_actualizacion || 'Reciente' }}</span>
                 </span>
                 
                 <div class="acciones">
+                    <!-- BADGE DEL ROL -->
+                    <span class="role-badge" :class="claseRol">
+                        {{ proyecto.mi_rol }}
+                    </span>
+
+                    <!-- BOTÓN PAUSAR/ACTIVAR (Propietario y Colaborador) -->
                     <button 
-                        v-if="proyecto.mi_rol === 'Propietario' || proyecto.mi_rol === 'Colaborador'"
-                        @click="toggleState" 
+                        v-if="esPropietario || esColaborador"
+                        @click.stop="toggleState" 
                         class="btn-accion btn-toggle-state" 
                         :class="{'btn-pause': proyecto.activo}" 
                         :title="toggleAction"
                     >
-                        <i :class="toggleIcon"></i> 
-                        {{ toggleAction }}
+                        <i :class="toggleIcon"></i>
                     </button>
                     
-                    <button 
-                        v-if="proyecto.mi_rol === 'Propietario'"
-                        class="btn-accion btn-share" 
-                        @click="openShareModal" 
-                        title="Invitar usuarios"
-                    >
-                        <i class="bi bi-share"></i>
-                    </button>
-                    
-                    <button 
-                        v-if="proyecto.mi_rol === 'Propietario'"
-                        class="btn-accion btn-detalle" 
-                        @click="editProject(proyecto)" 
-                        title="Editar proyecto"
-                    >
-                        <i class="bi bi-pencil"></i>
-                    </button>
+                    <!-- 🚨 ZONA PROTEGIDA: SOLO PROPIETARIO -->
+                    <template v-if="esPropietario">
+                        <button 
+                            class="btn-accion btn-share" 
+                            @click.stop="openShareModal" 
+                            title="Invitar usuarios"
+                        >
+                            <i class="bi bi-share-fill"></i>
+                        </button>
+                        
+                        <button 
+                            class="btn-accion btn-detalle" 
+                            @click.stop="editProject" 
+                            title="Editar proyecto"
+                        >
+                            <i class="bi bi-pencil-fill"></i>
+                        </button>
 
-                    <button 
-                        v-if="proyecto.mi_rol === 'Propietario'"
-                        class="btn-accion btn-eliminar" 
-                        @click="deleteProject" 
-                        title="Eliminar proyecto"
-                    >
-                        <i class="bi bi-trash"></i>
-                    </button>
-                    
-                    <span class="role-badge" :class="proyecto.mi_rol.toLowerCase()">
-                        {{ proyecto.mi_rol }}
-                    </span>
+                        <button 
+                            class="btn-accion btn-eliminar" 
+                            @click.stop="deleteProject" 
+                            title="Eliminar proyecto"
+                        >
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                    </template>
                 </div>
             </div>
         
@@ -91,18 +97,17 @@
 </template>
 
 <script>
-// Lista de colores vibrantes para asignación automática (sacados de la paleta moderna)
+// Colores para los gradientes de los iconos
 const PROJECT_COLORS = [
-    'linear-gradient(45deg, #A300FF, #6F00FF)', // Morado/Violeta
-    'linear-gradient(45deg, #1ABC9C, #00C853)', // Verde Menta/Éxito
-    'linear-gradient(45deg, #FFA500, #FF8C00)', // Naranja/Ambar
-    'linear-gradient(45deg, #1E90FF, #00BFFF)', // Azul Cielo
-    'linear-gradient(45deg, #FF69B4, #FF1493)', // Rosa
+    'linear-gradient(135deg, #8A2BE2, #6F00FF)', // Purple
+    'linear-gradient(135deg, #1ABC9C, #00C853)', // Green
+    'linear-gradient(135deg, #FFC107, #FF8C00)', // Orange
+    'linear-gradient(135deg, #3498db, #2980b9)', // Blue
+    'linear-gradient(135deg, #E74C3C, #c0392b)', // Red
 ];
 
-// Función para obtener un color basado en el ID (para que siempre sea el mismo color para el mismo ID)
 const getColorForId = (id) => {
-    // Si el ID es 0, usa el primer color. Si es 5, vuelve a usar el primer color.
+    if (!id) return PROJECT_COLORS[0];
     return PROJECT_COLORS[id % PROJECT_COLORS.length];
 };
 
@@ -111,320 +116,334 @@ export default {
     props: {
         proyecto: {
             type: Object,
-            required: true
+            required: true,
+            default: () => ({
+                id: 0,
+                nombre: 'Sin Nombre',
+                descripcion: '',
+                activo: true,
+                mi_rol: 'OBSERVADOR'
+            })
         },
         isDark: {
             type: Boolean,
-            required: true}
+            required: true
+        }
     },
-    data() {
-        return {
-            // 🚨 NUEVOS DATOS: Usaremos valores nulos para simular que la API no los tiene aún
-            dispositivos_count: null, 
-            sensores_count: null,
-        };
-    },
+    emits: ['toggle-activo', 'open-share-modal', 'edit-project', 'confirmar-eliminar'],
     computed: {
-        // 🚨 Genera el color de la caja de icono basado en el ID del proyecto
+        // Lógica de Roles Segura (Case Insensitive)
+        rolNormalizado() {
+            return (this.proyecto.mi_rol || '').toUpperCase();
+        },
+        esPropietario() {
+            return this.rolNormalizado === 'PROPIETARIO' || this.rolNormalizado === 'Propietario';
+        },
+        esColaborador() {
+            return this.rolNormalizado === 'COLABORADOR'|| this.rolNormalizado === 'Colaborador';
+        },
+
+        claseRol() {
+            if (this.esPropietario) return 'badge-owner';
+            if (this.esColaborador) return 'badge-collab';
+            return 'badge-guest';
+        },
+        
+        // Lógica Visual
         iconGradient() {
             return getColorForId(this.proyecto.id);
         },
-        // 🚨 Determina la acción y el icono del botón principal
         toggleAction() {
             return this.proyecto.activo ? 'Pausar' : 'Activar';
         },
         toggleIcon() {
-            // Opción Bootstrap Icons: bi-pause-fill (o bi-pause) y bi-play-fill (o bi-play)
-            return this.proyecto.activo ? 'bi bi-pause' : 'bi bi-play-fill';
+            return this.proyecto.activo ? 'bi bi-pause-fill' : 'bi bi-play-fill';
         },
-        // 🚨 Determina el texto del estado principal
         statusText() {
-            return this.proyecto.activo ? 'Activo' : 'Inactivo';
+            return this.proyecto.activo ? 'Activo' : 'Pausado';
         }
     },
-    mounted() {
-        // ... (lógica de detección de tema) ...
-        // if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        //     this.isDark = true;
-        // }
-        
-        // 🚨 Si la API tuviera los datos, los asignarías aquí:
-        // this.dispositivos_count = this.proyecto.dispositivos_count;
-        // this.sensores_count = this.proyecto.sensores_count;
-    },
     methods: {
-        // 🚨 Método que se dispara al presionar Pausar/Activar
+        irAlDetalle() {
+            this.$router.push({ name: 'DetalleProyecto', params: { id: this.proyecto.id } });
+        },
         toggleState() {
-            // Emitimos el evento 'toggle-activo' al componente padre (MisProyectos.vue)
             this.$emit('toggle-activo', this.proyecto.id); 
-            // La lógica para cambiar el estado (activo: true/false) se hará en el padre.
         },
         openShareModal() {
-            // Emitimos el evento 'open-share-modal' al componente padre (MisProyectos.vue)
             this.$emit('open-share-modal', this.proyecto.id); 
         },
         editProject() {
-            // 🚨 CRÍTICO: Emitir el objeto de proyecto completo
-            this.$emit('edit-project', this.proyecto); 
+            // Solo se emite si es propietario (doble seguridad visual)
+            if (this.esPropietario) {
+                this.$emit('edit-project', this.proyecto); 
+            }
         },
         deleteProject() {
-            // Emite evento para que el padre abra el modal de confirmación
-            this.$emit('confirmar-eliminar', this.proyecto.id);
-        },
-        verDetalle(id) {
-        // Usa el router para navegar a la ruta con el ID
-        this.$router.push(`/detalle-proyecto/${id}`);
-    },
+            if (this.esPropietario) {
+                this.$emit('confirmar-eliminar', this.proyecto.id);
+            }
+        }
     }
 }
 </script>
 
 <style scoped lang="scss">
+
 // ----------------------------------------
-// VARIABLES DE ESTILO PROFESIONAL (PALETA DE DISPOSITIVO)
-// ----------------------------------------
-// $PRIMARY-PURPLE: #8A2BE2;   // Azul Violeta (Acento Principal)
-// $SUCCESS-COLOR: #1ABC9C;    // Verde de Éxito
-// $BLUE-MIDNIGHT: #1A1A2E;    // Fondo Oscuro de Contraste (Métricas)
-// $DARK-TEXT: #333333;        // Texto en Modo Claro
-// $LIGHT-TEXT: #E4E6EB;       // Texto en Modo Oscuro
-// $SUBTLE-BG-DARK: #2B2B40;   // Fondo de Tarjeta en Modo Oscuro
-// $SUBTLE-BG-LIGHT: #FFFFFF;  // Fondo de Tarjeta en Modo Claro
-// $WHITE-SOFT: #F7F9FC;       // Fondo de Página en Modo Claro
-// $GRAY-COLD: #99A2AD;        // Subtítulos y Divisores
-// $DANGER-COLOR: #e74c3c;     // Rojo para Eliminar
-// $WARNING-COLOR: #FFC107;    // Amarillo/Naranja para Pausar
-// $LIGHT-BG-CARD: #F0F2F5;    // Fondo Claro de Tarjeta
-// $SUBTLE-BG-CARD: #FAFAFA;   // Fondo Muy Sutil de Tarjeta
-// ----------------------------------------
-// ESTILOS BASE DE LA TARJETA
+// TARJETA BASE (Ajustado para más espacio inferior)
 // ----------------------------------------
 .proyecto-tarjeta {
     border-radius: 16px; 
     padding: 24px; 
+    // 🚨 CRÍTICO: Se aumentó de 28px a 35px para garantizar visibilidad del botón eliminar
+    padding-bottom: 35px; 
     margin-bottom: 20px;
-    transition: all 0.3s ease-in-out;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     cursor: pointer;
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08); 
+    display: flex;
+    flex-direction: column;
+    border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
+
+    &:hover {
+        transform: translateY(-5px);
+    }
 }
 
 // ----------------------------------------
-// TÍTULOS Y CABECERA
+// CABECERA E ICONO
 // ----------------------------------------
 .card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center; /* CRÍTICO: Alinea verticalmente los ítems */
-    margin-bottom: 12px;
+    align-items: center;
+    margin-bottom: 15px;
 }
+
 .icon-box {
     width: 48px; height: 48px; 
     border-radius: 12px;
-    display: flex; justify-content: center; align-items: center; /* CRÍTICO: Centra el ÍCONO dentro de la caja */
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2); 
+    display: flex; justify-content: center; align-items: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
     
     i { 
-        font-size: 1.4rem; 
-        color: $LIGHT-BG-CARD;
+        font-size: 1.5rem; 
+        color: $WHITE;
     }
 }
+
 .status-dot { 
     width: 10px; height: 10px;
     border-radius: 50%;
-    /* No necesita margen superior ya que align-items: center lo centra */
+    background-color: $GRAY-COLD;
+    
+    &.online { background-color: $SUCCESS-COLOR; box-shadow: 0 0 8px rgba($SUCCESS-COLOR, 0.6); }
+    &.offline { background-color: $WARNING-COLOR; }
 }
 
-.proyecto-titulo { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+// ----------------------------------------
+// CUERPO
+// ----------------------------------------
+.card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.proyecto-titulo { 
+    font-size: 1.3rem; 
+    font-weight: 700; 
+    margin-bottom: 8px; 
+    line-height: 1.2;
+}
+
 .proyecto-tipo-estado {
-    font-size: 0.8rem; 
+    font-size: 0.85rem; 
     margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     
-    .tag-tipo { /* Etiqueta de Industria (Ej: Agricultura Precisión) */
-        font-weight: 500; 
-        padding: 2px 7px; 
-        border-radius: 4px;
-        margin-right: 8px; 
-        color: $PRIMARY-PURPLE; /* Texto del acento principal */
-        background-color: rgba($PRIMARY-PURPLE, 0.15); /* Fondo púrpura muy sutil */
+    .tag-tipo {
+        font-weight: 600; 
+        color: $PRIMARY-PURPLE;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .tag-estado {
+        font-weight: 500;
+        padding-left: 8px;
+        border-left: 1px solid $GRAY-COLD;
+        
+        &.text-active { color: $SUCCESS-COLOR; }
+        &.text-inactive { color: $WARNING-COLOR; }
     }
 }
+
 .proyecto-descripcion {
-    font-size: 0.85rem; 
+    font-size: 0.9rem; 
     margin-bottom: 20px;
     line-height: 1.5;
-    height: 3.5em; 
+    height: 2.8em; // Limita a ~2 líneas
     overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     opacity: 0.8;
 }
 
 // ----------------------------------------
-// MÉTRICAS (Dispositivos / Sensores)
+// MÉTRICAS
 // ----------------------------------------
 .metricas-container {
-  display: flex;
+    display: flex;
     gap: 12px;
     margin-bottom: 20px;
-    padding-top: 10px;
+    
     .metrica {
         flex: 1;
-        padding: 10px 12px; /* Espaciado más compacto */
-        border-radius: 8px; 
+        padding: 10px 12px;
+        border-radius: 10px;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         transition: background-color 0.2s;
-        background-color: $BLUE-MIDNIGHT;
+        border: 1px solid transparent;
+        
         i { 
-            font-size: 1rem; 
+            font-size: 1.1rem; 
             margin-bottom: 6px;
             color: $PRIMARY-PURPLE; 
         }
         
-        /* Etiqueta (Dispositivos / Sensores) */
         span:first-of-type { 
-            font-size: 0.8rem;
-            opacity: 0.9;
-            margin-bottom: 2px; /* Espacio sutil entre la etiqueta y el contador */
+            font-size: 0.75rem;
+            opacity: 0.8;
+            margin-bottom: 2px;
+            font-weight: 500;
         }
         
-        /* Contador (el número grande '0') */
         .count {
-            font-size: 1.8rem; 
+            font-size: 1.4rem; 
             font-weight: 700;
-            line-height: 1; /* CRÍTICO: Eliminar el espacio extra de línea */
-            padding-bottom: 2px;
+            line-height: 1;
         }
     }
 }
 
 // ----------------------------------------
-// FOOTER Y ACCIONES
+// FOOTER (Ajustado para visibilidad completa)
 // ----------------------------------------
 .card-footer {
     display: flex;
-    flex-wrap: wrap; /* Permite que los elementos pasen a la siguiente línea si es necesario */
     justify-content: space-between;
-    align-items: center; 
-    font-size: 0.8rem;
-    padding-top: 15px; 
-    border-top: 1px solid rgba($GRAY-COLD, 0.3); 
+    align-items: center;
+    // 🚨 Ajuste: Mayor espacio superior y gap para que no se aprieten
+    padding-top: 20px; 
+    border-top: 1px solid transparent;
+    margin-top: auto;
+    gap: 10px; 
     
     .ultima-actualizacion {
+        font-size: 0.65rem; 
+        color: $GRAY-COLD;
         display: flex;
         align-items: center;
-        margin-bottom: 10px; /* Espacio para separar la línea de tiempo de la fila de botones */
-        width: 100%; /* Ocupa todo el ancho */
+        gap: 4px;
+        flex-shrink: 0; 
         
-        /* Estilos de la hora (HACE 2 minutos) */
-        .time-ago { 
-            font-weight: 600; 
-            margin-left: 5px; 
-            margin-right: auto; /* Mueve el tiempo al inicio y el resto se justifica a la derecha */
-        }
+        i { font-size: 0.8rem; }
+        .time-ago { font-weight: 600; }
     }
 
     .acciones {
         display: flex;
         align-items: center;
-        gap: 8px; 
-        margin-left: auto; /* Justifica este grupo a la derecha */
-    }
-    
-    .btn-accion {
-        border: none;
-        padding: 5px;
-        transition: color 0.2s;
+        gap: 5px; 
+        flex-shrink: 0; 
         
-        // Botón Pausar/Activar
-        &.btn-toggle-state { 
-            border-radius: 8px; 
-            padding: 8px 15px;
-            font-weight: 600;
+        // Role Badge
+        .role-badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-right: 4px;
+            white-space: nowrap;
             
-            &.btn-pause { /* Estado Pausado */
-                background-color: $WARNING-COLOR; 
-                color: $DARK-TEXT; 
-            }
-            &:not(.btn-pause) { /* Estado Activar/Play */
-                background-color: $SUCCESS-COLOR;
-                color: $LIGHT-TEXT;
-            }
+            &.badge-owner { background-color: rgba($SUCCESS-COLOR, 0.1); color: $SUCCESS-COLOR; border: 1px solid rgba($SUCCESS-COLOR, 0.2); }
+            &.badge-collab { background-color: rgba($PRIMARY-PURPLE, 0.1); color: $PRIMARY-PURPLE; border: 1px solid rgba($PRIMARY-PURPLE, 0.2); }
+            &.badge-guest { background-color: rgba($GRAY-COLD, 0.1); color: $GRAY-COLD; border: 1px solid rgba($GRAY-COLD, 0.2); }
         }
-        
-        // Botones Icono (Share, Edit, Delete)
-        &.btn-share, &.btn-detalle, &.btn-eliminar {
+
+        .btn-accion {
             width: 32px; height: 32px;
-            border-radius: 6px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
             display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+            flex-shrink: 0;
             
-            i { font-size: 0.9rem; }
-        }
-    }
-}
-
-// ----------------------------------------
-// TEMAS (APLICACIÓN DE COLORES DE PALETA)
-// ----------------------------------------
-
-// MODO OSCURO (DARK MODE)
-.theme-dark {
-    background-color: $SUBTLE-BG-DARK; /* Fondo de Tarjeta */
-    color: $LIGHT-TEXT;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-
-    .proyecto-titulo, .proyecto-descripcion { color: $LIGHT-TEXT; }
-    .proyecto-tipo-estado { color: rgba($LIGHT-TEXT, 0.7); }
-    
-    // Métricas en Dark Mode
-    .metrica {
-        background-color: $BLUE-MIDNIGHT; /* Fondo de métrica más oscuro que la tarjeta */
-        border-color: rgba($LIGHT-TEXT, 0.1); 
-        
-        .count { color: $LIGHT-TEXT; } /* Valor numérico claro */
-    }
-    
-    // Botones de Icono
-    .btn-accion {
-        color: $LIGHT-TEXT;
-        
-        &.btn-share, &.btn-detalle, &.btn-eliminar {
-            background-color: rgba($LIGHT-TEXT, 0.1); /* Fondo sutil */
-            color: $GRAY-COLD; 
+            &:hover { transform: translateY(-2px); }
             
-            &:hover {
-                background-color: rgba($PRIMARY-PURPLE, 0.3);
-                color: $LIGHT-TEXT;
+            &.btn-toggle-state {
+                color: $LIGHT-TEXT; 
+                &.btn-pause { background-color: rgba($WARNING-COLOR, 0.1); color: $WARNING-COLOR; }
+                &:not(.btn-pause) { background-color: rgba($SUCCESS-COLOR, 0.1); color: $SUCCESS-COLOR; }
             }
+            
+            &.btn-share { color: $PRIMARY-PURPLE; background-color: rgba($PRIMARY-PURPLE, 0.1); }
+            &.btn-detalle { color: $GRAY-COLD; background-color: rgba($GRAY-COLD, 0.1); &:hover { color: $PRIMARY-PURPLE; } }
+            &.btn-eliminar { color: $DANGER-COLOR; background-color: rgba($DANGER-COLOR, 0.1); }
         }
     }
 }
 
-// MODO CLARO
+// ----------------------------------------
+// TEMAS
+// ----------------------------------------
 .theme-light {
-    background-color: $SUBTLE-BG-CARD;
-    color: $DARK-TEXT;
+    background-color: $WHITE-SOFT;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    
+    .proyecto-titulo { color: $DARK-TEXT; }
+    .proyecto-descripcion { color: $DARK-TEXT; }
+    .card-footer { border-top-color: $LIGHT-BORDER; }
     
     .metrica {
-        background-color: $WHITE-SOFT;
-        border-color: rgba($DARK-TEXT, 0.1);
-        color: $DARK-TEXT;
-        
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
         .count { color: $DARK-TEXT; }
     }
     
-    // Botones de Icono
-    .btn-accion {
-        color: $DARK-TEXT;
-        
-        &.btn-share, &.btn-detalle, &.btn-eliminar {
-            background-color: rgba($DARK-TEXT, 0.05);
-            color: $DARK-TEXT;
-            
-            &:hover {
-                background-color: rgba($PRIMARY-PURPLE, 0.1);
-                color: $PRIMARY-PURPLE;
-            }
-        }
+    &:hover { box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+}
+
+.theme-dark {
+    background-color: $SUBTLE-BG-DARK;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-color: rgba($WHITE, 0.05);
+    
+    .proyecto-titulo { color: $LIGHT-TEXT; }
+    .proyecto-descripcion { color: $GRAY-COLD; }
+    .card-footer { border-top-color: rgba($WHITE, 0.1); }
+    
+    .metrica {
+        background-color: $BLUE-MIDNIGHT;
+        border-color: rgba($WHITE, 0.05);
+        .count { color: $LIGHT-TEXT; }
     }
+    
+    &:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5); background-color: lighten($SUBTLE-BG-DARK, 2%); }
 }
 </style>

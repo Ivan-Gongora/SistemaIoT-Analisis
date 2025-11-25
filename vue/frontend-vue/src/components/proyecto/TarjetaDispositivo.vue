@@ -13,10 +13,15 @@
                 
                 <div class="name-type-group">
                     <span class="dispositivo-tipo-badge">{{ dispositivo.tipo || 'General' }}</span>
-                    <router-link :to="{ name: 'DetalleDispositivo', params: { id: dispositivo.id } }" style="text-decoration: none; color: inherit;">
-                    <h3 class="dispositivo-nombre">{{ dispositivo.nombre || 'Cargando...' }}</h3>
-                    
+                    <!-- Enlace al detalle del dispositivo (si existe la ruta) -->
+                    <router-link 
+                        v-if="dispositivo.id"
+                        :to="{ name: 'DetalleDispositivo', params: { id: dispositivo.id } }" 
+                        class="link-detalle"
+                    >
+                        <h3 class="dispositivo-nombre">{{ dispositivo.nombre || 'Cargando...' }}</h3>
                     </router-link>
+                    <h3 v-else class="dispositivo-nombre">{{ dispositivo.nombre || 'Cargando...' }}</h3>
                 </div>
             </div>
             
@@ -45,22 +50,27 @@
                         type="checkbox" 
                         :checked="dispositivo.habilitado" 
                         @change="toggleHabilitado(dispositivo.id)"
+                        :disabled="!puedeEditar" 
                     >
-                    <span class="slider round"></span>
+                    <span class="slider round" :class="{ 'disabled-slider': !puedeEditar }"></span>
                 </label>
                 <span class="label-text">{{ dispositivo.habilitado ? 'Habilitado' : 'Deshabilitado' }}</span>
             </div>
 
             <div class="acciones">
-                            <template v-if="dispositivo.mi_rol === 'Propietario' || dispositivo.mi_rol === 'Colaborador'">
-
-                <button @click="editDevice()" class="btn-accion" title="Editar Dispositivo">
-                    <i class="bi bi-pencil"></i>
-                </button>
-                <button @click="deleteDevice(dispositivo.id)" class="btn-accion btn-delete" title="Eliminar Dispositivo">
-                    <i class="bi bi-trash"></i>
-                </button>
-                            </template>
+                <!-- 🚨 RENDERIZADO CONDICIONAL BASADO EN ROL -->
+                <template v-if="puedeEditar">
+                    <button @click="editDevice()" class="btn-accion" title="Editar Dispositivo">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button @click="deleteDevice(dispositivo.id)" class="btn-accion btn-delete" title="Eliminar Dispositivo">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </template>
+                <!-- Opcional: Icono de candado si no tiene permisos -->
+                <span v-else class="rol-badge-small" title="Modo Solo Lectura">
+                   <i class="bi bi-eye"></i>
+                </span>
             </div>
         </div>
     </div>
@@ -72,7 +82,6 @@ export default {
     props: {
         dispositivo: {
             type: Object,
-            // 🚨 Protección crítica: valor por defecto completo para evitar 'undefined'
             default: () => ({ 
                 id: null,
                 nombre: 'Error de Carga', 
@@ -82,21 +91,32 @@ export default {
                 porcentaje_carga: 0,
                 ultima_lectura: 'N/A',
                 latitud: null,
-                longitud: null
+                longitud: null,
+                mi_rol: '' // Fallback si viene en el objeto
             })
         },
         isDark: {
             type: Boolean,
             required: true
+        },
+        miRol: {
+            type: String,
+            default: ''
         }
     },
     emits: ['edit-device', 'open-delete-modal', 'toggle-habilitado'],
+    computed: {
+        puedeEditar() {
+            // Priorizamos el prop miRol, si no existe usamos el del objeto dispositivo
+            const rol = (this.miRol || this.dispositivo.mi_rol || '').toUpperCase();
+            return rol === 'PROPIETARIO' ||rol=== 'Propietario'|| rol=== 'Colaborador'  || rol === 'COLABORADOR' || rol === 'EDITOR';
+        }
+    },
     methods: {
-        // Método para emitir el evento de cambio de estado
         toggleHabilitado(id) {
+            if (!this.puedeEditar) return; // Doble protección
             this.$emit('toggle-habilitado', id, !this.dispositivo.habilitado); 
         },
-        // Lógica para seleccionar el icono de batería
         getBatteryIcon(percentage) {
             if (percentage >= 90) return 'bi bi-battery-full';
             if (percentage >= 60) return 'bi bi-battery-three-quarters';
@@ -104,27 +124,18 @@ export default {
             if (percentage > 10) return 'bi bi-battery-quarter';
             return 'bi bi-battery';
         },
-        // Lógica para seleccionar el icono de dispositivo
         getDeviceIcon(type) {
-             if (!type || typeof type !== 'string') {
-                  return 'bi bi-tablet';
-             }
+             if (!type || typeof type !== 'string') return 'bi bi-tablet';
              switch (type.toLowerCase()) {
-                case 'sensor':
-                    return 'bi bi-thermometer-sun'; 
-                case 'actuador':
-                case 'controlador': 
-                    return 'bi bi-lightbulb';
-                case 'microcontrolador':
-                    return 'bi bi-cpu';
-                case 'raspberry pi':
-                    return 'bi bi-motherboard-fill';
-                default:
-                    return 'bi bi-tablet';
+                case 'sensor': return 'bi bi-thermometer-sun'; 
+                case 'actuador': return 'bi bi-lightbulb';
+                case 'controlador': return 'bi bi-sliders'; 
+                case 'microcontrolador': return 'bi bi-cpu';
+                case 'raspberry pi': return 'bi bi-motherboard-fill';
+                default: return 'bi bi-tablet';
             }
         },
         editDevice() {
-            // Emite el objeto completo del dispositivo para la edición en el modal
             this.$emit('edit-device', this.dispositivo);
         },
         deleteDevice(id) {
@@ -135,20 +146,6 @@ export default {
 </script>
 
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES DE LA PALETA
-// ----------------------------------------
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $BLUE-MIDNIGHT: #1A1A2E; 
-// $DARK-TEXT: #333333;
-// $LIGHT-TEXT: #E4E6EB;
-// $SUBTLE-BG-DARK: #2B2B40; 
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-// $WHITE-SOFT: #F7F9FC;
-// $GRAY-COLD: #99A2AD;
-// $DANGER-COLOR: #e74c3c;
-// $INACTIVE-COLOR: #7F8C8D; // Color para el switch inactivo
 
 
 // ----------------------------------------
@@ -171,14 +168,13 @@ export default {
     }
     
     &.disabled {
-        opacity: 0.6;
-        pointer-events: none;
-        filter: grayscale(10%);
+        opacity: 0.8; 
+        /* filter: grayscale(10%); Quitamos grayscale total para que se vea mejor */
     }
 
     .tarjeta-header {
         display: flex;
-        align-items: flex-start; /* Alinea los ítems a la parte superior */
+        align-items: flex-start; 
         justify-content: space-between;
         margin-bottom: 5px; 
         
@@ -194,20 +190,26 @@ export default {
                 margin-top: 5px; 
             }
             
-            // 🚨 SOLUCIÓN: Agrupación y Columna
             .name-type-group {
                 display: flex;
-                flex-direction: column; /* Apila el tipo sobre el nombre */
+                flex-direction: column; 
                 align-items: flex-start;
                 margin-top: 0;
             }
         }
         
+        .link-detalle {
+            text-decoration: none;
+            color: inherit;
+            &:hover .dispositivo-nombre { color: $PRIMARY-PURPLE; }
+        }
+
         .dispositivo-nombre {
             font-size: 1.15rem;
             font-weight: 600;
             margin: 0;
             line-height: 1.2;
+            transition: color 0.2s;
         }
         .wifi-signal {
             font-size: 1.2rem;
@@ -216,9 +218,8 @@ export default {
         }
     }
     
-    // 🚨 ESTILOS DEL BADGE (Ajustado a posición estática/flujo normal)
     .dispositivo-tipo-badge {
-        position: static; /* 🚨 CRÍTICO: Elimina el absolute position */
+        position: static; 
         background-color: rgba($PRIMARY-PURPLE, 0.1); 
         color: $PRIMARY-PURPLE;
         padding: 2px 8px;
@@ -227,19 +228,21 @@ export default {
         font-weight: 600;
         text-transform: uppercase;
         border: 1px solid rgba($PRIMARY-PURPLE, 0.3);
-        
-        margin-bottom: 4px; /* Pequeño espacio para separarlo del nombre */
-        order: -1; /* 🚨 Fuerza que el badge aparezca antes del nombre dentro del grupo */
+        margin-bottom: 4px; 
+        order: -1; 
     }
     
-    // 🚨 MEJORA DE ESPACIADO: Descripción
     .dispositivo-descripcion {
         font-size: 0.9rem;
         color: $GRAY-COLD;
         margin-bottom: 10px; 
-        margin-top: 5px; /* Ajuste para el nuevo flujo */
+        margin-top: 5px; 
         height: 38px;
         overflow: hidden;
+        display: -webkit-box;
+        line-clamp: 2;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
     }
 
     .dispositivo-info {
@@ -269,7 +272,7 @@ export default {
 }
 
 // ----------------------------------------
-// FOOTER Y ACCIONES (Mantenidos)
+// FOOTER Y ACCIONES
 // ----------------------------------------
 .tarjeta-footer {
     display: flex;
@@ -289,6 +292,14 @@ export default {
 .acciones {
     display: flex;
     gap: 8px;
+    align-items: center;
+    
+    .rol-badge-small {
+        color: $GRAY-COLD;
+        font-size: 1.2rem;
+        opacity: 0.5;
+    }
+
     .btn-accion {
         padding: 6px; 
         border-radius: 50%;
@@ -302,6 +313,7 @@ export default {
         &.btn-delete:hover { color: $DANGER-COLOR; }
     }
 }
+
 // ----------------------------------------
 // ESTILOS DEL SWITCH (Toggle)
 // ----------------------------------------
@@ -319,6 +331,11 @@ export default {
         background-color: $INACTIVE-COLOR; 
         transition: 0.4s;
         border-radius: 20px;
+        
+        &.disabled-slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     }
     .slider:before {
         position: absolute; content: ""; height: 16px; width: 16px;

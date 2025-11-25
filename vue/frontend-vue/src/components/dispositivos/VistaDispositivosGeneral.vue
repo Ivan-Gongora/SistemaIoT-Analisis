@@ -41,6 +41,7 @@
         </div>
         
         <div v-else>
+          <!-- Iteramos sobre los grupos (Proyectos) -->
           <div v-for="(dispositivos_lista, nombre_proyecto) in dispositivosAgrupados" :key="nombre_proyecto" class="proyecto-seccion">
             
             <div class="seccion-header">
@@ -54,14 +55,13 @@
             </div>
 
             <div class="dispositivos-grid">
+                    <!-- 🚨 Pasamos el rol inyectado al componente hijo -->
                     <TarjetaDispositivo 
                         v-for="dispositivo in dispositivos_lista"
                         :key="dispositivo.id"
                         :dispositivo="dispositivo"
                         :is-dark="isDark"
-                        
-                        :mi-rol="dispositivo.mi_rol || 'Observador'"
-
+                        :mi-rol="dispositivo.mi_rol" 
                         @open-delete-modal="openDeleteDeviceModal"
                         @edit-device="openEditDeviceModal"
                     />
@@ -113,10 +113,11 @@
 <script>
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
-import TarjetaDispositivo from '../proyecto/TarjetaDispositivo.vue'; // 🚨 Ruta corregida
+import TarjetaDispositivo from '../proyecto/TarjetaDispositivo.vue'; 
 import ModalEditarDispositivo from '../dispositivos/ModalEditarDispositivo.vue'; 
 import ModalEliminarDispositivo from '../dispositivos/ModalEliminarDispositivo.vue'; 
-import debounce from 'lodash/debounce'; // 🚨 Asegúrate de tener lodash instalado
+import debounce from 'lodash/debounce';
+
 
 export default {
     name: 'VistaDispositivosGeneral',
@@ -129,15 +130,16 @@ export default {
     },
     data() {
         return {
+            isDark: false,
             isSidebarOpen: true,
             loading: true,
             error: null,
             dispositivos: [],
             
-            // 🚨 Estados de Paginación y Búsqueda
+            // Estados de Paginación y Búsqueda
             searchQuery: '',
             page: 1,
-            limit: 8, // Mostrar 12 por página
+            limit: 8, 
             totalPages: 1,
             totalRecords: 0,
 
@@ -152,7 +154,7 @@ export default {
         };
     },
     computed: {
-        // 🚨 Función crítica para agrupar dispositivos por proyecto
+        // Agrupar dispositivos por nombre de proyecto para la vista
         dispositivosAgrupados() {
             return this.dispositivos.reduce((groups, dispositivo) => {
                 const projectName = dispositivo.nombre_proyecto || 'Sin Proyecto';
@@ -165,15 +167,14 @@ export default {
         }
     },
     created() {
-        // Crear la función debounced
         this.debouncedSearch = debounce(() => {
             this.page = 1;
             this.cargarDispositivosGlobales();
         }, 500);
     },
     mounted() {
-        this.cargarDispositivosGlobales();
         this.detectarTemaSistema();
+        this.cargarDispositivosGlobales();
         if (window.matchMedia) {
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.handleThemeChange);
         }
@@ -184,21 +185,17 @@ export default {
         }
     },
     methods: {
-// Evento de Input
         onSearchInput() {
             this.debouncedSearch();
         },
 
-        // Cambio de Página
         changePage(newPage) {
             if (newPage >= 1 && newPage <= this.totalPages) {
                 this.page = newPage;
                 this.cargarDispositivosGlobales();
-                // Scroll suave al inicio de la lista
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         },
-
 
         // -----------------------------------------------------
         // CONSUMO DE API: Cargar Dispositivos Globales
@@ -210,7 +207,6 @@ export default {
             
             if (!token) { this.$router.push('/'); return; }
 
-            // 🚨 Construcción de URL con parámetros
             const params = new URLSearchParams({
                 page: this.page,
                 limit: this.limit,
@@ -227,19 +223,24 @@ export default {
                     throw new Error(err.detail || 'Fallo al obtener dispositivos.'); 
                 }
                 
-                // 🚨 Manejo de respuesta paginada { data, total, total_pages }
                 const respuesta = await response.json();
                 
                 const devData = respuesta.data || [];
+                const rolesContext = respuesta.roles_context || {}; 
                 this.totalRecords = respuesta.total || 0;
                 this.totalPages = respuesta.total_pages || 1;
 
-                // Mapeo de datos
+                // Mapeo de datos e inyección de Rol
                 this.dispositivos = devData.map(d => ({
                     ...d,
                     habilitado: d.habilitado === 1 || d.habilitado === true, 
                     estado_texto: (d.habilitado === 1 || d.habilitado === true) ? 'Habilitado' : 'Deshabilitado',
-                    // Datos visuales simulados o formateados
+                    
+                    // 🚨 INYECCIÓN DE ROL (Side-Loading)
+                    // Buscamos el rol usando el ID del proyecto
+                    mi_rol: rolesContext[d.proyecto_id] || 'Observador',
+
+                    // Datos visuales simulados
                     ultima_lectura: 'Reciente', 
                     porcentaje_carga: Math.floor(Math.random() * 100),
                 }));
@@ -252,7 +253,9 @@ export default {
             }
         },
 
-        // Edición
+        // -----------------------------------------------------
+        // MANEJO DE MODALES
+        // -----------------------------------------------------
         openEditDeviceModal(dispositivo) {
             this.dispositivoSeleccionado = dispositivo;
             this.mostrarModalEditarDispositivo = true;
@@ -266,23 +269,19 @@ export default {
             this.cargarDispositivosGlobales();
         },
         
-        // VistaDispositivosGeneral.vue <script> (dentro de methods)
-
         openDeleteDeviceModal(dispositivoId, nombre) {
             this.dispositivoEliminarId = dispositivoId;
             this.dispositivoEliminarNombre = nombre;
             this.mostrarModalEliminarDispositivo = true;
             
-            // 🚨 CRÍTICO: Encontrar el objeto completo del dispositivo en el array local
+            // Encontrar datos extra para la eliminación
             const dispositivo = this.dispositivos.find(d => d.id === dispositivoId);
             
             if (dispositivo) {
-                // Guardamos el proyectoId y Propietario ID en variables de estado
                 this.dispositivoEliminarProyectoId = dispositivo.proyecto_id; 
                 this.dispositivoEliminarPropietarioId = dispositivo.propietario_id;
             } else {
-                // Si por alguna razón el dispositivo no está en el array local (nunca debería pasar)
-                this.error = "Error interno: No se encontraron datos del dispositivo para eliminar.";
+                this.error = "Error interno: No se encontraron datos del dispositivo.";
                 this.mostrarModalEliminarDispositivo = false;
             }
         },
@@ -291,46 +290,20 @@ export default {
             this.mostrarModalEliminarDispositivo = false;
             this.dispositivoEliminarId = null;
             this.dispositivoEliminarNombre = null;
-            
-            // 🚨 LIMPIEZA ADICIONAL: Limpiar las variables de seguridad después de cerrar
             this.dispositivoEliminarProyectoId = null; 
             this.dispositivoEliminarPropietarioId = null;
         },
-        // 🚨 CRÍTICO: FUNCIÓN DE ELIMINACIÓN SEGURA CON JWT
-        // DetalleProyecto.vue (dentro de methods)
-
-        // VistaDispositivosGeneral.vue (dentro de methods)
-        // VistaDispositivosGeneral.vue <script> (dentro de methods)
-
-        confirmarEliminacion(dispositivoId, nombre) {
-            this.dispositivoEliminarId = dispositivoId;
-            this.dispositivoEliminarNombre = nombre;
-            this.mostrarModalEliminarDispositivo = true;
-            
-            // 🚨 CRÍTICO: Encontrar el objeto completo del dispositivo en el array local
-            const dispositivo = this.dispositivos.find(d => d.id === dispositivoId);
-            
-            if (dispositivo) {
-                // Guardamos el proyectoId y Propietario ID en variables de estado
-                this.dispositivoEliminarProyectoId = dispositivo.proyecto_id; 
-                this.dispositivoEliminarPropietarioId = dispositivo.propietario_id;
-            } else {
-                // Fallback si el dispositivo no se encuentra
-                this.error = "Error interno: No se encontraron datos del dispositivo para eliminar.";
-                this.mostrarModalEliminarDispositivo = false;
-            }
-        },
-        // VistaDispositivosGeneral.vue <script> (dentro de methods)
 
         async eliminarDispositivo(dispositivoId) {
             this.loading = true; 
             const token = localStorage.getItem('accessToken');
             const proyectoId = this.dispositivoEliminarProyectoId; 
             const usuarioId = this.dispositivoEliminarPropietarioId; 
-            const url = `${API_BASE_URL}/api/dispositivos/?id=${dispositivoId}&proyecto_id=${proyectoId}`;
+            
+            const url = `${API_BASE_URL}/api/dispositivos/?id=${dispositivoId}&proyecto_id=${proyectoId}&usuario_id=${usuarioId}`;
 
             if (!token || !usuarioId || !proyectoId) {
-                alert("Error: Faltan datos de seguridad (token/proyecto/dueño).");
+                alert("Error: Faltan datos de seguridad para eliminar.");
                 this.closeDeleteDeviceModal();
                 this.loading = false;
                 return;
@@ -340,17 +313,13 @@ export default {
                 const response = await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                 const data = await response.json();
 
-                if (!response.ok || data.status === 'error') {
-                    if (response.status === 403) {
-                        throw new Error(data.detail || "No tiene permisos para eliminar este dispositivo.");
-                    }
-                    throw new Error(data.message || 'Fallo al eliminar el dispositivo.');
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || 'Fallo al eliminar.');
                 }
 
-                // 4. ÉXITO
-                alert(data.message || 'Dispositivo eliminado exitosamente.');
+                alert('Dispositivo eliminado exitosamente.');
                 this.closeDeleteDeviceModal();
-                this.cargarDispositivosGlobales(); // Recargar la lista para actualizar la vista
+                this.cargarDispositivosGlobales(); 
             } catch (err) {
                 alert('Error al eliminar: ' + err.message);
                 this.closeDeleteDeviceModal();
@@ -358,8 +327,9 @@ export default {
                 this.loading = false;
             }
         },
+
         // -----------------------------------------------------
-        // LÓGICA DEL LAYOUT (Heredada)
+        // LÓGICA DE LAYOUT
         // -----------------------------------------------------
         toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
         handleThemeChange(event) { this.isDark = event.matches; },
@@ -383,37 +353,8 @@ export default {
 }
 
 // ----------------------------------------
-// ESTILOS DE AGRUPACIÓN
+// ESTILOS DE AGRUPACIÓN Y HEADER
 // ----------------------------------------
-
-.proyecto-seccion {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-}
-
-.seccion-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    padding-bottom: 5px;
-    border-bottom: 1px solid; /* Se define el color en el tema */
-    
-    h3 {
-        font-size: 1.6rem;
-        font-weight: 600;
-        i { margin-right: 10px; }
-    }
-    .propietario-tag {
-        font-size: 0.85rem;
-    }
-}
-
-.dispositivos-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-}
 .controls-header {
     display: flex;
     justify-content: space-between;
@@ -428,7 +369,7 @@ export default {
         color: $GRAY-COLD;
         .count-badge {
             background-color: $PRIMARY-PURPLE;
-            color: white;
+            color: $WHITE;
             padding: 2px 10px;
             border-radius: 12px;
             font-weight: 700;
@@ -438,10 +379,11 @@ export default {
 
     .search-box {
         position: relative;
+        
         .search-input {
             padding: 10px 15px 10px 40px;
             border-radius: 20px;
-            border: 1px solid #ddd;
+            border: 1px solid transparent; // Se define en temas
             width: 250px;
             font-size: 0.95rem;
             transition: all 0.3s;
@@ -463,7 +405,9 @@ export default {
     }
 }
 
+// ----------------------------------------
 // SECCIÓN DE PROYECTO
+// ----------------------------------------
 .proyecto-seccion {
     margin-bottom: 40px;
     
@@ -472,7 +416,7 @@ export default {
         align-items: center;
         margin-bottom: 20px;
         padding-bottom: 10px;
-        border-bottom: 1px solid rgba(150,150,150, 0.2);
+        border-bottom: 1px solid transparent; // Se define en temas
         
         h3 {
             font-size: 1.3rem;
@@ -495,7 +439,7 @@ export default {
             margin-left: auto;
             font-size: 0.8rem;
             color: $GRAY-COLD;
-            background: rgba(150,150,150, 0.1);
+            background: rgba($GRAY-COLD, 0.1);
             padding: 4px 10px;
             border-radius: 20px;
         }
@@ -508,7 +452,9 @@ export default {
     gap: 25px;
 }
 
-// 🚨 PAGINACIÓN
+// ----------------------------------------
+// PAGINACIÓN
+// ----------------------------------------
 .pagination-controls {
     display: flex;
     justify-content: center;
@@ -529,7 +475,7 @@ export default {
         
         &:hover:not(:disabled) {
             background-color: $PRIMARY-PURPLE;
-            color: white;
+            color: $WHITE;
         }
         &:disabled {
             border-color: $GRAY-COLD;
@@ -540,31 +486,52 @@ export default {
     }
     .page-info { font-weight: 600; color: $GRAY-COLD; }
 }
+
 // ----------------------------------------
-// TEMAS (Para hacer visible el contenido)
+// TEMAS (INTEGRACIÓN CON VARIABLES)
 // ----------------------------------------
 .theme-light {
     background-color: $WHITE-SOFT;
-    .seccion-header { color: $DARK-TEXT; border-bottom-color: #ddd; }
+    
+    .seccion-header { 
+        color: $DARK-TEXT; 
+        border-bottom-color: $LIGHT-BORDER; 
+    }
+    
     .search-input {
-        background-color: $SUBTLE-BG-LIGHT;
-        border-color: #ddd;
+        background-color: $WHITE; // Input blanco en tema claro
+        border-color: $LIGHT-BORDER;
         color: $DARK-TEXT;
     }
-    .alert-info, .alert-empty { color: $GRAY-COLD; text-align: center; margin-top: 30px;}
+    
+    .alert-info, .alert-empty, .alert-error { 
+        color: $GRAY-COLD; 
+        text-align: center; 
+        margin-top: 30px;
+    }
 }
 
 .theme-dark {
     background-color: $DARK-BG-CONTRAST; 
     color: $LIGHT-TEXT;
     
-    .seccion-header { color: $LIGHT-TEXT; border-bottom-color: rgba($LIGHT-TEXT, 0.1); }
+    .seccion-header { 
+        color: $LIGHT-TEXT; 
+        border-bottom-color: $DARK-BORDER; 
+    }
+    
     .propietario-tag { color: $GRAY-COLD; }
+    
     .search-input {
-        background-color: $BLUE-MIDNIGHT;
-        border-color: rgba(255,255,255,0.1);
+        background-color: $DARK-INPUT-BG;
+        border-color: $DARK-BORDER;
         color: $LIGHT-TEXT;
     }
-    .alert-info, .alert-empty { color: $LIGHT-TEXT; text-align: center; margin-top: 30px;}
+    
+    .alert-info, .alert-empty, .alert-error { 
+        color: $LIGHT-TEXT; 
+        text-align: center; 
+        margin-top: 30px;
+    }
 }
 </style>

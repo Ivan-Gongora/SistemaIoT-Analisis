@@ -16,13 +16,13 @@
       <div class="proyecto-detalle-contenido">
         
         <div class="summary-cards-container">
-                        <TarjetaResumen 
-                            v-for="card in summaryCards" 
-                            :key="card.title" 
-                            :card="card"
-                            :is-dark="isDark"
-                        />
-                    </div>
+            <TarjetaResumen 
+                v-for="card in summaryCards" 
+                :key="card.title" 
+                :card="card"
+                :is-dark="isDark"
+            />
+        </div>
                     
         <div class="dispositivos-header">
             <h2>Dispositivos del Proyecto ({{ totalRecords }})</h2>
@@ -39,8 +39,9 @@
                     >
                 </div>
 
+                
                 <button 
-                    v-if="miRol === 'Propietario' || miRol === 'Colaborador'"
+                    v-if="esPropietarioOColaborador"
                     @click="openAddDeviceModal" 
                     class="btn-add-device"
                 > 
@@ -53,6 +54,7 @@
         <div v-else-if="dispositivos.length === 0" class="alert-empty-data">No se encontraron dispositivos.</div>
         
         <div v-else class="dispositivos-grid">
+            <!-- Pasamos miRol al hijo para que controle sus propios botones (editar/eliminar) -->
             <TarjetaDispositivo 
                 v-for="dispositivo in dispositivos"
                 :key="dispositivo.id" 
@@ -72,34 +74,33 @@
             <button class="btn-page" :disabled="page === totalPages" @click="changePage(page + 1)">
                 <i class="bi bi-chevron-right"></i>
             </button>
-        
-                    
-                </div>
-            </div>
         </div>
-        
-        <ModalCrearDispositivo 
-            v-if="mostrarModalCrearDispositivo"
-            :proyecto-id="proyectoId"
-            @dispositivo-creado="handleDeviceCreated"
-            @close="closeAddDeviceModal"
-        />
+      </div>
+    </div>
+    
+    <!-- MODALES -->
+    <ModalCrearDispositivo 
+        v-if="mostrarModalCrearDispositivo"
+        :proyecto-id="proyectoId"
+        @dispositivo-creado="handleDeviceCreated"
+        @close="closeAddDeviceModal"
+    />
 
-        <ModalEditarDispositivo 
-            v-if="mostrarModalEditarDispositivo"
-            :dispositivo-actual="dispositivoSeleccionado"
-            @dispositivo-actualizado="handleDeviceUpdated"
-            @close="closeEditDeviceModal"
-        />
-        <ModalEliminarDispositivo 
-          v-if="mostrarModalEliminarDispositivo"
-          :dispositivo-id="dispositivoEliminarId"
-          :dispositivo-nombre="dispositivoEliminarNombre"
-          :proyecto-id="proyectoId"
-          @cancelar="closeDeleteDeviceModal"
-          @confirmar="eliminarDispositivo(dispositivoEliminarId, proyectoId)"
-      />
-        </div>
+    <ModalEditarDispositivo 
+        v-if="mostrarModalEditarDispositivo"
+        :dispositivo-actual="dispositivoSeleccionado"
+        @dispositivo-actualizado="handleDeviceUpdated"
+        @close="closeEditDeviceModal"
+    />
+    <ModalEliminarDispositivo 
+        v-if="mostrarModalEliminarDispositivo"
+        :dispositivo-id="dispositivoEliminarId"
+        :dispositivo-nombre="dispositivoEliminarNombre"
+        :proyecto-id="proyectoId"
+        @cancelar="closeDeleteDeviceModal"
+        @confirmar="eliminarDispositivo(dispositivoEliminarId, proyectoId)"
+    />
+  </div>
 </template>
 
 <script>
@@ -113,8 +114,10 @@ import TarjetaDispositivo from './TarjetaDispositivo.vue';
 import ModalCrearDispositivo from '../dispositivos/ModalCrearDispositivo.vue'; 
 import ModalEditarDispositivo from '../dispositivos/ModalEditarDispositivo.vue'; 
 import ModalEliminarDispositivo from '../dispositivos/ModalEliminarDispositivo.vue'; 
-import debounce from 'lodash/debounce'; // npm install lodash
-// const API_BASE_URL = 'http://127.0.0.1:8001';
+import debounce from 'lodash/debounce'; 
+
+// Configuración API
+// const API_BASE_URL = 'http://127.0.0.1:8001'; // Ajusta según tu entorno
 
 export default {
     name: 'DetalleProyecto',
@@ -134,8 +137,9 @@ export default {
             loading: true,
             error: null,
             proyecto: {},
-            miRol: '',
+            miRol: '', // Se llenará dinámicamente desde el backend
             dispositivos: [],
+            
             // Estados de Modales
             mostrarModalCrearDispositivo: false,
             mostrarModalEditarDispositivo: false, 
@@ -144,49 +148,45 @@ export default {
             mostrarModalEliminarDispositivo: false,
             dispositivoEliminarId: null,
             dispositivoEliminarNombre: null,
-            
 
             searchQuery: '',
             page: 1,
-            limit: 6, // 6 tarjetas se ven bien
+            limit: 6,
             totalPages: 1,
             totalRecords: 0,
-            loading: true,
             resumenMetricas: {},
         };
     },
     computed: {
         proyectoId() { return this.$route.params.id; },
+        // Computed para simplificar la lógica del template
+        esPropietarioOColaborador() {
+            // Normalizamos a mayúsculas por si acaso el backend envía variantes
+            const rol = (this.miRol || '').toUpperCase();
+            return rol === 'PROPIETARIO'|| rol === 'Propietario '|| rol === 'Colaborador' || rol === 'COLABORADOR' || rol === 'EDITOR'; // Ajusta según tus roles reales
+        },
         summaryCards() {
-            // Lógica de tarjetas
             const dispositivos = this.dispositivos || [];
             const activos = dispositivos.filter(d => d.habilitado).length;
-            const total = dispositivos.length;
-            // const resumen = this.resumenMetricas;
+            const total = this.totalRecords || 0;
+            
             return [
                 { title: 'Total Dispositivos', value: total, icon: 'bi bi-tablet-fill', color: '#1ABC9C' },
                 { title: 'Dispositivos Activos', value: activos, icon: 'bi bi-wifi', color: '#8A2BE2' },
-                { title: 'Batería Promedio', value: 'N/A', icon: 'bi bi-battery-half', color: '#FFC107', isPlaceholder: true },
-                { title: 'Última Actividad', value: 'Hace 2 min', icon: 'bi bi-activity', color: '#FF5733', isPlaceholder: true },
-                // { title: 'Total Dispositivos', value: resumen.total_dispositivos || 0, icon: 'bi bi-tablet-fill', color: '#1ABC9C' },
-                // { title: 'Sensores Conectados', value: resumen.total_sensores || 0, icon: 'bi bi-broadcast-pin', color: '#8A2BE2' },
-                // // 🚨 Última Conexión basada en la DB
-                // { title: 'Última Conexión', value: this.formatRelativeTime(resumen.ultima_conexion), icon: 'bi bi-clock-history', color: '#FFC107' },
-                // // 🚨 Campos Activos
-                // { title: 'Campos de Medición', value: resumen.campos_activos || 0, icon: 'bi bi-speedometer', color: '#FF5733' },
+                { title: 'Rol Actual', value: this.miRol || 'Cargando...', icon: 'bi bi-person-badge', color: '#FFC107' },
+                { title: 'Última Actividad', value: 'Hace un momento', icon: 'bi bi-activity', color: '#FF5733', isPlaceholder: true },
             ];
         }
-    },created() {
-        // Debounce para la búsqueda
+    },
+    created() {
         this.debouncedSearch = debounce(() => {
             this.page = 1;
             this.cargarDispositivos();
         }, 500);
     },
     mounted() {
-        this.cargarDatosIniciales();
-        this.cargarDetallesProyecto();
         this.detectarTemaSistema();
+        this.cargarDatosIniciales(); 
         if (window.matchMedia) {
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.handleThemeChange);
         }
@@ -198,7 +198,7 @@ export default {
     },
     methods: {
         // -----------------------------------------------------
-        // LÓGICA DE CARGA Y RECARGA
+        // LÓGICA DE CARGA DE DATOS (API)
         // -----------------------------------------------------
          async cargarDatosIniciales() {
             await this.cargarProyecto();
@@ -209,23 +209,24 @@ export default {
             const token = localStorage.getItem('accessToken');
             if (!token) return;
             try {
-                const response = await fetch(`${API_BASE_URL}/api/proyectos/${this.$route.params.id}`, {
+                const response = await fetch(`${API_BASE_URL}/api/proyectos/${this.proyectoId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.ok) {
                     const data = await response.json();
                     this.proyecto = data;
-                    this.miRol = data.mi_rol; // Guardamos el rol
+                    // Intentamos obtener el rol del endpoint de proyecto si existe,
+                    // si no, el endpoint de dispositivos lo sobreescribirá.
+                    if (data.mi_rol) this.miRol = data.mi_rol;
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Error cargando proyecto:", e); }
         },
 
-        // 2. Cargar Dispositivos (Paginados)
+        //MÉTODO  PARA LEER EL NUEVO FORMATO JSON
         async cargarDispositivos() {
             this.loading = true;
             const token = localStorage.getItem('accessToken');
             
-            // Construir URL con params
             const params = new URLSearchParams({
                 page: this.page,
                 limit: this.limit,
@@ -233,25 +234,43 @@ export default {
             });
             
             try {
-                const response = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.$route.params.id}?${params}`, {
+                // Endpoint actualizado: /api/dispositivos/proyecto/{id}
+                const response = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.proyectoId}?${params}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
                 if (response.ok) {
-                    const data = await response.json();
-                    // La API ahora devuelve { data, total, total_pages }
-                    this.dispositivos = data.data.map(d => ({
+                    const data = await response.json(); // Estructura: { data: [], total: #, roles_context: {} }
+                    
+                    // 1. EXTRAER EL ROL DEL CONTEXTO (Side-Loading)
+                    if (data.roles_context && data.roles_context[this.proyectoId]) {
+                        this.miRol = data.roles_context[this.proyectoId];
+                        console.log("Rol obtenido del contexto de dispositivos:", this.miRol);
+                    }
+
+                    // 2. MAPEAR DISPOSITIVOS
+                    // Usamos data.data porque el array viene dentro de la propiedad 'data'
+                    this.dispositivos = (data.data || []).map(d => ({
                         ...d,
                         habilitado: d.habilitado === 1 || d.habilitado === true,
-                        // ... (otros mapeos) ...
+                        // Inyectamos el rol en el objeto por si el hijo lo necesita localmente
+                        mi_rol: this.miRol,
+                        // Datos simulados para vista
+                        ultima_lectura: 'Sincronizando...',
+                        porcentaje_carga: Math.floor(Math.random() * 100),
                     }));
+
+                    // 3. ACTUALIZAR PAGINACIÓN
                     this.totalRecords = data.total;
                     this.totalPages = data.total_pages;
+
                 } else {
                     this.dispositivos = [];
+                    this.totalRecords = 0;
                 }
             } catch (e) {
-                console.error(e);
+                console.error("Error cargando dispositivos:", e);
+                this.error = "Error de conexión al cargar dispositivos.";
             } finally {
                 this.loading = false;
             }
@@ -265,69 +284,6 @@ export default {
                 this.cargarDispositivos();
             }
         },
-        async cargarDetallesProyecto() {
-            this.loading = true;
-            this.error = null;
-            const token = localStorage.getItem('accessToken');
-            
-            if (!token || !this.proyectoId) { this.$router.push('/'); return; }
-
-            try {
-                // 1. Obtener detalles del proyecto
-                const projResponse = await fetch(`${API_BASE_URL}/api/proyectos/${this.proyectoId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!projResponse.ok) { throw new Error('No se encontró el proyecto.'); }
-                this.proyecto = await projResponse.json();
-                
-                // 2. Obtener lista de dispositivos
-                const devResponse = await fetch(`${API_BASE_URL}/api/dispositivos/proyecto/${this.proyectoId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const devData = await devResponse.json();
-
-                if (devResponse.status !== 200 && devResponse.status !== 404) { 
-                     throw new Error('Fallo al obtener dispositivos.');
-                } else if (devResponse.ok) {
-                    //comprobar como llegan los datos
-                    console.log('Dispositivos cargados:', devData);
-
-                    
-                    this.dispositivos = devData.map(d => ({
-                        ...d,
-                        habilitado: d.habilitado === 1 || d.habilitado === true, 
-                        estado_texto: (d.habilitado === 1 || d.habilitado === true) ? 'Habilitado' : 'Deshabilitado',
-                        ultima_lectura: '23.1°C / 78%',
-                        porcentaje_carga: Math.floor(Math.random() * 100),
-                    }));
-                    console.log('Dispositivos procesados:', this.dispositivos);
-                } else {
-                    this.dispositivos = [];
-                }
-                //  const idsDispositivos = this.dispositivos.map(dispositivo => dispositivo.id);
-                // // idsDispositivos ahora será un array de números, por ejemplo: [1, 2]
-
-                // console.log('IDs de dispositivos para resumen:', idsDispositivos); // Mostrará [1, 2]
-
-                // // 3. Verificar si hay IDs antes de hacer la llamada
-                // if (idsDispositivos.length > 0) {
-                //     const primerId = idsDispositivos[0]; // Obtener el primer ID del array (ej: 1)
-                    
-                //     // 4. Usar el primer ID en la llamada a la API
-                //     const token = localStorage.getItem('accessToken');
-                //     const resumenResponse = await fetch(`${API_BASE_URL}/api/dispositivos/${primerId}/resumen`, { 
-                //         headers: { 'Authorization': `Bearer ${token}` } 
-                //     });
-                    
-                //     // ... procesar resumenResponse ...
-                    
-                // } else {
-                //     console.log('No hay IDs de dispositivos para obtener resumen.');
-                //     // Manejar el caso donde no hay dispositivos
-                // }
-
-            } catch (err) {
-                this.error = err.message || 'Error al cargar los detalles del proyecto.';
-            } finally {
-                this.loading = false;
-            }
-        },
         
         // -----------------------------------------------------
         // MANEJO DE EVENTOS DE DISPOSITIVOS
@@ -338,7 +294,7 @@ export default {
         closeAddDeviceModal() { this.mostrarModalCrearDispositivo = false; },
         handleDeviceCreated() {
             this.closeAddDeviceModal();
-            this.cargarDatosIniciales(); 
+            this.cargarDispositivos(); // Recargamos la lista
         },
         
         // Edición
@@ -352,16 +308,10 @@ export default {
         },
         handleDeviceUpdated() {
             this.closeEditDeviceModal();
-            this.cargarDatosIniciales();
+            this.cargarDispositivos();
         },
 
-        // Toggle Habilitado (Simulación)
-        handleToggleHabilitado(dispositivoId, nuevoEstado) {
-            console.log(`Simulando cambio de estado para ID ${dispositivoId} a ${nuevoEstado}`);
-            this.cargarDatosIniciales(); 
-        },
-        
-        // 🚨 FUNCIÓN LLAMADA POR EL BOTÓN DE LA PAPELERA (TarjetaDispositivo)
+        // Eliminar (Pop-up confirmación)
         openDeleteDeviceModal(dispositivoId, nombre) {
             this.dispositivoEliminarId = dispositivoId;
             this.dispositivoEliminarNombre = nombre;
@@ -374,22 +324,19 @@ export default {
             this.dispositivoEliminarNombre = null;
         },
         
-        // 🚨 CRÍTICO: FUNCIÓN DE ELIMINACIÓN SEGURA CON JWT
-        // DetalleProyecto.vue (dentro de methods)
-
         async eliminarDispositivo(dispositivoId, proyectoId) {
             this.loading = true; 
             const token = localStorage.getItem('accessToken');
-            
-            // 🚨 CRÍTICO: Obtenemos el ID del dueño del proyecto (usado para la validación de propiedad en el backend)
             const usuarioId = this.proyecto.usuario_id; 
 
-            // 🚨 CONSTRUCCIÓN DE LA URL CORREGIDA: Usa el prefijo /api y las variables dinámicas
+            // Construcción URL (Si tu backend usa Query Params para DELETE)
+            // Si migraste a REST estándar sería: `${API_BASE_URL}/api/dispositivos/${dispositivoId}`
             const url = `${API_BASE_URL}/api/dispositivos/?id=${dispositivoId}&proyecto_id=${proyectoId}&usuario_id=${usuarioId}`; 
 
-            if (!token || !usuarioId) {
-                alert("Error: Sesión no válida o faltan datos de usuario.");
+            if (!token) {
+                alert("Sesión no válida.");
                 this.closeDeleteDeviceModal();
+                this.loading = false;
                 return;
             }
 
@@ -401,23 +348,16 @@ export default {
 
                 const data = await response.json();
 
-                // Manejo de errores de la API (403, 500)
-                if (!response.ok || data.status === 'error') {
-                    if (response.status === 403) {
-                        throw new Error(data.detail || "No tiene permisos para eliminar este dispositivo.");
-                    }
-                    throw new Error(data.message || 'Fallo al eliminar el dispositivo.');
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || 'Fallo al eliminar.');
                 }
 
-                // 4. ÉXITO
-                alert(data.message || 'Dispositivo eliminado exitosamente.');
+                alert('Dispositivo eliminado exitosamente.');
                 this.closeDeleteDeviceModal();
-                
-                // Recargar la lista para que la tarjeta desaparezca
-                this.cargarDatosIniciales(); 
+                this.cargarDispositivos(); 
 
             } catch (err) {
-                alert('Error al eliminar: ' + err.message);
+                alert('Error: ' + err.message);
                 this.closeDeleteDeviceModal();
             } finally {
                 this.loading = false;
@@ -437,58 +377,51 @@ export default {
                 this.isDark = false;
             }
         },
-        // 🚨 CRÍTICO: Función de formateo de tiempo (simulada)
-    formatRelativeTime(isoString) {
-        if (!isoString) return 'N/A';
-        // En una app real, usarías librerías como Moment.js o Day.js
-        // Por ahora:
-        return 'Hace X minutos';
-    }
-        
+        formatRelativeTime(isoString) {
+            if (!isoString) return 'N/A';
+            return 'Hace un momento'; 
+        }
     }
 };
 </script>
 
-
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES DE LA PALETA "IoT SPECTRUM"
-// ----------------------------------------
-// $WIDTH-SIDEBAR: 280px; 
-// $WIDTH-CLOSED: 80px; 
-// $WHITE-SOFT: #F7F9FC; 
-// $BLUE-MIDNIGHT: #1A1A2E;
-// $DARK-BG-CONTRAST: #1E1E30; // Fondo general oscuro
-// $DARK-TEXT: #333333;
-// $LIGHT-TEXT: #E4E6EB;
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $MAINTENANCE-COLOR: #FFC107; // Amarillo
-// $GRAY-COLD: #99A2AD;
-// $SUBTLE-BG-LIGHT: #FFFFFF; // <-- DEBE ESTAR AQUÍ
 
-
-// ----------------------------------------
-// LAYOUT PRINCIPAL Y CONTENIDO
-// ----------------------------------------
-// .plataforma-layout {
-//     display: flex;
-//     min-height: 100vh;
-//     transition: background-color 0.3s;
-// }
-
-// .plataforma-contenido {
-//     position: relative; /* Necesario para que el contenido de los hijos se posicione */
-//     margin-left: $WIDTH-CLOSED;
-//     flex-grow: 1;
-//     padding: 0; 
-//     transition: margin-left 0.3s ease-in-out;
-    
-//     &.shifted {
-//         margin-left: $WIDTH-SIDEBAR;
-//     }
-// }
-
+.btn-add-device {
+    background-color: #1abc9c;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.3s;
+}
+.btn-add-device:hover {
+    background-color: #16a085;
+}
+/* Estilos adicionales para paginación y layout */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 1rem;
+    gap: 1rem;
+}
+.btn-page {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+}
+.btn-page:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 .proyecto-detalle-contenido {
     padding: 20px 40px 40px 40px; 
 }

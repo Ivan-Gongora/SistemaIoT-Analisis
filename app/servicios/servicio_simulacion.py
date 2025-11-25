@@ -56,28 +56,28 @@ def get_db_connection():
 
 # ... (otras importaciones y tu función get_db_connection_local o get_db_connection) ...
 
-async def obtener_proyectos() -> List[Dict[str, Any]]:
-    conn = None
-    try:
-        conn = get_db_connection() # O get_db_connection()
-        cursor = conn.cursor()
-        # ¡CAMBIO AQUÍ! ASEGÚRATE DE INCLUIR 'descripcion' Y 'usuario_id'
-        cursor.execute("SELECT id, nombre, descripcion, usuario_id FROM proyectos") # <--- ¡CAMBIO CLAVE!
-        proyectos = cursor.fetchall()
+# async def obtener_proyectos() -> List[Dict[str, Any]]:
+#     conn = None
+#     try:
+#         conn = get_db_connection() # O get_db_connection()
+#         cursor = conn.cursor()
+#         # ¡CAMBIO AQUÍ! ASEGÚRATE DE INCLUIR 'descripcion' Y 'usuario_id'
+#         cursor.execute("SELECT id, nombre, descripcion, usuario_id FROM proyectos") # <--- ¡CAMBIO CLAVE!
+#         proyectos = cursor.fetchall()
 
-        # --- AÑADE ESTAS LÍNEAS TEMPORALMENTE PARA DEBUGGING ---
-        print("Resultado de la consulta obtener_proyectos:", proyectos)
-        if proyectos:
-            print("Keys (nombres de columnas) en el primer proyecto:", proyectos[0].keys())
-        # --- FIN DE LÍNEAS PARA DEBUGGING ---
+#         # --- AÑADE ESTAS LÍNEAS TEMPORALMENTE PARA DEBUGGING ---
+#         print("Resultado de la consulta obtener_proyectos:", proyectos)
+#         if proyectos:
+#             print("Keys (nombres de columnas) en el primer proyecto:", proyectos[0].keys())
+#         # --- FIN DE LÍNEAS PARA DEBUGGING ---
 
-        return proyectos
-    except Exception as e:
-        print(f"Error al obtener proyectos: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
+#         return proyectos
+#     except Exception as e:
+#         print(f"Error al obtener proyectos: {e}")
+#         return []
+#     finally:
+#         if conn:
+#             conn.close()
 
 
 
@@ -121,12 +121,16 @@ async def obtener_proyectos_por_usuario(usuario_id: int) -> List[Dict[str, Any]]
             conn.close()
             
 
-async def obtener_proyectos_con_rol_db(
+
+# -----------------------------------------------------------------------------
+# 1. OBTENER PROYECTOS PAGINADOS (Sin cálculo de rol)
+# -----------------------------------------------------------------------------
+async def obtener_proyectos_paginados_db(
     usuario_id: int, 
     page: int = 1, 
     limit: int = 10, 
     search: str = ""
-) -> Dict[str, Any]: # 👈 Ahora devuelve un Dict con 'data' y 'total'
+) -> Dict[str, Any]:
     
     offset = (page - 1) * limit
     search_pattern = f"%{search}%"
@@ -136,39 +140,33 @@ async def obtener_proyectos_con_rol_db(
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 1. Consulta Base (CTE o Subquery para simplificar el conteo y filtrado)
-        # Nota: Usamos SQL dinámico simple para el WHERE
-        where_clause = "WHERE (p.nombre LIKE %s OR p.descripcion LIKE %s)"
-        
-        sql_base = f"""
-        (
-            SELECT p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id, 'Propietario' as mi_rol
-            FROM proyectos p
-            {where_clause} AND p.usuario_id = %s
-        )
-        UNION
-        (
-            SELECT p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id, r.nombre_rol as mi_rol
-            FROM proyectos p
-            JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
-            JOIN roles r ON pu.rol_id = r.id
-            {where_clause} AND pu.usuario_id = %s AND p.usuario_id != %s
-        )
+        # Consulta Base: Obtener proyectos donde soy Dueño O Invitado
+        # Usamos DISTINCT p.id para evitar duplicados si hubiera multiples roles (aunque la lógica lo evita)
+        sql_base = """
+        FROM proyectos p
+        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+        WHERE (p.usuario_id = %s OR pu.usuario_id = %s)
+          AND (p.nombre LIKE %s OR p.descripcion LIKE %s)
         """
         
-        # Parámetros para la consulta de datos (search, search, uid, search, search, uid, uid)
-        params_data = [search_pattern, search_pattern, usuario_id, search_pattern, search_pattern, usuario_id, usuario_id]
+        # Params: [user, user, search, search]
+        params_count = [usuario_id, usuario_id, search_pattern, search_pattern]
         
-        # 2. Obtener Total de Registros (Para el paginador)
-        count_sql = f"SELECT COUNT(*) as total FROM ({sql_base}) as subquery"
-        cursor.execute(count_sql, params_data)
+        # 1. Obtener Total
+        cursor.execute(f"SELECT COUNT(DISTINCT p.id) as total {sql_base}", params_count)
         total_records = cursor.fetchone()['total']
         
-        # 3. Obtener Datos Paginados
-        final_sql = f"{sql_base} ORDER BY id DESC LIMIT %s OFFSET %s"
-        params_data.extend([limit, offset]) # Añadir limit y offset al final
+        # 2. Obtener Datos
+        sql_final = f"""
+        SELECT DISTINCT p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id
+        {sql_base}
+        ORDER BY p.id DESC
+        LIMIT %s OFFSET %s
+        """
         
-        cursor.execute(final_sql, params_data)
+        params_data = params_count + [limit, offset]
+        
+        cursor.execute(sql_final, params_data)
         proyectos = cursor.fetchall()
         
         return {
@@ -176,55 +174,56 @@ async def obtener_proyectos_con_rol_db(
             "total": total_records,
             "page": page,
             "limit": limit,
-            "total_pages": (total_records + limit - 1) // limit
+            "total_pages": (total_records + limit - 1) // limit if limit > 0 else 0
         }
         
     except Exception as e:
-        print(f"Error DB: {e}")
+        print(f"Error DB Proyectos Paginados: {e}")
         raise e
     finally:
-        if conn: conn.close()          
+        if conn: conn.close()        
             
 
-async def obtener_proyecto_con_rol_por_id_db(proyecto_id: int, usuario_id: int) -> Dict[str, Any]:
+# -----------------------------------------------------------------------------
+# 2. OBTENER UN PROYECTO POR ID (Datos crudos)
+# -----------------------------------------------------------------------------
+async def obtener_proyecto_por_id_db(proyecto_id: int) -> Dict[str, Any]:
     """
-    Obtiene un proyecto específico y calcula el rol del usuario solicitante.
+    Obtiene los datos básicos de un proyecto.
+    La validación de permisos y rol se hace en el endpoint.
     """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # Esta consulta determina tu rol en un solo paso
-        sql = """
-        SELECT 
-            p.id, p.nombre, p.descripcion, p.tipo_industria, p.usuario_id,
-            CASE 
-                WHEN p.usuario_id = %s THEN 'Propietario' -- Si soy el creador
-                ELSE r.nombre_rol                         -- Si soy invitado, toma el nombre del rol
-            END as mi_rol
-        FROM proyectos p
-        LEFT JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id AND pu.usuario_id = %s
-        LEFT JOIN roles r ON pu.rol_id = r.id
-        WHERE p.id = %s
-        """
-        
-        cursor.execute(sql, (usuario_id, usuario_id, proyecto_id))
+        sql = "SELECT id, nombre, descripcion, tipo_industria, usuario_id FROM proyectos WHERE id = %s"
+        cursor.execute(sql, (proyecto_id,))
         proyecto = cursor.fetchone()
         
-        # Validación de seguridad: Si no devuelve nada o mi_rol es NULL, no tengo acceso
-        if not proyecto or not proyecto['mi_rol']:
-            return None
-            
         return proyecto
 
     except Exception as e:
-        print(f"Error DB obtener_proyecto_con_rol: {e}")
+        print(f"Error DB obtener_proyecto: {e}")
         raise e
     finally:
         if conn: conn.close()
 
-# # --- Funcion para la consulta GET para proyectos por id
+# -----------------------------------------------------------------------------
+# 3. OBTENER TODOS (ADMIN - Mantenido igual pero limpio)
+# -----------------------------------------------------------------------------
+async def obtener_proyectos() -> List[Dict[str, Any]]:
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT id, nombre, descripcion, usuario_id FROM proyectos")
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"Error al obtener proyectos admin: {e}")
+        return []
+    finally:
+        if conn: conn.close()# # --- Funcion para la consulta GET para proyectos por id
 # async def obtener_proyecto_por_id(proyecto_id: int) -> Dict[str, Any] | None:
 #     conn = None
 #     try:

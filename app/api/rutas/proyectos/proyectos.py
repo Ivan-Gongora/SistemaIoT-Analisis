@@ -16,7 +16,7 @@ from app.api.modelos.simulacion import DatosSimulacion
 from app.servicios import servicio_simulacion as servicio_simulacion
 
 from app.servicios.servicio_actividad import registrar_actividad_db
-from app.servicios.servicio_permisos import verificar_permiso_proyecto
+from app.servicios.servicio_permisos import verificar_permiso_proyecto,obtener_rol_usuario_en_proyecto
 
 
 
@@ -29,61 +29,85 @@ router_proyecto = APIRouter()
 # 1. ENDPOINTS DE FASTAPI (PROTEGIDOS POR JWT)
 # ------------------------------------------------------------------
 
-# Endpoint para administradores (obtener todos los proyectos)
-@router_proyecto.get("/proyectos", response_model=List[Proyecto])
-async def get_proyectos(
-    current_user_id: int = Depends(get_current_user_id)
-):
+# -----------------------------------------------------------
+# 1. ADMIN: TODOS LOS PROYECTOS
+# -----------------------------------------------------------
+@router_proyecto.get("/proyectos")
+async def get_proyectos(current_user_id: int = Depends(get_current_user_id)):
+    # Aquí podrías agregar validación de rol de SuperAdmin si fuera necesario
     proyectos = await servicio_simulacion.obtener_proyectos()
     return proyectos
 
-
-@router_proyecto.get("/proyectos/usuario/{usuario_id}", response_model=RespuestaPaginadaProyectos) # 👈 Cambio de modelo
+# -----------------------------------------------------------
+# 2. LISTA DE PROYECTOS DEL USUARIO (Paginado + Contexto Roles)
+# -----------------------------------------------------------
+@router_proyecto.get("/proyectos/usuario/{usuario_id}")
 async def obtener_proyectos_por_usuario(
     usuario_id: int,
-    # 🚨 NUEVOS PARÁMETROS (Query Params)
-    page: int = Query(1, ge=1, description="Número de página"),
-    limit: int = Query(10, ge=1, le=100, description="Registros por página"),
-    search: str = Query("", description="Término de búsqueda (nombre o descripción)"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    search: str = Query(""),
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # Validación básica de identidad
     if usuario_id != current_user_id:
-        raise HTTPException(status_code=403, detail="No autorizado para ver estos proyectos.")
+        raise HTTPException(status_code=403, detail="No autorizado.")
         
     try:
-        # 🚨 LLAMADA A LA FUNCIÓN ACTUALIZADA CON PARÁMETROS
-        resultados_paginados = await servicio_simulacion.obtener_proyectos_con_rol_db(
-            usuario_id=usuario_id,
-            page=page,
-            limit=limit,
-            search=search
+        # 1. Obtener datos crudos
+        resultado = await servicio_simulacion.obtener_proyectos_paginados_db(
+            usuario_id, page, limit, search
         )
         
-        # La función de servicio ya devuelve el diccionario con la estructura correcta:
-        # { "data": [...], "total": 50, "page": 1, ... }
-        return resultados_paginados
+        proyectos = resultado["data"]
+        
+        # 2. Construir Contexto de Roles (Side-Loading)
+        # Iteramos sobre los proyectos para saber qué rol tengo en cada uno
+        mapa_roles = {}
+        for proj in proyectos:
+            # Usamos la función centralizada
+            rol = await obtener_rol_usuario_en_proyecto(current_user_id, proj["id"])
+            mapa_roles[proj["id"]] = rol
+            
+        # 3. Inyectar contexto
+        resultado["roles_context"] = mapa_roles
+        
+        return resultado
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
 
-
-@router_proyecto.get("/proyectos/{id}", response_model=ProyectoConRol) # 👈 Usamos el modelo con Rol
+# -----------------------------------------------------------
+# 3. DETALLE DE UN PROYECTO (Rol Inyectado en Objeto)
+# -----------------------------------------------------------
+@router_proyecto.get("/proyectos/{id}")
 async def obtener_proyecto_por_id(
     id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
     try:
-        # Usamos la nueva función que calcula el rol
-        proyecto = await  servicio_simulacion.obtener_proyecto_con_rol_por_id_db(id, current_user_id)
+        # 1. Verificar Permiso Básico (Firewall)
+        # 'VER_DATOS_IOT' es un ejemplo, usa el permiso base para "ver" el proyecto
+        await verificar_permiso_proyecto(current_user_id, id, 'VER_DATOS_IOT')
+        
+        # 2. Obtener Datos Crudos
+        proyecto = await servicio_simulacion.obtener_proyecto_por_id_db(id)
         
         if not proyecto:
-            raise HTTPException(status_code=404, detail="Proyecto no encontrado o no tienes acceso.")
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
             
+        # 3. Obtener Rol Específico
+        rol = await obtener_rol_usuario_en_proyecto(current_user_id, id)
+        
+        # 4. Inyectar Rol directamente (para el header del detalle)
+        proyecto["mi_rol"] = rol
+        
         return proyecto
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener proyecto: {str(e)}")
+
 
 # Crear Proyectos (PROTEGIDO)
 @router_proyecto.post("/crear_proyecto/")

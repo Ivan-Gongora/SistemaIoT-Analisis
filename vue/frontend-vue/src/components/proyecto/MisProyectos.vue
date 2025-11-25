@@ -1,16 +1,22 @@
 <template>
-  <div class="mis-proyectos">
+  <div class="plataforma-layout" :class="{ 'theme-dark': isDark, 'theme-light': !isDark }">
     
-   <div class="proyectos-header-view">       
+    <div class="mis-proyectos-contenido">
+      
+      <!-- HEADER DE LA VISTA -->
+      <div class="proyectos-header-view">       
+        
+        <!-- GRUPO IZQUIERDO: Contador -->
         <div class="left-group">
              <span class="count-total">
-                <strong>{{ totalRecords }}</strong> ecosistemas
+                <strong>{{ totalRecords }}</strong> proyectos encontrados
             </span>
         </div>
 
+        <!-- GRUPO DERECHO: Buscador y Botón -->
         <div class="actions-group">
             
-            <div class="search-box" :class="{ 'theme-dark': isDark }">
+            <div class="search-box">
                 <i class="bi bi-search search-icon"></i>
                 <input 
                     type="text" 
@@ -26,32 +32,33 @@
             </button>
             
         </div>
-    </div>
+      </div>
 
-    <div v-if="error" class="alerta-error">{{ error }}</div>
-    
-    <div v-else-if="loading" class="alerta-loading">
+      <!-- ESTADOS DE CARGA -->
+      <div v-if="error" class="alerta-error">{{ error }}</div>
+      
+      <div v-else-if="loading" class="alerta-loading">
         <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando proyectos...
-    </div>
-    
-    <div v-else-if="proyectos.length > 0" class="proyectos-grid">
+      </div>
+      
+      <!-- GRID DE PROYECTOS -->
+      <div v-else-if="proyectos.length > 0" class="proyectos-grid">
         <TarjetaProyecto 
             v-for="proyecto in proyectos" 
             :key="proyecto.id" 
             :proyecto="proyecto" 
             :is-dark="isDark"
-            @toggle-activo="simularCambioEstado"
-            @open-share-modal="openShareModal" 
-            @edit-project="handleEditClick" 
-            @confirmar-eliminar="confirmarEliminacion"
+            @editar="handleEditClick" 
+            @eliminar="confirmarEliminacion"
         />
-    </div>
-    
-    <div v-else class="alerta-vacio">
-        <i class="bi bi-box-fill"></i> No se encontraron proyectos que coincidan con la búsqueda.
-    </div>
+      </div>
+      
+      <div v-else class="alerta-vacio">
+        <i class="bi bi-box-fill"></i> No se encontraron proyectos.
+      </div>
 
-    <div class="pagination-controls" v-if="totalPages > 1">
+      <!-- PAGINACIÓN -->
+      <div class="pagination-controls" v-if="totalPages > 1">
         <button 
             class="btn-page" 
             :disabled="page === 1" 
@@ -69,24 +76,50 @@
         >
             Siguiente <i class="bi bi-chevron-right"></i>
         </button>
+      </div>
+
     </div>
 
-    <ModalEliminarProyecto v-if="mostrarModalEliminar" @cancelar="cerrarModalEliminar" @confirmar="eliminar(proyectoEliminarId)" :proyecto-id="proyectoEliminarId" :usuario-id="id_usuario" />
-    <ModalEditarProyecto v-if="mostrarModalEditar" :proyecto="proyectoSeleccionado" @updated="handleProyectoActualizado" @close="closeEditModal" />
-    <ModalProyecto v-if="mostrarModalCrear" @creado="handleProyectoCreado" @cerrar="cerrarModalCrear" />
-    <ModalCompartir v-if="mostrarModalCompartir" :proyecto-id="proyectoCompartirId" @cerrar="closeShareModal" />
+    <!-- MODALES -->
+    <ModalEliminarProyecto 
+        v-if="mostrarModalEliminar" 
+        :proyecto-id="proyectoEliminarId" 
+        :usuario-id="id_usuario"
+        @cancelar="cerrarModalEliminar" 
+        @confirmar="eliminar(proyectoEliminarId)" 
+         
+    />
+    
+    <ModalEditarProyecto 
+        v-if="mostrarModalEditar" 
+        :proyecto="proyectoSeleccionado" 
+        @updated="handleProyectoActualizado" 
+        @close="closeEditModal" 
+    />
+    
+    <ModalProyecto 
+        v-if="mostrarModalCrear" 
+        @creado="handleProyectoCreado" 
+        @cerrar="cerrarModalCrear" 
+    />
+    
+    <ModalCompartir 
+        v-if="mostrarModalCompartir" 
+        :proyecto-id="proyectoCompartirId" 
+        @cerrar="closeShareModal" 
+    />
     
   </div>
 </template>
 
 <script>
-// Ajusta las rutas a tus modales
 import TarjetaProyecto from './TarjetaProyecto.vue';
 import ModalProyecto from './CrearProyecto.vue';
 import ModalEliminarProyecto from './ModalEliminar.vue';
 import ModalCompartir from './ModalCompartir.vue'; 
 import ModalEditarProyecto from './ModalEditarProyecto.vue'; 
 import debounce from 'lodash/debounce'; 
+
 // const API_BASE_URL = 'http://127.0.0.1:8001'; 
 
 export default {
@@ -112,10 +145,10 @@ export default {
             mostrarModalCompartir: false, proyectoCompartirId: null,
             mostrarModalEditar: false, proyectoSeleccionado: null,
 
-            // 🚨 NUEVO: Estado de Paginación y Búsqueda
+            // Paginación y Búsqueda
             searchQuery: '',
             page: 1,
-            limit: 9, // 9 tarjetas se ven bien en grid de 3 columnas
+            limit: 9, 
             totalPages: 1,
             totalRecords: 0
         };
@@ -123,44 +156,49 @@ export default {
     mounted() {
         this.cargarProyectos();
     },
-    // Crear la función debounced una sola vez
     created() {
         this.debouncedSearch = debounce(() => {
-            this.page = 1; // Reset a página 1 al buscar
+            this.page = 1; 
             this.cargarProyectos();
         }, 500);
     },
     methods: {
         // -----------------------------------------------------------------------
-        // LÓGICA DE CARGA Y FETCH
+        // LÓGICA DE CARGA (SIDE-LOADING IMPLEMENTADO)
         // -----------------------------------------------------------------------
-        // 🚨 Método input que llama al debounce
         onSearchInput() {
             this.debouncedSearch();
         },
 
-        // 🚨 Método de Paginación
         changePage(newPage) {
             if (newPage >= 1 && newPage <= this.totalPages) {
                 this.page = newPage;
                 this.cargarProyectos();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         },
 
         async cargarProyectos() {
             this.loading = true;
             this.error = null;
-            const resultado = JSON.parse(localStorage.getItem('resultado'));
+            
+            // Obtener usuario del localStorage
+            const resultado = JSON.parse(localStorage.getItem('resultado')); 
             const token = localStorage.getItem('accessToken'); 
 
-            if (!resultado || !token) {
+            if (!token) {
                 this.$router.push('/');
                 return;
             }
-
-            this.id_usuario = resultado.usuario.id;
             
-            // 🚨 Construir URL con Query Params
+            // Fallback seguro si resultado es null
+            this.id_usuario = resultado?.usuario?.id;
+            if (!this.id_usuario) {
+                 this.error = "Error de sesión. Usuario no identificado.";
+                 this.loading = false;
+                 return;
+            }
+            
             const params = new URLSearchParams({
                 page: this.page,
                 limit: this.limit,
@@ -184,22 +222,21 @@ export default {
                     throw new Error(errorData.detail || 'Error al obtener proyectos.');
                 }
 
-                // 🚨 La API ahora devuelve un objeto paginado { data, total, total_pages }
-                const respuesta = await response.json();
+                const respuesta = await response.json(); 
                 
-                // Procesar los datos
-                this.proyectos = respuesta.data.map(p => ({
+                const dataProyectos = respuesta.data || [];
+                const rolesContext = respuesta.roles_context || {};
+
+                // Mapear proyectos e inyectar Rol
+                this.proyectos = dataProyectos.map(p => ({
                     ...p,
-                    activo: p.activo !== undefined ? p.activo : true, 
-                    estado_texto: p.activo ? 'Activo' : 'Pausado',
+                    mi_rol: rolesContext[p.id] || 'OBSERVADOR', 
                     tipo_industria: p.tipo_industria || 'General',
-                    icono: p.tipo_industria === 'Agricola' ? 'bi bi-tree-fill' : 'bi bi-house-fill',
-                    dispositivos_count: 0, sensores_count: 0, ultima_actualizacion: 'Hace 2 min',
+                    activo: true, 
                 }));
 
-                // 🚨 Actualizar estado de paginación
-                this.totalRecords = respuesta.total;
-                this.totalPages = respuesta.total_pages;
+                this.totalRecords = respuesta.total || 0;
+                this.totalPages = respuesta.total_pages || 1;
 
             } catch (error) {
                 this.error = 'Error: ' + error.message;
@@ -210,22 +247,33 @@ export default {
         },
         
         // -----------------------------------------------------------------------
-        // LÓGICA DE ELIMINACIÓN (JWT SEGURO)
+        // ACCIONES
         // -----------------------------------------------------------------------
-        confirmarEliminacion(id) {
-            this.proyectoEliminarId = id;
+        
+        confirmarEliminacion(proyecto) {
+            if (proyecto.mi_rol !== 'PROPIETARIO') {
+                alert("No tienes permisos para eliminar este proyecto.");
+                return;
+            }
+            this.proyectoEliminarId = proyecto.id;
             this.mostrarModalEliminar = true;
+        },
+
+        handleEditClick(proyecto) {
+            if (proyecto.mi_rol !== 'PROPIETARIO') {
+                alert("No tienes permisos para editar este proyecto.");
+                return;
+            }
+            this.proyectoSeleccionado = proyecto;
+            this.mostrarModalEditar = true;
         },
 
         async eliminar(id) {
             const token = localStorage.getItem('accessToken');
-            const usuarioId = this.id_usuario; 
             const url = `${API_BASE_URL}/api/proyectos/${id}`; 
 
-            if (!token || !usuarioId) {
+            if (!token) {
                 alert("Error: Sesión no válida.");
-                this.cerrarModalEliminar();
-                this.$router.push('/');
                 return;
             }
 
@@ -237,17 +285,12 @@ export default {
 
                 const data = await response.json();
 
-                if (!response.ok || data.status === 'error') {
-                    if (response.status === 403) {
-                         throw new Error(data.detail || "No tiene permisos para eliminar este proyecto.");
-                    }
-                    throw new Error(data.message || 'Error al eliminar el proyecto.');
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || 'Error al eliminar.');
                 }
 
-                alert(data.message || 'Proyecto eliminado exitosamente.');
-                
-                // Actualizar el array local
-                this.proyectos = this.proyectos.filter(p => p.id !== id);
+                alert('Proyecto eliminado exitosamente.');
+                this.cargarProyectos(); 
                 this.cerrarModalEliminar();
 
             } catch (err) {
@@ -257,7 +300,7 @@ export default {
         }, 
 
         // -----------------------------------------------------------------------
-        // LÓGICA DE CREACIÓN Y EDICIÓN
+        // EVENTOS DE MODALES
         // -----------------------------------------------------------------------
         
         handleProyectoCreado() {
@@ -270,196 +313,147 @@ export default {
             this.cargarProyectos(); 
         },
 
-        // -----------------------------------------------------------------------
-        // MANEJO DE MODALES AUXILIARES
-        // -----------------------------------------------------------------------
-        
-        // Cierre de Modales
         cerrarModalCrear() { this.mostrarModalCrear = false; },
         closeEditModal() { this.mostrarModalEditar = false; this.proyectoSeleccionado = null; },
         closeShareModal() { this.mostrarModalCompartir = false; this.proyectoCompartirId = null; },
         cerrarModalEliminar() { this.mostrarModalEliminar = false; this.proyectoEliminarId = null; },
 
-        // Apertura de Modales
-        handleEditClick(proyecto) {
-            this.proyectoSeleccionado = proyecto;
-            this.mostrarModalEditar = true;
-        },
         openShareModal(proyectoId) {
             this.proyectoCompartirId = proyectoId;
             this.mostrarModalCompartir = true;
-        },
-        
-        // Simulación
-        simularCambioEstado(proyectoId) {
-            const index = this.proyectos.findIndex(p => p.id === proyectoId);
-            if (index !== -1) {
-                const nuevoEstado = !this.proyectos[index].activo;
-                this.proyectos[index].activo = nuevoEstado;
-                this.proyectos[index].estado_texto = nuevoEstado ? 'Activo' : 'Pausado';
-            }
-        },
+        }
     }
 };
 </script>
 
-
 <style scoped lang="scss">
-.mis-proyectos {
-    padding-top: 20px;
-    /* Espaciado lateral consistente */
-    padding-left: 40px;
-    padding-right: 40px;
-    padding-bottom: 40px;
-}
+
 
 // ----------------------------------------
-// BARRA DE HERRAMIENTAS UNIFICADA
+// CONTENEDOR PRINCIPAL
 // ----------------------------------------
-.toolbar-header {
+.mis-proyectos-contenido {
+    max-width: 1650px;      
+    margin: 0 auto;         
+    padding: 30px 40px;     
+    width: 100%;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    gap: 20px;
-    flex-wrap: wrap; // Para móviles
-
-    .left-group {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        flex-grow: 1;
-    }
-    
-    .count-total {
-        font-size: 0.95rem;
-        color: $GRAY-COLD;
-        white-space: nowrap;
-        strong { color: $PRIMARY-PURPLE; }
-    }
+    flex-direction: column;
+    gap: 30px;
 }
+
 // ----------------------------------------
-// HEADER Y ACCIONES UNIFICADAS
+// HEADER / TOP BAR
 // ----------------------------------------
 .proyectos-header-view {
     display: flex;
-    justify-content: space-between; /* Izquierda <--- Espacio ---> Derecha */
     align-items: center;
-    margin-bottom: 30px;
-    flex-wrap: wrap; 
-    gap: 20px; // Espacio si se envuelve en móviles
+    justify-content: space-between;
+    width: 100%;
+    gap: 25px;
+    margin-top: 10px;
 
-    // GRUPO IZQUIERDO (Contador)
     .left-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+
         .count-total {
+            color: $GRAY;
             font-size: 1.1rem;
-            font-weight: 500;
-            color: $GRAY-COLD;
-            
+            letter-spacing: .3px;
+
             strong { 
-                color: $PRIMARY-PURPLE; 
-                font-size: 1.2rem;
+                color: $PRIMARY-PURPLE;
+                font-weight: 600;
+                font-size: 1.25rem;
             }
         }
     }
 
-    // GRUPO DERECHO (Buscador + Botón)
     .actions-group {
         display: flex;
         align-items: center;
-        gap: 15px; /* Espacio entre el buscador y el botón */
-        
-        // BUSCADOR
+        gap: 18px;
+        margin-left: auto;
+
         .search-box {
+            width: 310px;
             position: relative;
-            width: 280px; // Ancho fijo del buscador
-            
+
             .search-icon {
                 position: absolute;
-                left: 15px;
+                left: 14px;
                 top: 50%;
                 transform: translateY(-50%);
-                color: $GRAY-COLD;
-                font-size: 0.9rem;
+                color: $GRAY;
+                font-size: 1rem;
             }
-            
+
             .search-input {
                 width: 100%;
-                padding: 10px 15px 10px 40px; // Espacio a la izquierda para el icono
-                border-radius: 10px;
-                border: 1px solid $LIGHT-BORDER; // Variable global
-                font-size: 0.9rem;
-                outline: none;
-                background-color: $WHITE;
-                transition: all 0.2s ease;
-                
+                padding: 11px 16px 11px 42px;
+                border-radius: 12px;
+                border: 1px solid rgba($WHITE, .08);
+                background-color: $DARK-INPUT-BG;
+                color: $LIGHT-TEXT;
+                font-size: .95rem;
+                transition: 0.2s;
+
                 &:focus {
                     border-color: $PRIMARY-PURPLE;
-                    box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.1);
-                    width: 300px; // Efecto de expansión sutil al escribir
+                    box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, .15);
                 }
-            }
-            
-            // Tema Oscuro
-            &.theme-dark .search-input {
-                background-color: $DARK-INPUT-BG; // Variable global
-                border-color: rgba($WHITE, 0.1);
-                color: $LIGHT-TEXT;
-                &:focus { border-color: $PRIMARY-PURPLE; }
             }
         }
 
-        // BOTÓN NUEVO
         .btn-nuevo-proyecto {
-            background: $SUCCESS-COLOR; // Variable global
+            background: $SUCCESS;
             color: $WHITE;
             border: none;
-            padding: 10px 24px;
-            border-radius: 10px;
-            font-size: 0.95rem;
+            padding: 11px 24px;
+            border-radius: 12px;
+            font-size: .95rem;
             font-weight: 600;
             cursor: pointer;
             display: flex;
-            align-items: right;
+            align-items: center;
             gap: 8px;
-            white-space: nowrap; // Evita que el texto se rompa
-            box-shadow: 0 4px 10px rgba($SUCCESS-COLOR, 0.3);
-            transition: transform 0.2s;
+            white-space: nowrap;
+            box-shadow: 0 3px 12px rgba($SUCCESS, .35);
+            transition: 0.15s;
 
             &:hover { transform: translateY(-2px); }
             &:active { transform: translateY(0); }
-            
-            .icon-space { font-size: 1.1rem; }
         }
     }
 }
+
 // ----------------------------------------
-// GRID Y ALERTAS
+// GRID RESPONSIVE DE TARJETAS
 // ----------------------------------------
 .proyectos-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
-    gap: 25px;
+    width: 100%;
+    gap: 28px;
+
+    // Mejor distribución moderna
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+
+    // Las tarjetas no quedan chicas aunque haya pocos items
+    align-items: stretch;
 }
 
+// ----------------------------------------
+// ESTADOS (EMPTY / LOADING)
+// ----------------------------------------
 .alerta-vacio, .alerta-loading, .alerta-error {
     text-align: center;
     padding: 40px;
-    border-radius: 12px;
-    margin-top: 20px;
+    border-radius: 14px;
+    margin-top: 40px;
     font-weight: 500;
-}
-
-.alerta-vacio {
-    background-color: rgba($GRAY-COLD, 0.1);
-    color: $GRAY-COLD;
-    border: 1px dashed $GRAY-COLD;
-}
-
-.alerta-error {
-    background-color: rgba($DANGER-COLOR, 0.1);
-    color: $DANGER-COLOR;
-    border: 1px solid rgba($DANGER-COLOR, 0.2);
+    letter-spacing: 0.3px;
 }
 
 // ----------------------------------------
@@ -470,9 +464,9 @@ export default {
     justify-content: center;
     align-items: center;
     gap: 20px;
-    margin-top: 50px;
-    padding-bottom: 30px;
-    
+    margin-top: 40px;
+    padding-bottom: 20px;
+
     .btn-page {
         background: transparent;
         border: 1px solid $PRIMARY-PURPLE;
@@ -481,24 +475,36 @@ export default {
         border-radius: 8px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
-        display: flex; align-items: center; gap: 8px;
-        
+        transition: .15s;
+
         &:hover:not(:disabled) {
             background-color: $PRIMARY-PURPLE;
             color: $WHITE;
         }
+
         &:disabled {
-            border-color: $GRAY-COLD;
-            color: $GRAY-COLD;
+            opacity: .4;
             cursor: not-allowed;
-            opacity: 0.5;
         }
     }
-    
+
     .page-info {
         font-weight: 500;
-        color: $GRAY-COLD;
+        color: $GRAY;
     }
 }
+
+// ----------------------------------------
+// DARK MODE
+// ----------------------------------------
+.theme-dark {
+    .alerta-vacio {
+        background-color: rgba($WHITE, .04);
+        color: $LIGHT-TEXT;
+        border: 1px dashed rgba($WHITE, .15);
+    }
+    .alerta-error { color: $DANGER; }
+    .alerta-loading { color: $LIGHT-TEXT; }
+}
+
 </style>
