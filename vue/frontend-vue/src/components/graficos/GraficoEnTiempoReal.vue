@@ -4,6 +4,7 @@
     <div class="chart-header">
       <div class="title-group">
           <h4 class="chart-title">{{ chartTitle }}</h4>
+          <!-- Indicador visual de IA activa -->
           <span v-if="analisisActivo" class="analysis-badge" title="Detección activa">
             <span class="pulse-dot"></span> AI
           </span>
@@ -32,13 +33,14 @@
             <v-chart :option="chartOption" autoresize />
         </div>
 
-        <!-- PANEL DE ESTADÍSTICAS -->
+        <!-- 🚨 PANEL DE ESTADÍSTICAS MEJORADO -->
         <div class="stats-footer">
             <div class="stat-item">
                 <span class="label">Último</span>
                 <span class="value">{{ stats.ultimo }}</span>
             </div>
             
+            <!-- Lógica Condicional para Movimiento -->
             <template v-if="!esMovimiento">
                 <div class="stat-item">
                     <span class="label">Promedio</span>
@@ -50,6 +52,7 @@
                 </div>
             </template>
 
+            <!-- Si ES movimiento, mostramos conteo de eventos -->
             <template v-else>
                 <div class="stat-item highlight">
                     <span class="label">Total Eventos</span>
@@ -116,23 +119,28 @@ export default {
 
     const esMovimiento = computed(() => {
         const t = props.titulo.toLowerCase();
-        return t.includes('movimiento') || t.includes('puerta') || t.includes('presencia');
+        return t.includes('movimiento') || t.includes('puerta') || t.includes('presencia') || t.includes('estado');
     });
 
-    // --- ESTADÍSTICAS ---
+    // ---------------------------------------------------------
+    // CÁLCULO DE ESTADÍSTICAS MEJORADO
+    // ---------------------------------------------------------
     const calcularEstadisticas = (data) => {
         if (!data || data.length === 0) return;
+        
         const valores = data.map(item => item.value[1]);
         const ultimo = valores[valores.length - 1];
         const maximo = Math.max(...valores);
         const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
         
         if (esMovimiento.value) {
+             // Para movimiento, sumamos todos los eventos detectados en el periodo
              const total = valores.reduce((a,b) => a + b, 0);
+             
              stats.value = {
                 ultimo: ultimo > 0 ? 'Activo' : 'Inactivo',
                 promedio: '-',
-                maximo: maximo.toFixed(0), 
+                maximo: maximo.toFixed(0), // Muestra el pico más alto de actividad en un bloque
                 totalEventos: total.toFixed(0)
             };
         } else {
@@ -145,10 +153,14 @@ export default {
         }
     };
 
-    // --- PROCESAMIENTO MOVIMIENTO (CORREGIDO) ---
+    // ---------------------------------------------------------
+    // PROCESAMIENTO DE MOVIMIENTO (AGREGACIÓN VISUAL)
+    // ---------------------------------------------------------
     const procesarDatosMovimiento = (rawData) => {
+        // Si la ventana es corta (5 min), mostramos datos crudos (línea 0/1)
         if (props.ventanaTiempo <= 5) return rawData;
 
+        // Si es ventana larga, agrupamos por bloques de tiempo para ver densidad
         const intervaloMinutos = props.ventanaTiempo > 60 ? 15 : 1;
         const intervaloMs = intervaloMinutos * 60 * 1000;
 
@@ -156,54 +168,55 @@ export default {
         
         rawData.forEach(item => {
             const timestamp = new Date(item.value[0]).getTime();
+            // "Redondear" al bloque de tiempo (Bucket)
             const bloque = Math.floor(timestamp / intervaloMs) * intervaloMs;
             
             if (!agrupado[bloque]) {
                 agrupado[bloque] = { sum: 0, anomalia: false, mensaje: '' };
             }
             
+            // Sumar actividad (si valor > 0.5 asumimos 1/true)
             if (item.value[1] > 0.5) {
                 agrupado[bloque].sum += 1;
             }
             
-            // 🚨 HERENCIA DE ANOMALÍA CORREGIDA
-            // Si el backend marcó este dato como anómalo, la barra entera es anómala
+            // Heredar anomalía del backend
             if (item.anomalia) {
                 agrupado[bloque].anomalia = true;
-                // Priorizar el mensaje del backend
-                if (!agrupado[bloque].mensaje || agrupado[bloque].mensaje.includes('eventos')) {
-                    agrupado[bloque].mensaje = item.mensaje; 
-                }
+                if (!agrupado[bloque].mensaje) agrupado[bloque].mensaje = item.mensaje;
             }
         });
 
-        // 🚨 DETECCIÓN LOCAL DE PICOS (Doble Check)
-        // Calculamos la media de eventos por bloque para detectar picos locales
-        const bloques = Object.values(agrupado);
-        if (bloques.length > 5) {
-             const sumas = bloques.map(b => b.sum);
-             const mediaLocal = sumas.reduce((a,b) => a+b, 0) / sumas.length;
-             
-             // Si un bloque tiene 3 veces más eventos que el promedio local, márcalo
-             Object.keys(agrupado).forEach(key => {
-                 if (agrupado[key].sum > (mediaLocal * 3) && agrupado[key].sum > 5) {
-                     agrupado[key].anomalia = true;
-                     if (!agrupado[key].mensaje) agrupado[key].mensaje = `Pico de actividad (${agrupado[key].sum} eventos)`;
-                 }
-             });
-        }
-
-        return Object.keys(agrupado).sort().map(key => {
+        // Convertir objeto agrupado a array para ECharts
+        const resultado = Object.keys(agrupado).sort().map(key => {
             const dataBloque = agrupado[key];
             return {
-                value: [parseInt(key), dataBloque.sum],
+                value: [parseInt(key), dataBloque.sum], // Y = Total de eventos en el lapso
                 anomalia: dataBloque.anomalia,
                 mensaje: dataBloque.mensaje || `${dataBloque.sum} eventos`
             };
         });
+
+        // 🚨 DETECCIÓN LOCAL DE PICOS (Frontend)
+        // Si la gráfica muestra mucha actividad en un bloque comparado con otros, márcalo
+        if (resultado.length > 5) {
+             const sumas = resultado.map(r => r.value[1]);
+             const mediaLocal = sumas.reduce((a,b) => a+b, 0) / sumas.length;
+             
+             resultado.forEach(r => {
+                 if (r.value[1] > (mediaLocal * 3) && r.value[1] > 5) {
+                     r.anomalia = true;
+                     if (!r.mensaje.includes('Pico')) r.mensaje = `Pico de actividad (${r.value[1]} eventos)`;
+                 }
+             });
+        }
+
+        return resultado;
     };
 
-    // --- CARGA INICIAL ---
+    // ---------------------------------------------------------
+    // 1. CARGA INICIAL
+    // ---------------------------------------------------------
     const cargarDatosIniciales = async () => {
       if (!props.campoId || props.campoId <= 0) { loading.value = false; return; }
       
@@ -234,7 +247,7 @@ export default {
                 mensaje: v.mensaje_alerta
             }));
 
-            // Procesar Movimiento
+            // Transformación si es movimiento
             if (esMovimiento.value) {
                 dataPoints = procesarDatosMovimiento(dataPoints);
             }
@@ -256,8 +269,11 @@ export default {
       }
     };
 
-    // --- POLLING ---
+    // ---------------------------------------------------------
+    // 2. POLLING (Adaptativo)
+    // ---------------------------------------------------------
     const sondearUltimoValor = async () => {
+      // Si es ventana larga, recargamos todo para mantener la agregación correcta
       if (props.ventanaTiempo > 5) {
           await cargarDatosIniciales(); 
           return;
@@ -309,7 +325,9 @@ export default {
       }
     };
 
-    // --- ECHARTS OPTION ---
+    // ---------------------------------------------------------
+    // 3. CONFIGURACIÓN ECHARTS
+    // ---------------------------------------------------------
     const actualizarOpciones = (data, seriesName) => {
         // Filtrar anomalías para crear la serie de pines
         const anomalypoints = data.filter(item => item.anomalia).map(item => ({
@@ -342,11 +360,16 @@ export default {
                 formatter: (params) => {
                     const item = params[0];
                     if (!item || !item.value) return ''; 
-                    const fecha = new Date(item.value[0]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    const fechaObj = new Date(item.value[0]);
+                    const fecha = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const dia = fechaObj.toLocaleDateString([], {month: 'short', day: 'numeric'});
+                    
                     const val = item.value[1];
                     const alerta = item.data.anomalia ? `<br/><span style="color:${colorAlerta}; font-weight:bold;">⚠️ ${item.data.mensaje || 'Anomalía'}</span>` : '';
                     const label = isBarChart ? 'Eventos' : item.seriesName;
-                    return `<b>${fecha}</b><br/>${label}: ${val}${alerta}`;
+                    
+                    return `<b>${dia} ${fecha}</b><br/>${label}: ${val}${alerta}`;
                 }
             },
             grid: { left: 40, right: 30, bottom: 40, top: 50, containLabel: true },
@@ -374,7 +397,7 @@ export default {
                 data: data.map(item => ({
                     value: item.value,
                     itemStyle: { color: item.anomalia ? colorAlerta : colorPrincipal },
-                    // Icono de punto en líneas
+                    // Puntos solo en modo línea
                     symbol: (chartType === 'line' && item.anomalia) ? 'circle' : 'none',
                     symbolSize: 6,
                     anomalia: item.anomalia,
@@ -391,11 +414,10 @@ export default {
                     }
                 } : undefined,
                 
-                // 🚨 MARKPOINT ACTIVADO EN TODOS LOS TIPOS (Barras y Líneas)
+                // 🚨 Pines activados en AMBOS modos (Línea y Barra)
                 markPoint: props.analisisActivo ? {
                     data: anomalypoints,
-                    symbol: 'pin', 
-                    symbolSize: 40,
+                    symbol: 'pin', symbolSize: 40,
                     label: { show: true, formatter: '!', color: '#fff', fontWeight: 'bold' },
                     itemStyle: { color: colorAlerta, shadowBlur: 5, shadowColor: 'rgba(0,0,0,0.3)' },
                     animation: false 

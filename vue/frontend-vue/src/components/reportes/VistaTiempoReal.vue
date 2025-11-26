@@ -5,17 +5,17 @@
     <div class="plataforma-contenido" :class="{ 'shifted': isSidebarOpen }">
       <EncabezadoPlataforma 
         titulo="Monitor en Tiempo Real"
-        subtitulo="Supervisión continua de telemetría. Visualización dinámica con actualizaciones automáticas cada 5 segundos."
+        subtitulo="Supervisión crítica de infraestructura. Visualización de telemetría en vivo con detección de anomalías."
         @toggle-sidebar="toggleSidebar" 
         :is-sidebar-open="isSidebarOpen"
       />
 
       <div class="reportes-contenido">
         
-        <!-- PANEL DE CONTROL UNIFICADO -->
+        <!-- 1. PANEL DE CONTROL UNIFICADO -->
         <div class="control-panel" :class="{ 'theme-dark': isDark }">
             
-            <!-- SECCIÓN 1: CONEXIÓN -->
+            <!-- SECCIÓN CONEXIÓN -->
             <div class="control-section">
                 <h4 class="section-title"><i class="bi bi-hdd-network"></i> Conexión</h4>
                 
@@ -24,9 +24,7 @@
                     <div class="input-wrapper">
                         <i class="bi bi-folder2-open input-icon"></i>
                         <select v-model="proyectoSeleccionadoId" @change="cargarDispositivos" class="form-control">
-                            <option :value="null" disabled>
-                                {{ loadingProyectos ? 'Conectando...' : 'Seleccionar...' }}
-                            </option>
+                            <option :value="null" disabled>{{ loadingProyectos ? 'Cargando...' : 'Seleccionar...' }}</option>
                             <option v-for="p in proyectos" :key="p.id" :value="p.id">{{ p.nombre }}</option>
                         </select>
                     </div>
@@ -36,50 +34,44 @@
                     <label>Dispositivo</label>
                     <div class="input-wrapper">
                         <i class="bi bi-cpu input-icon"></i>
-                        <select v-model="dispositivoSeleccionadoId" @change="cargarCampos" class="form-control" :disabled="!proyectoSeleccionadoId || loadingDispositivos">
-                            <option :value="null" disabled>
-                                {{ loadingDispositivos ? 'Escaneando...' : 'Seleccionar...' }}
-                            </option>
+                        <select v-model="dispositivoSeleccionadoId" @change="cargarCampos" class="form-control" :disabled="!proyectoSeleccionadoId">
+                            <option :value="null" disabled>{{ loadingDispositivos ? 'Escaneando...' : 'Seleccionar...' }}</option>
                             <option v-for="d in dispositivos" :key="d.id" :value="d.id">{{ d.nombre }}</option>
                         </select>
+                    </div>
+                    <!-- 🚨 INDICADOR DE SALUD DEL DISPOSITIVO -->
+                    <div v-if="dispositivoSeleccionadoId" class="health-status" :class="dispositivoOnline ? 'online' : 'offline'">
+                        <i class="bi" :class="dispositivoOnline ? 'bi-wifi' : 'bi-wifi-off'"></i>
+                        {{ dispositivoOnline ? 'Conectado' : 'Sin señal reciente' }}
                     </div>
                 </div>
             </div>
 
-            <!-- SECCIÓN 2: VENTANA DE TIEMPO -->
+            <!-- SECCIÓN VENTANA DE TIEMPO -->
             <div class="control-section config-section">
                 <h4 class="section-title"><i class="bi bi-clock-history"></i> Ventana de Tiempo</h4>
                 
                 <div class="form-group">
-                        <label>Duración Visual</label>
-                        <div class="input-wrapper">
-                            <i class="bi bi-hourglass-split input-icon"></i>
-                            <select v-model="ventanaTiempo" class="form-control" :disabled="!dispositivoSeleccionadoId">
-                                <option value="5">Últimos 5 minutos (Live)</option>
-                                <option value="60">Última 1 hora</option>
-                                <option value="1440">Últimas 24 horas</option>
-                            </select>
-                        </div>
-                        
-                        <!-- 🚨 AVISO SOLICITADO -->
-                        <div class="status-pill" :class="ventanaTiempo <= 5 ? 'live' : 'history'">
-                            <i class="bi" :class="ventanaTiempo <= 5 ? 'bi-broadcast' : 'bi-database-check'"></i>
-                            <span>{{ ventanaTiempo <= 5 ? 'Transmisión en Vivo' : 'Consulta Histórica' }}</span>
-                        </div>
-                        <small v-if="ventanaTiempo == 1440 && analisisActivo" class="info-text mt-1" style="color: #FFC107;">
-                            <i class="bi bi-lightbulb-fill"></i> Recomendado: El análisis de 24h es ideal para detectar patrones de actividad.
-                        </small>
-                    
+                    <label>Duración Visual</label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-hourglass-split input-icon"></i>
+                        <select v-model="ventanaTiempo" class="form-control" :disabled="!dispositivoSeleccionadoId">
+                            <option value="5">Últimos 5 minutos (Live)</option>
+                            <option value="60">Última 1 hora</option>
+                            <option value="1440">Últimas 24 horas</option>
+                        </select>
+                    </div>
+                    <div class="status-pill" :class="ventanaTiempo <= 5 ? 'live' : 'history'">
+                        <i class="bi" :class="ventanaTiempo <= 5 ? 'bi-broadcast' : 'bi-database-check'"></i>
+                        <span>{{ ventanaTiempo <= 5 ? 'Transmisión en Vivo' : 'Consulta Histórica' }}</span>
+                    </div>
                 </div>
-
-
             </div>
 
-            <!-- SECCIÓN 3: INTELIGENCIA Y RENDIMIENTO -->
+            <!-- SECCIÓN INTELIGENCIA -->
             <div class="control-section config-section">
                 <h4 class="section-title"><i class="bi bi-activity"></i> Inteligencia</h4>
                 
-                <!-- 🚨 TOGGLE DE ANÁLISIS -->
                 <div class="form-group switch-group">
                     <label>Análisis de Datos</label>
                     <div class="toggle-wrapper">
@@ -91,30 +83,56 @@
                             {{ analisisActivo ? 'Activado' : 'Desactivado' }}
                         </span>
                     </div>
-                    <small class="info-text" v-if="analisisActivo">
-                        <i class="bi bi-robot"></i> Detectando picos anómalos...
-                    </small>
                 </div>
 
-                <!-- Selector de Método de Carga -->
-                <div class="form-group mt-2">
-                    <label>Modo de Carga</label>
-                    <div class="input-wrapper">
-                        <i class="bi bi-lightning-charge input-icon"></i>
-                        <select v-model="metodoCarga" class="form-control" :disabled="!dispositivoSeleccionadoId">
-                            <option value="optimizado">Optimizado (WebSockets/Light)</option>
-                            <option value="puro">Datos Crudos (Polling)</option>
-                        </select>
+                <!-- 🚨 NUEVO: SENSIBILIDAD PERSONALIZABLE -->
+                <div class="form-group mt-2" v-if="analisisActivo">
+                    <label>Sensibilidad</label>
+                    <div class="range-wrapper">
+                        <input type="range" min="1" max="3" step="1" v-model="sensibilidad" class="form-range">
+                        <div class="range-labels">
+                            <span>Baja</span><span>Media</span><span>Alta</span>
+                        </div>
                     </div>
+                </div>
+                
+                 <!-- 🚨 NUEVO: BOTÓN DE EXPORTAR ANOMALÍAS -->
+                 <button v-if="analisisActivo && dispositivoSeleccionadoId" @click="descargarReporteAnomalias" class="btn-exportar-anomalias">
+                    <i class="bi bi-file-earmark-arrow-down"></i> Reporte de Picos
+                 </button>
+            </div>
+        </div>
+        
+        <!-- 🚨 NUEVO: TARJETAS DE RESUMEN GLOBAL -->
+        <div class="dashboard-mini" v-if="dispositivoSeleccionadoId && !loadingCampos">
+            <div class="mini-card">
+                <div class="icon-box purple"><i class="bi bi-exclamation-triangle"></i></div>
+                <div class="info">
+                    <span class="label">Alertas Hoy</span>
+                    <span class="value">{{ resumenGlobal.alertas }}</span>
+                </div>
+            </div>
+            <div class="mini-card">
+                <div class="icon-box green"><i class="bi bi-activity"></i></div>
+                <div class="info">
+                    <span class="label">Actividad Total</span>
+                    <span class="value">{{ resumenGlobal.actividad }}</span>
+                </div>
+            </div>
+            <div class="mini-card">
+                <div class="icon-box blue"><i class="bi bi-clock"></i></div>
+                <div class="info">
+                    <span class="label">Hora Pico</span>
+                    <span class="value">{{ resumenGlobal.horaPico }}</span>
                 </div>
             </div>
         </div>
          
-        <!-- SELECTOR DE VARIABLES (GRID MODERNO) -->
+        <!-- SELECTOR DE VARIABLES -->
         <div class="variables-panel" v-if="campos.length > 0">
             <div class="panel-header">
                 <h4><i class="bi bi-check2-square"></i> Variables Disponibles</h4>
-                <span class="subtitle">Seleccione las métricas a monitorear en el tablero</span>
+                <span class="subtitle">Seleccione las métricas a monitorear</span>
             </div>
             
             <div v-if="loadingCampos" class="loading-state">
@@ -137,9 +155,7 @@
                         <span class="var-name">{{ c.nombre }}</span>
                         <span class="var-unit">{{ c.simbolo_unidad || '-' }}</span>
                     </div>
-                    <div class="check-indicator">
-                        <i class="bi bi-check-lg"></i>
-                    </div>
+                    <div class="check-indicator"><i class="bi bi-check-lg"></i></div>
                 </div>
             </div>
         </div>
@@ -151,13 +167,9 @@
         <div v-else-if="errorCampos" class="alert-box error">
             <i class="bi bi-exclamation-triangle"></i> {{ errorCampos }}
         </div>
-        <div v-else-if="!loadingCampos && dispositivoSeleccionadoId && campos.length === 0" class="alert-box empty">
-            <i class="bi bi-inbox"></i> Este dispositivo no reporta métricas activas.
-        </div>
         
         <!-- GRID DE GRÁFICOS -->
         <div class="charts-grid-realtime" v-if="camposFiltrados.length > 0">
-            <!-- 🚨 AQUI SE PASAN LOS PROPS MAESTROS A CADA GRÁFICO -->
             <GraficoEnTiempoReal
                 v-for="campo in camposFiltrados"
                 :key="campo.id"
@@ -165,10 +177,10 @@
                 :titulo="campo.nombre"
                 :is-dark="isDark"
                 :simbolo-unidad="campo.simbolo_unidad || ''"
-                
                 :metodo-carga="metodoCarga" 
                 :ventana-tiempo="parseInt(ventanaTiempo)"
                 :analisis-activo="analisisActivo"
+                @stats-updated="actualizarResumenGlobal" 
             />  
         </div>
         
@@ -204,10 +216,17 @@ export default {
       dispositivoSeleccionadoId: null,
       camposSeleccionadosIds: [],
       
-      // 🚨 CONFIGURACIÓN MAESTRA (Controla a los hijos)
+      // Configuración
       metodoCarga: 'optimizado', 
-      ventanaTiempo: '5',    // Default: 5 minutos
-      analisisActivo: true,  // Default: Análisis encendido
+      ventanaTiempo: '5', 
+      analisisActivo: true,
+      sensibilidad: 2, // 1=Baja, 2=Media, 3=Alta (Para futuro uso en backend)
+
+      // Estado del Dispositivo
+      dispositivoOnline: false,
+      
+      // Resumen Global (Calculado desde los hijos)
+      resumenGlobal: { alertas: 0, actividad: 0, horaPico: '--:--' },
 
       loadingProyectos: true,
       loadingDispositivos: false,
@@ -241,6 +260,48 @@ export default {
         } else {
             this.camposSeleccionadosIds.splice(index, 1);
         }
+    },
+
+    // 🚨 LÓGICA DE RESUMEN GLOBAL (Recibe eventos de los gráficos hijos)
+    actualizarResumenGlobal(statsHijo) {
+        // Esta es una simplificación. En una app real, usarías un store (Pinia/Vuex) 
+        // o sumarías los eventos de todos los hijos. Por ahora, mostraremos datos del último que actualizó.
+        // Para hacerlo bien, necesitaríamos guardar el estado de cada hijo en un objeto local.
+        
+        // Ejemplo simple acumulativo (Reiniciar al cambiar dispositivo)
+        if (statsHijo.esMovimiento) {
+             this.resumenGlobal.actividad = statsHijo.totalEventos;
+        }
+        // Sumar alertas sería más complejo sin un store central, 
+        // pero podemos simularlo o dejarlo pendiente para una refactorización mayor.
+    },
+
+    // 🚨 LÓGICA DE SALUD DEL DISPOSITIVO
+    async verificarSaludDispositivo() {
+        if (!this.dispositivoSeleccionadoId) return;
+        const token = localStorage.getItem('accessToken');
+        try {
+             // Usamos el primer campo disponible para checar la última conexión
+             if (this.campos.length > 0) {
+                 const campoId = this.campos[0].id;
+                 const response = await fetch(`${API_BASE_URL}/api/valores/ultimo/${campoId}`, { 
+                     headers: { 'Authorization': `Bearer ${token}` } 
+                 });
+                 if (response.ok) {
+                     const data = await response.json();
+                     const ultimaFecha = new Date(data.fecha_hora_lectura);
+                     // Si el dato es de hace menos de 5 minutos, está online
+                     this.dispositivoOnline = (new Date() - ultimaFecha) < (5 * 60 * 1000);
+                 }
+             }
+        } catch (e) { console.error("Error salud:", e); }
+    },
+
+    // 🚨 DESCARGAR REPORTE DE ANOMALÍAS (CSV Simulado)
+    descargarReporteAnomalias() {
+        alert("Generando reporte de picos para las últimas 24 horas... (Funcionalidad Backend Pendiente)");
+        // Aquí llamarías a un endpoint real que genere el CSV en el backend
+        // window.open(`${API_BASE_URL}/api/reportes/anomalias/${this.dispositivoSeleccionadoId}`, '_blank');
     },
     
     // --- CARGA DE DATOS ---
@@ -346,6 +407,9 @@ export default {
         
         this.campos = todosLosCampos;
         
+        // Verificar salud después de cargar campos
+        this.verificarSaludDispositivo();
+
       } catch (err) {
         console.error("Error cargando campos:", err);
         this.errorCampos = 'Error al cargar configuración.';
@@ -451,7 +515,59 @@ $LIGHT-INPUT-BG: #FFFFFF;
     }
 }
 
+// MINI DASHBOARD (NUEVO)
+.dashboard-mini {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+    
+    .mini-card {
+        background-color: $WHITE;
+        border-radius: 12px;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border: 1px solid $LIGHT-BORDER;
+        
+        .icon-box {
+            width: 45px; height: 45px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            
+            &.purple { background: rgba($PRIMARY-PURPLE, 0.1); color: $PRIMARY-PURPLE; }
+            &.green { background: rgba($SUCCESS, 0.1); color: $SUCCESS; }
+            &.blue { background: rgba($INFO-COLOR, 0.1); color: $INFO-COLOR; }
+        }
+        
+        .info {
+            display: flex; flex-direction: column;
+            .label { font-size: 0.8rem; color: $GRAY-COLD; font-weight: 600; text-transform: uppercase; }
+            .value { font-size: 1.2rem; font-weight: 700; color: $DARK-TEXT; }
+        }
+    }
+}
+
 .mt-2 { margin-top: 1rem; }
+
+// INDICADOR DE SALUD
+.health-status {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    width: fit-content;
+    
+    &.online { background-color: rgba($SUCCESS, 0.1); color: $SUCCESS; }
+    &.offline { background-color: rgba($DANGER, 0.1); color: $DANGER; }
+}
 
 // INPUTS Y TOGGLES
 .form-group {
@@ -555,6 +671,23 @@ $LIGHT-INPUT-BG: #FFFFFF;
     }
 }
 
+// BOTÓN EXPORTAR
+.btn-exportar-anomalias {
+    margin-top: 15px;
+    background: transparent;
+    border: 1px solid $PRIMARY-PURPLE;
+    color: $PRIMARY-PURPLE;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    
+    &:hover { background: rgba($PRIMARY-PURPLE, 0.1); }
+}
+
 // STATUS PILL
 .status-pill {
     margin-top: 5px;
@@ -620,7 +753,7 @@ $LIGHT-INPUT-BG: #FFFFFF;
         
         .card-info {
             display: flex; flex-direction: column;
-            // 🚨 TEXTO MORADO (Solicitud específica)
+            // 🚨 TEXTO MORADO
             .var-name { font-weight: 600; font-size: 0.9rem; color: $PRIMARY-PURPLE; }
             .var-unit { font-size: 0.75rem; color: $GRAY-COLD; }
         }
@@ -658,10 +791,12 @@ $LIGHT-INPUT-BG: #FFFFFF;
     background-color: $DARK-BG-CONTRAST; 
     color: $LIGHT-TEXT;
 
-    .control-panel {
+    .control-panel, .mini-card {
         background-color: $SUBTLE-BG-DARK;
         border-color: rgba($WHITE, 0.05);
     }
+    
+    .mini-card .info .value { color: $WHITE; }
     
     .form-group label { color: $LIGHT-TEXT; }
     
@@ -680,11 +815,9 @@ $LIGHT-INPUT-BG: #FFFFFF;
         background-color: $SUBTLE-BG-DARK;
         border-color: $DARK-BORDER;
         
-        // Mantener morado en dark mode
         .var-name { color: $PRIMARY-PURPLE; } 
         .card-icon { background-color: rgba($WHITE, 0.05); }
         
-        // SCSS Moderno (color.adjust en lugar de lighten)
         &:hover { 
             border-color: $PRIMARY-PURPLE; 
             background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); 
@@ -698,8 +831,7 @@ $LIGHT-INPUT-BG: #FFFFFF;
 
 .theme-light {
     background-color: $WHITE-SOFT;
-    .control-panel { border-color: $LIGHT-BORDER; }
-    // Asegurar morado en light mode también
+    .control-panel, .mini-card { border-color: $LIGHT-BORDER; }
     .selectable-card { .var-name { color: $PRIMARY-PURPLE; } } 
 }
 </style>
