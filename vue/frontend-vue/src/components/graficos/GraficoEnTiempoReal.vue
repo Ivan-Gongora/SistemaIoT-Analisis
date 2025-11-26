@@ -2,23 +2,56 @@
   <div class="chart-card" :class="{ 'theme-dark': isDark }">
     
     <div class="chart-header">
-      <h4 class="chart-title">{{ chartTitle }}</h4>
+      <div class="title-group">
+          <h4 class="chart-title">{{ chartTitle }}</h4>
+          <span v-if="analisisActivo" class="analysis-badge" title="Detección activa">
+            <span class="pulse-dot"></span> AI
+          </span>
+      </div>
+      
       <span 
         class="last-update" 
         :class="{ 'stale': isStale, 'live': !isStale && !loading }"
-        :title="isStale ? 'Datos desactualizados' : 'Recibiendo datos'"
+        :title="isStale ? 'Sin datos recientes' : 'Conexión estable'"
       >
         <i class="bi bi-broadcast"></i> {{ ultimaLectura }}
       </span>
     </div>
     
     <div v-if="loading" class="chart-loading">
-      <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando datos iniciales...
+      <div class="spinner-border"></div>
+      <p>Sincronizando...</p>
     </div>
-    <div v-else-if="error" class="chart-error">{{ error }}</div>
+    <div v-else-if="error" class="chart-error">
+        <i class="bi bi-exclamation-circle"></i> {{ error }}
+    </div>
     
-    <div v-else class="chart-wrapper">
-      <v-chart :option="chartOption" autoresize />
+    <div v-else class="chart-content">
+        <!-- Gráfico -->
+        <div class="chart-wrapper">
+            <v-chart :option="chartOption" autoresize />
+        </div>
+
+        <!-- 🚨 NUEVO: PANEL DE ESTADÍSTICAS -->
+        <div class="stats-footer">
+            <div class="stat-item">
+                <span class="label">Último</span>
+                <span class="value">{{ stats.ultimo }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">Promedio</span>
+                <span class="value">{{ stats.promedio }}</span>
+            </div>
+            <div class="stat-item highlight">
+                <span class="label">Pico Máx</span>
+                <span class="value">{{ stats.maximo }}</span>
+            </div>
+            <!-- Si es movimiento, mostramos el total de eventos -->
+            <div class="stat-item" v-if="esMovimiento">
+                <span class="label">Eventos</span>
+                <span class="value">{{ stats.totalEventos }}</span>
+            </div>
+        </div>
     </div>
   </div>
 </template>
@@ -26,34 +59,19 @@
 <script>
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart } from 'echarts/charts';
+import { LineChart, BarChart } from 'echarts/charts'; // 🚨 Agregamos BarChart
 import {
-  TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent
+  TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent, VisualMapComponent, MarkPointComponent, ToolboxComponent
 } from 'echarts/components';
 import VChart from 'vue-echarts';
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 
-// Registro de ECharts
 use([
-  CanvasRenderer, LineChart, TitleComponent, TooltipComponent, 
-  LegendComponent, GridComponent, DataZoomComponent
+  CanvasRenderer, LineChart, BarChart, TitleComponent, TooltipComponent, 
+  LegendComponent, GridComponent, DataZoomComponent, VisualMapComponent, MarkPointComponent, ToolboxComponent
 ]);
 
-// 🚨 Asumo que API_BASE_URL está definida globalmente
-// const API_BASE_URL = 'http://127.0.0.1:8001';
-
-// --- FUNCIÓN AUXILIAR (Para evitar el error de Zona Horaria UTC) ---
-function formatFechaLocalParaAPI(date) {
-    const pad = (num) => String(num).padStart(2, '0');
-    const Y = date.getFullYear();
-    const M = pad(date.getMonth() + 1);
-    const D = pad(date.getDate());
-    const h = pad(date.getHours());
-    const m = pad(date.getMinutes());
-    const s = pad(date.getSeconds());
-    return `${Y}-${M}-${D}T${h}:${m}:${s}`; 
-}
-
+const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
   name: 'GraficoEnTiempoReal',
@@ -62,7 +80,10 @@ export default {
     campoId: { type: Number, required: true },
     titulo: { type: String, default: 'Tiempo Real' },
     isDark: { type: Boolean, default: false },
-    simboloUnidad: { type: String, default: 'N/A' }
+    simboloUnidad: { type: String, default: '' },
+    metodoCarga: { type: String, default: 'optimizado' },
+    ventanaTiempo: { type: Number, default: 5 },
+    analisisActivo: { type: Boolean, default: true }
   },
   
   setup(props) {
@@ -71,95 +92,127 @@ export default {
     const chartOption = ref({});
     const chartTitle = ref(props.titulo);
     
-    const ultimaLectura = ref('N/A');
+    const ultimaLectura = ref('Esperando...');
     const isStale = ref(true);
-    let pollingInterval = null; 
     
-    // --- Constantes de Tiempo ---
+    // 🚨 Estadísticas Reactivas
+    const stats = ref({ ultimo: '-', promedio: '-', maximo: '-', totalEventos: 0 });
+    
+    let pollingInterval = null; 
     const POLLING_INTERVAL_MS = 5000;
-    const INITIAL_LOAD_MINUTES = 5;
-    const MAX_DATA_POINTS = (INITIAL_LOAD_MINUTES * 60) / (POLLING_INTERVAL_MS / 1000); 
-    const STALE_THRESHOLD_MS = 60000;
+    const STALE_THRESHOLD_MS = 60000; 
 
-    // --- Colores de tema ---
-    const gridColor = computed(() => props.isDark ? 'rgba(228, 230, 235, 0.2)' : 'rgba(51, 51, 51, 0.2)');
+    const gridColor = computed(() => props.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)');
     const textColor = computed(() => props.isDark ? '#E4E6EB' : '#333333');
+    const colorPrincipal = '#8A2BE2'; 
+    const colorAlerta = '#E74C3C';    
 
-    // --- 1. FUNCIÓN DE CARGA INICIAL (CORREGIDA CON LÓGICA DE 2 PASOS) ---
+    // Detectar si es un sensor de movimiento para cambiar la visualización
+    const esMovimiento = computed(() => {
+        const t = props.titulo.toLowerCase();
+        return t.includes('movimiento') || t.includes('puerta') || t.includes('presencia');
+    });
+
+    // ---------------------------------------------------------
+    // CÁLCULO DE ESTADÍSTICAS
+    // ---------------------------------------------------------
+    const calcularEstadisticas = (data) => {
+        if (!data || data.length === 0) return;
+        
+        const valores = data.map(item => item.value[1]); // Extraer solo el valor Y
+        const ultimo = valores[valores.length - 1];
+        const maximo = Math.max(...valores);
+        const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+        
+        // Total de "1s" para movimiento
+        const totalEventos = valores.filter(v => v > 0).reduce((a,b) => a + b, 0);
+
+        // Formateo
+        const decimales = esMovimiento.value ? 0 : 2;
+        stats.value = {
+            ultimo: ultimo.toFixed(decimales),
+            promedio: promedio.toFixed(decimales),
+            maximo: maximo.toFixed(decimales),
+            totalEventos: totalEventos.toFixed(0)
+        };
+    };
+
+    // ---------------------------------------------------------
+    // PROCESAMIENTO DE MOVIMIENTO (AGREGACIÓN)
+    // ---------------------------------------------------------
+    const procesarDatosMovimiento = (rawData) => {
+        // Si la ventana es pequeña (5 min), mostramos raw (0/1)
+        if (props.ventanaTiempo <= 5) return rawData;
+
+        // Si es 1h o 24h, agrupamos por MINUTO para contar "Eventos por Minuto"
+        const agrupado = {};
+        
+        rawData.forEach(item => {
+            // Redondear timestamp al minuto
+            const fecha = new Date(item.value[0]);
+            fecha.setSeconds(0);
+            fecha.setMilliseconds(0);
+            const key = fecha.getTime();
+            
+            if (!agrupado[key]) agrupado[key] = 0;
+            // Sumamos el valor (asumiendo 1=movimiento)
+            agrupado[key] += item.value[1]; 
+        });
+
+        // Convertir de vuelta a array [timestamp, count]
+        return Object.keys(agrupado).sort().map(key => ({
+            value: [parseInt(key), agrupado[key]],
+            anomalia: false, // Perderemos la anomalía individual al agrupar, es aceptable
+            mensaje: `Detectados ${agrupado[key]} eventos`
+        }));
+    };
+
+    // ---------------------------------------------------------
+    // 1. CARGA INICIAL
+    // ---------------------------------------------------------
     const cargarDatosIniciales = async () => {
-      // Validar ID
-      if (!props.campoId || props.campoId <= 0) {
-        loading.value = false;
-        error.value = 'ID de campo no válido.';
-        return;
-      }
+      if (!props.campoId || props.campoId <= 0) { loading.value = false; return; }
       
       loading.value = true;
       error.value = null;
       const token = localStorage.getItem('accessToken');
 
-      let fechaFinReal; // Aquí guardaremos la última fecha de la DB
-
       try {
-        // -----------------------------------------------------
-        // PASO 1: Obtener la fecha máxima (usando el endpoint /ultimo)
-        // -----------------------------------------------------
-        const ultimoResponse = await fetch(`${API_BASE_URL}/api/valores/ultimo/${props.campoId}`, { 
-            headers: { 'Authorization': `Bearer ${token}` } 
-        });
-        
-        if (!ultimoResponse.ok) {
-            if (ultimoResponse.status === 404) {
-                 throw new Error('No se han encontrado datos históricos para este dispositivo.');
-            }
-            throw new Error('No se pudo obtener el último valor.');
-        }
-        
-        const ultimoDato = await ultimoResponse.json();
-        
-        // ¡Éxito! Usamos la fecha máxima real como punto final
-        fechaFinReal = new Date(ultimoDato.fecha_hora_lectura);
+        const url = new URL(`${API_BASE_URL}/api/valores/ventana/${props.campoId}`);
+        url.searchParams.append('minutos', props.ventanaTiempo);
+        if (props.analisisActivo) url.searchParams.append('analisis_activo', 'true');
 
-      } catch (err) {
-          error.value = err.message;
-          loading.value = false;
-          actualizarOpciones([], props.titulo); // Iniciar gráfico vacío
-          return; // Detener si no hay rango
-      }
-
-      // -----------------------------------------------------
-      // PASO 2: Cargar los 5 minutos ANTERIORES a esa fecha máxima
-      // -----------------------------------------------------
-      try {
-        const inicio = new Date(fechaFinReal.getTime() - (INITIAL_LOAD_MINUTES * 60 * 1000));
-        
-        const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
-        
-        // Usar la función auxiliar para formato local
-        url.searchParams.append('fecha_inicio', formatFechaLocalParaAPI(inicio));
-        url.searchParams.append('fecha_fin', formatFechaLocalParaAPI(fechaFinReal));
-
-        const response = await fetch(url.toString(), {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error('Fallo al cargar datos iniciales.');
+        const response = await fetch(url.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Sin conexión.');
         
         const valores = await response.json();
         
         if (valores.length > 0) {
             const primerValor = valores[0];
             const magnitud = primerValor.magnitud_tipo || props.titulo;
-            const simbolo = (primerValor.unidad && primerValor.unidad.simbolo) ? primerValor.unidad.simbolo : 'N/A';
-            chartTitle.value = `${magnitud} (${props.simboloUnidad})`;
+            const unidad = props.simboloUnidad || primerValor.simbolo_unidad || '';
+            chartTitle.value = `${magnitud} (${unidad})`;
             
-            const dataPoints = valores.map(v => [v.fecha_hora_lectura, parseFloat(v.valor)]);
+            let dataPoints = valores.map(v => ({
+                value: [v.fecha_hora_lectura, parseFloat(v.valor)],
+                anomalia: v.anomalia || false, 
+                mensaje: v.mensaje_alerta
+            }));
+
+            // 🚨 LÓGICA ESPECIAL MOVIMIENTO
+            if (esMovimiento.value) {
+                dataPoints = procesarDatosMovimiento(dataPoints);
+            }
+            
             actualizarOpciones(dataPoints, magnitud);
-            
+            calcularEstadisticas(dataPoints); // Calcular stats iniciales
+
             const ultimaFecha = new Date(valores[valores.length - 1].fecha_hora_lectura);
             ultimaLectura.value = ultimaFecha.toLocaleTimeString();
             isStale.value = (new Date() - ultimaFecha) > STALE_THRESHOLD_MS;
         } else {
-            actualizarOpciones([], props.titulo); // Iniciar gráfico vacío
+            actualizarOpciones([], props.titulo);
+            ultimaLectura.value = "Sin datos recientes";
         }
 
       } catch (err) {
@@ -169,497 +222,262 @@ export default {
       }
     };
 
-    // --- 2. FUNCIÓN DE POLLING (TIEMPO REAL) ---
+    // ---------------------------------------------------------
+    // 2. POLLING
+    // ---------------------------------------------------------
     const sondearUltimoValor = async () => {
-      // No ejecutar si no hay un ID de campo (ej. si el padre aún no lo envía)
       const token = localStorage.getItem('accessToken');
-      if (!props.campoId || props.campoId <= 0 || !token) return;
+      if (!props.campoId || !token) return;
 
       try {
-        // Llama al endpoint de TIEMPO REAL (LIMIT 1)
-        const response = await fetch(`${API_BASE_URL}/api/valores/ultimo/${props.campoId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-            // Si el sensor deja de responder, marcar los datos como "viejos"
-            isStale.value = true;
-            return; 
-        }
+        const url = new URL(`${API_BASE_URL}/api/valores/ultimo/${props.campoId}`);
+        if (props.analisisActivo) url.searchParams.append('analisis_activo', 'true');
+
+        const response = await fetch(url.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) { isStale.value = true; return; }
         
         const ultimoValor = await response.json();
         const nuevaFecha = new Date(ultimoValor.fecha_hora_lectura);
-        const nuevoPunto = [ultimoValor.fecha_hora_lectura, parseFloat(ultimoValor.valor)];
-
-        // Actualizar UI (Hora e indicador de estado)
-        ultimaLectura.value = nuevaFecha.toLocaleTimeString();
-        isStale.value = (new Date() - nuevaFecha) > STALE_THRESHOLD_MS;
         
-        // Si el gráfico estaba vacío (porque la carga inicial no trajo datos)
+        // Punto crudo
+        const nuevoPunto = {
+            value: [ultimoValor.fecha_hora_lectura, parseFloat(ultimoValor.valor)],
+            anomalia: ultimoValor.anomalia || false,
+            mensaje: ultimoValor.mensaje_alerta
+        };
+
+        ultimaLectura.value = nuevaFecha.toLocaleTimeString();
+        isStale.value = false;
+        
         if (!chartOption.value.series || chartOption.value.series.length === 0) {
-            const magnitud = ultimoValor.magnitud_tipo || props.titulo;
-            const simbolo = (ultimoValor.unidad && ultimoValor.unidad.simbolo) ? ultimoValor.unidad.simbolo : 'N/A';
-            chartTitle.value = `${magnitud} (${simbolo})`;
-            actualizarOpciones([nuevoPunto], magnitud); // Crea el gráfico con el primer punto
+            actualizarOpciones([nuevoPunto], props.titulo);
             return;
         }
 
-        // Obtener la data existente del gráfico
-        const data = chartOption.value.series[0].data;
+        let seriesData = chartOption.value.series[0].data;
+        const lastTimestamp = seriesData.length > 0 ? seriesData[seriesData.length - 1].value[0] : null;
+        
+        // Si es movimiento y ventana larga, necesitamos lógica especial de agregación en tiempo real
+        // (Simplificación: Para polling en ventanas largas, simplemente agregamos el punto. 
+        // Si se quiere agregación perfecta en tiempo real, sería complejo. 
+        // Aquí simplemente añadimos el punto crudo para ver actividad inmediata).
+        if (lastTimestamp === nuevoPunto.value[0]) return;
 
-        // Evitar duplicados (si el 'ultimoValor' es el mismo que ya tenemos)
-        if (data.length > 0 && data[data.length - 1][0] === nuevoPunto[0]) {
-            return; // El dato ya está, no hacer nada
-        }
-
-        // Lógica de Ventana Deslizante
-        data.push(nuevoPunto); // Añadir el nuevo
-
-        if (data.length > MAX_DATA_POINTS) {
-          data.shift(); // Eliminar el más antiguo
+        seriesData.push(nuevoPunto); 
+        
+        // Limpieza (Ventana deslizante)
+        const minTime = new Date(nuevaFecha.getTime() - (props.ventanaTiempo * 60 * 1000)).getTime();
+        while (seriesData.length > 0 && new Date(seriesData[0].value[0]).getTime() < minTime) {
+             seriesData.shift();
         }
         
-        // Forzar la actualización de ECharts
-        chartOption.value.series[0].data = data;
-        chartOption.value = { ...chartOption.value }; 
+        actualizarOpciones(seriesData, chartTitle.value.split(' ')[0]); 
+        calcularEstadisticas(seriesData); // Actualizar stats en vivo
 
       } catch (err) {
-        console.error("Error en polling:", err);
         isStale.value = true;
       }
     };
 
-    // --- 3. FUNCIÓN DE ECHARTS (Configuración) ---
-    const actualizarOpciones = (data, magnitud) => {
+    // ---------------------------------------------------------
+    // 3. CONFIGURACIÓN ECHARTS
+    // ---------------------------------------------------------
+    const actualizarOpciones = (data, seriesName) => {
+        const anomalypoints = data.filter(item => item.anomalia).map(item => ({
+            name: 'Anomalía', xAxis: item.value[0], yAxis: item.value[1], value: item.value[1],
+            itemStyle: { color: colorAlerta }
+        }));
+        
+        // Tipo de gráfico: Barra para movimiento (histórico), Línea para lo demás
+        const chartType = (esMovimiento.value && props.ventanaTiempo > 5) ? 'bar' : 'line';
+
         chartOption.value = {
-            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-            // 🚨 Ajustamos el 'grid' para dar espacio al título y al dataZoom
-            grid: { left: '50px', right: '20px', bottom: '70px', top: '50px' },
+            toolbox: {
+                show: true,
+                feature: {
+                    saveAsImage: { show: true, title: 'Guardar' },
+                    dataZoom: { show: true, title: { zoom: 'Zoom', back: 'Restaurar' } }
+                },
+                iconStyle: { borderColor: textColor.value },
+                right: 20, top: 0
+            },
+            tooltip: { 
+                trigger: 'axis', 
+                axisPointer: { type: 'line' },
+                backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                borderColor: props.isDark ? '#444' : '#ddd',
+                textStyle: { color: textColor.value },
+                formatter: (params) => {
+                    const item = params[0];
+                    if (!item || !item.value) return ''; 
+                    const fecha = new Date(item.value[0]).toLocaleTimeString();
+                    const val = item.value[1];
+                    const alerta = item.data.anomalia ? `<br/><span style="color:${colorAlerta}">⚠️ ${item.data.mensaje || 'Anomalía'}</span>` : '';
+                    return `<b>${fecha}</b><br/>${item.seriesName}: ${val}${alerta}`;
+                }
+            },
+            grid: { left: 40, right: 30, bottom: 40, top: 40, containLabel: true },
             xAxis: {
                 type: 'time',
-                axisLine: { lineStyle: { color: gridColor.value } },
-                axisLabel: { color: textColor.value }
+                boundaryGap: chartType === 'bar', // Barras necesitan gap
+                axisLine: { show: false },
+                axisLabel: { color: textColor.value, fontSize: 11 },
+                splitLine: { show: false }
             },
             yAxis: {
                 type: 'value',
-                scale: true,
-                axisLabel: { color: textColor.value, formatter: '{value}' },
-                splitLine: { lineStyle: { color: gridColor.value } }
+                scale: true, 
+                axisLabel: { color: textColor.value, fontSize: 11 },
+                splitLine: { lineStyle: { color: gridColor.value, type: 'dashed' } }
             },
-            
-            // 🚨 CORRECCIÓN: Añadir la barra de Zoom (dataZoom)
-            dataZoom: [
-              {
-                type: 'slider', // Barra de deslizamiento inferior
-                start: 0,
-                end: 100,
-                bottom: 10,
-                height: 25,
-                backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-                borderColor: gridColor.value,
-                textStyle: { color: textColor.value }
-              },
-              {
-                type: 'inside' // Zoom con la rueda del ratón
-              }
-            ],
-            
+            dataZoom: [ { type: 'slider', show: true, bottom: 5, height: 15, borderColor: 'transparent', textStyle: { color: textColor.value } }, { type: 'inside' } ], 
             series: [{
-                name: magnitud,
-                data: data,
-                type: 'line',
-                showSymbol: false,
-                color: '#8A2BE2',
-                lineStyle: { width: 2 },
+                name: seriesName,
+                type: chartType,
+                data: data.map(item => ({
+                    value: item.value,
+                    itemStyle: item.anomalia ? { color: colorAlerta } : null,
+                    // Puntos solo en modo línea
+                    symbol: (chartType === 'line' && item.anomalia) ? 'circle' : 'none',
+                    symbolSize: 6,
+                    anomalia: item.anomalia,
+                    mensaje: item.mensaje
+                })),
+                smooth: true,
+                barMaxWidth: 20, // Para barras
+                lineStyle: { width: 2, color: colorPrincipal },
+                itemStyle: { color: colorPrincipal }, // Color base para barras
+                areaStyle: chartType === 'line' ? {
+                    color: {
+                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [{ offset: 0, color: 'rgba(138, 43, 226, 0.3)' }, { offset: 1, color: 'rgba(138, 43, 226, 0)' }]
+                    }
+                } : undefined,
+                markPoint: props.analisisActivo && chartType === 'line' ? {
+                    data: anomalypoints,
+                    symbol: 'pin', symbolSize: 35,
+                    label: { show: true, formatter: '!', color: '#fff', fontWeight: 'bold' },
+                    itemStyle: { color: colorAlerta }
+                } : null
             }]
         };
     };
 
-    // --- 4. CICLO DE VIDA ---
+    watch(() => [props.campoId, props.ventanaTiempo, props.analisisActivo], () => {
+        clearInterval(pollingInterval);
+        cargarDatosIniciales().then(() => {
+            pollingInterval = setInterval(sondearUltimoValor, POLLING_INTERVAL_MS);
+        });
+    });
+
+    watch(() => props.isDark, () => {
+        if (chartOption.value.series) chartOption.value = { ...chartOption.value };
+    });
+
     onMounted(() => {
-      // Lógica de dos fases: Carga inicial PRIMERO, luego polling
-      cargarDatosIniciales().then(() => {
-        if (pollingInterval) clearInterval(pollingInterval);
-        pollingInterval = setInterval(sondearUltimoValor, POLLING_INTERVAL_MS);
-      });
-    });
-
-    onBeforeUnmount(() => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    });
-    
-    // --- 5. WATCHERS ---
-    watch(() => props.campoId, (newId, oldId) => {
-      if (newId !== oldId) {
-        clearInterval(pollingInterval);
-        
-        chartOption.value = {}; 
-        loading.value = true;
-        error.value = null;
-        ultimaLectura.value = 'N/A';
-        isStale.value = true;
-
-        // Reiniciar carga y polling para el nuevo campoId
         cargarDatosIniciales().then(() => {
             if (pollingInterval) clearInterval(pollingInterval);
             pollingInterval = setInterval(sondearUltimoValor, POLLING_INTERVAL_MS);
         });
-      }
     });
+    onBeforeUnmount(() => { if (pollingInterval) clearInterval(pollingInterval); });
 
-    watch(() => props.isDark, () => {
-        if (chartOption.value && chartOption.value.series) {
-          actualizarOpciones(chartOption.value.series[0].data, chartOption.value.series[0].name);
-        }
-      }
-    );
-
-    return { loading, error, chartOption, chartTitle, ultimaLectura, isStale };
+    return { loading, error, chartOption, chartTitle, ultimaLectura, isStale, stats, esMovimiento };
   }
 }
 </script>
 
 <style scoped lang="scss">
 $PRIMARY-PURPLE: #8A2BE2;
+$DANGER-COLOR: #E74C3C;
+$SUCCESS-COLOR: #1ABC9C;
 $GRAY-COLD: #99A2AD;
 $LIGHT-TEXT: #E4E6EB;
 $DARK-TEXT: #333333;
 $SUBTLE-BG-DARK: #2B2B40;
 $SUBTLE-BG-LIGHT: #FFFFFF;
-$DANGER-COLOR: #e74c3c;
-$SUCCESS-COLOR: #1ABC9C;
 
 .chart-card {
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 20px;
-    height: 350px; /* Altura fija */
+    height: 450px; /* 🚨 Aumentamos altura para acomodar el footer de stats */
     display: flex;
     flex-direction: column;
     transition: background-color 0.3s, box-shadow 0.3s;
+    border: 1px solid transparent;
 }
-.chart-wrapper {
-    position: relative;
+
+.chart-content {
     flex-grow: 1;
-    width: 100%;
+    display: flex;
+    flex-direction: column;
     height: 100%;
 }
-.chart-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 0; /* Ajustado por el header */
+
+.chart-wrapper {
+    flex-grow: 1; /* Ocupa el espacio disponible */
+    width: 100%;
+    min-height: 0; /* Importante para flexbox */
 }
-.chart-loading, .chart-error {
-    text-align: center;
-    margin: auto;
-    font-style: italic;
+
+/* HEADER */
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    
+    .title-group {
+        display: flex; align-items: center; gap: 12px;
+        .chart-title { font-size: 1.1rem; font-weight: 700; margin: 0; }
+        .analysis-badge {
+            font-size: 0.7rem; background-color: rgba($PRIMARY-PURPLE, 0.1);
+            color: $PRIMARY-PURPLE; padding: 3px 8px; border-radius: 12px;
+            font-weight: 700; display: flex; align-items: center; gap: 6px;
+            .pulse-dot { width: 6px; height: 6px; background-color: $PRIMARY-PURPLE; border-radius: 50%; animation: pulse 2s infinite; }
+        }
+    }
+    .last-update { font-size: 0.8rem; font-weight: 600; color: $GRAY-COLD; i { margin-right: 4px; } &.live { color: $SUCCESS-COLOR; } &.stale { color: $DANGER-COLOR; } }
 }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba($PRIMARY-PURPLE, 0.7); } 70% { box-shadow: 0 0 0 6px rgba($PRIMARY-PURPLE, 0); } 100% { box-shadow: 0 0 0 0 rgba($PRIMARY-PURPLE, 0); } }
+
+/* 🚨 NUEVO: FOOTER DE ESTADÍSTICAS */
+.stats-footer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 10px;
+    padding-top: 15px;
+    margin-top: 10px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    
+    .stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        
+        .label { font-size: 0.7rem; text-transform: uppercase; color: $GRAY-COLD; font-weight: 600; margin-bottom: 2px; }
+        .value { font-size: 1rem; font-weight: 700; }
+        
+        &.highlight .value { color: $PRIMARY-PURPLE; }
+    }
+}
+
+/* ESTADOS */
+.chart-loading, .chart-error { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: $GRAY-COLD; gap: 10px; }
+.spinner-border { width: 2rem; height: 2rem; border: 3px solid rgba($PRIMARY-PURPLE, 0.3); border-top-color: $PRIMARY-PURPLE; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .chart-error { color: $DANGER-COLOR; }
 
-/* 🚨 NUEVOS ESTILOS (Header y Estado) */
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 15px;
-}
-.last-update {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #99A2AD; /* $GRAY-COLD */
-  transition: color 0.3s;
-  
-  i { margin-right: 4px; }
-  
-  &.live { /* Recibiendo datos */
-    color: #1ABC9C; /* $SUCCESS-COLOR */
-  }
-  &.stale { /* Datos viejos */
-    color: #e74c3c; /* $DANGER-COLOR */
-  }
-}
-
-/* ------------------- TEMAS ------------------- */
+/* TEMAS */
 .theme-light .chart-card {
-    background-color: $SUBTLE-BG-LIGHT;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    color: $DARK-TEXT;
+    background-color: $SUBTLE-BG-LIGHT; box-shadow: 0 4px 20px rgba(0,0,0,0.05); color: $DARK-TEXT;
+    .chart-header, .stats-footer { border-color: rgba(0,0,0,0.05); }
 }
 .theme-dark .chart-card {
-    background-color: $SUBTLE-BG-DARK;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    color: $LIGHT-TEXT;
-}
-.theme-dark .chart-title {
-    color: $LIGHT-TEXT;
-}
-.theme-dark .chart-loading, .theme-dark .chart-error {
-    color: $GRAY-COLD;
+    background-color: $SUBTLE-BG-DARK; box-shadow: 0 4px 20px rgba(0,0,0,0.2); color: $LIGHT-TEXT;
+    .chart-header, .stats-footer { border-color: rgba(255,255,255,0.05); }
+    .chart-title { color: $LIGHT-TEXT; }
 }
 </style>
-
-<!-- <template>
-  <div class="chart-card" :class="{ 'theme-dark': isDark }">
-    
-    <div class="chart-header">
-      <h4 class="chart-title">{{ chartTitle }}</h4>
-      <span 
-        class="last-update" 
-        :class="{ 'stale': isStale, 'live': !isStale && !loading }"
-        :title="isStale ? 'Datos desactualizados' : 'Recibiendo datos'"
-      >
-        <i class="bi bi-broadcast"></i> {{ ultimaLectura }}
-      </span>
-    </div>
-    
-    <div v-if="loading" class="chart-loading">
-      <i class="bi bi-arrow-clockwise fa-spin"></i> Cargando datos iniciales...
-    </div>
-    <div v-else-if="error" class="chart-error">{{ error }}</div>
-    
-    <div v-else class="chart-wrapper">
-      <v-chart :option="chartOption" autoresize />
-    </div>
-  </div>
-</template>
-
-<script>
-// (Importaciones de ECharts: use, CanvasRenderer, LineChart, ...)
-import { use } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart } from 'echarts/charts';
-import {
-  TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent
-} from 'echarts/components';
-import VChart from 'vue-echarts';
-import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
-
-// Registro de componentes de ECharts
-use([
-  CanvasRenderer, LineChart, TitleComponent, TooltipComponent, 
-  LegendComponent, GridComponent, DataZoomComponent
-]);
-
-// // 🚨 CORRECCIÓN 1: API_BASE_URL debe estar definida
-// const API_BASE_URL = 'http://127.0.0.1:8001';
-function formatFechaLocalParaAPI(date) {
-    const pad = (num) => String(num).padStart(2, '0');
-    
-    const Y = date.getFullYear();
-    const M = pad(date.getMonth() + 1);
-    const D = pad(date.getDate());
-    const h = pad(date.getHours());
-    const m = pad(date.getMinutes());
-    const s = pad(date.getSeconds());
-    
-    return `${Y}-${M}-${D}T${h}:${m}:${s}`;
-}
-export default {
-  name: 'GraficoEnTiempoReal',
-  components: { VChart },
-  props: {
-    campoId: { type: Number, required: true },
-    titulo: { type: String, default: 'Tiempo Real' },
-    isDark: { type: Boolean, default: false }
-  },
-  
-  setup(props) {
-    const loading = ref(true); // 👈 Vuelve a 'true'
-    const error = ref(null);
-    const chartOption = ref({});
-    const chartTitle = ref(props.titulo);
-    
-    const ultimaLectura = ref('N/A');
-    const isStale = ref(true);
-    let pollingInterval = null; 
-    
-    // Constantes de tiempo
-    const POLLING_INTERVAL_MS = 5000;
-    const INITIAL_LOAD_MINUTES = 5;
-    const MAX_DATA_POINTS = (INITIAL_LOAD_MINUTES * 60) / (POLLING_INTERVAL_MS / 1000); // 60 puntos
-    const STALE_THRESHOLD_MS = 60000;
-
-    // Colores de tema
-    const gridColor = computed(() => props.isDark ? 'rgba(228, 230, 235, 0.2)' : 'rgba(51, 51, 51, 0.2)');
-    const textColor = computed(() => props.isDark ? '#E4E6EB' : '#333333');
-
-    // --- FUNCIÓN DE CARGA INICIAL (RESTAURADA) ---
-    const cargarDatosIniciales = async () => {
-      loading.value = true;
-      error.value = null;
-      const token = localStorage.getItem('accessToken');
-
-      // 1. Carga Inicial (Últimos 5 minutos)
-      const fin = new Date();
-      const inicio = new Date(fin.getTime() - (INITIAL_LOAD_MINUTES * 60 * 1000));
-
-      const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
-      
-      // 🚨 CORRECCIÓN UTC: Usar la función auxiliar para formato local
-      url.searchParams.append('fecha_inicio', formatFechaLocalParaAPI(inicio));
-      url.searchParams.append('fecha_fin', formatFechaLocalParaAPI(fin));
-
-      try {
-        const response = await fetch(url.toString(), {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error('Fallo al cargar datos iniciales.');
-        
-        const valores = await response.json();
-        
-        if (valores.length > 0) {
-            const primerValor = valores[0];
-            const magnitud = primerValor.magnitud_tipo || props.titulo;
-            const simbolo = (primerValor.unidad && primerValor.unidad.simbolo) ? primerValor.unidad.simbolo : 'N/A';
-            chartTitle.value = `${magnitud} (${simbolo})`;
-            
-            const dataPoints = valores.map(v => [v.fecha_hora_lectura, parseFloat(v.valor)]);
-            actualizarOpciones(dataPoints, magnitud);
-            
-            const ultimaFecha = new Date(valores[valores.length - 1].fecha_hora_lectura);
-            ultimaLectura.value = ultimaFecha.toLocaleTimeString();
-        } else {
-            // Si no hay datos iniciales, creamos un gráfico vacío
-            actualizarOpciones([], props.titulo);
-            // No lanzamos error, simplemente el polling empezará a llenar el gráfico
-        }
-
-      } catch (err) {
-        error.value = err.message;
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    // --- FUNCIÓN DE POLLING (TIEMPO REAL) ---
-    const sondearUltimoValor = async () => {
-      const token = localStorage.getItem('accessToken');
-      if (!props.campoId) return;
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/valores/ultimo/${props.campoId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-            isStale.value = true;
-            return; 
-        }
-        
-        const ultimoValor = await response.json();
-        
-        const nuevaFecha = new Date(ultimoValor.fecha_hora_lectura);
-        ultimaLectura.value = nuevaFecha.toLocaleTimeString();
-        isStale.value = false; 
-        
-        const nuevoPunto = [ultimoValor.fecha_hora_lectura, parseFloat(ultimoValor.valor)];
-
-        // Si el gráfico estaba vacío (por la carga inicial fallida)
-        if (!chartOption.value.series || chartOption.value.series.length === 0) {
-            const magnitud = ultimoValor.magnitud_tipo || props.titulo;
-            const simbolo = (ultimoValor.unidad && ultimoValor.unidad.simbolo) ? ultimoValor.unidad.simbolo : 'N/A';
-            chartTitle.value = `${magnitud} (${simbolo})`;
-            actualizarOpciones([nuevoPunto], magnitud);
-            return;
-        }
-
-        const data = chartOption.value.series[0].data;
-
-        // Evitar duplicados
-        if (data.length > 0 && data[data.length - 1][0] === nuevoPunto[0]) {
-            const ahora = new Date();
-            isStale.value = (ahora - nuevaFecha) > STALE_THRESHOLD_MS;
-            return;
-        }
-
-        data.push(nuevoPunto); 
-
-        if (data.length > MAX_DATA_POINTS) {
-          data.shift(); 
-        }
-        
-        chartOption.value.series[0].data = data;
-        chartOption.value = { ...chartOption.value }; 
-
-      } catch (err) {
-        console.error("Error en polling:", err);
-        isStale.value = true;
-      }
-    };
-    // --- FUNCIÓN DE ECHARTS (ACTUALIZAR OPCIONES) ---
-    const actualizarOpciones = (data, magnitud) => {
-        chartOption.value = {
-            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-            grid: { left: '50px', right: '20px', bottom: '30px', top: '20px' }, 
-            xAxis: {
-                type: 'time',
-                axisLine: { lineStyle: { color: gridColor.value } },
-                axisLabel: { color: textColor.value }
-            },
-            yAxis: {
-                type: 'value',
-                scale: true,
-                axisLabel: { color: textColor.value, formatter: '{value}' },
-                splitLine: { lineStyle: { color: gridColor.value } }
-            },
-            dataZoom: [ { type: 'inside' } ], 
-            series: [{
-                name: magnitud,
-                data: data,
-                type: 'line',
-                showSymbol: false,
-                color: '#8A2BE2',
-                lineStyle: { width: 2 },
-            }]
-        };
-    };
-
-    // --- CICLO DE VIDA ---
-    onMounted(() => {
-      // 🚨 CORREGIDO: Carga inicial PRIMERO, luego polling
-      cargarDatosIniciales().then(() => {
-        // Iniciar el polling solo después de la carga inicial
-        if (pollingInterval) clearInterval(pollingInterval);
-        pollingInterval = setInterval(sondearUltimoValor, POLLING_INTERVAL_MS);
-      });
-    });
-
-    onBeforeUnmount(() => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    });
-    
-    // --- WATCHERS ---
-    watch(() => props.campoId, (newId, oldId) => {
-      if (newId !== oldId) {
-        clearInterval(pollingInterval);
-        
-        // Reiniciar estados
-        chartOption.value = {}; 
-        loading.value = true;
-        error.value = null;
-        ultimaLectura.value = 'N/A';
-        isStale.value = true;
-
-        // Reiniciar carga y polling para el nuevo campoId
-        cargarDatosIniciales().then(() => {
-            if (pollingInterval) clearInterval(pollingInterval);
-            pollingInterval = setInterval(sondearUltimoValor, POLLING_INTERVAL_MS);
-        });
-      }
-    });
-
-    // Actualizar colores del tema
-    watch(() => props.isDark, () => {
-        if (chartOption.value && chartOption.value.series) {
-          actualizarOpciones(chartOption.value.series[0].data, chartOption.value.series[0].name);
-        }
-      }
-    );
-
-    return { loading, error, chartOption, chartTitle, ultimaLectura, isStale };
-  }
-}
-</script> -->

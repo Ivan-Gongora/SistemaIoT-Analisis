@@ -5,7 +5,7 @@
     <div class="plataforma-contenido" :class="{ 'shifted': isSidebarOpen }">
       <EncabezadoPlataforma 
         titulo="Monitor en Tiempo Real"
-        subtitulo="Supervisión crítica de infraestructura. Visualización de telemetría en vivo con detección de anomalías y alertas preventivas."
+        subtitulo="Supervisión continua de telemetría. Visualización dinámica con actualizaciones automáticas cada 5 segundos."
         @toggle-sidebar="toggleSidebar" 
         :is-sidebar-open="isSidebarOpen"
       />
@@ -51,27 +51,35 @@
                 <h4 class="section-title"><i class="bi bi-clock-history"></i> Ventana de Tiempo</h4>
                 
                 <div class="form-group">
-                    <label>Duración Visual</label>
-                    <div class="input-wrapper">
-                        <i class="bi bi-hourglass-split input-icon"></i>
-                        <select v-model="ventanaTiempo" class="form-control" :disabled="!dispositivoSeleccionadoId">
-                            <option value="5">Últimos 5 minutos (Live)</option>
-                            <option value="60">Última 1 hora (Histórico)</option>
-                            <option value="1440">Últimas 24 horas (Histórico)</option>
-                        </select>
-                    </div>
-                    <div class="status-pill" :class="ventanaTiempo <= 5 ? 'live' : 'history'">
-                        <i class="bi" :class="ventanaTiempo <= 5 ? 'bi-broadcast' : 'bi-database-check'"></i>
-                        <span>{{ ventanaTiempo <= 5 ? 'Transmisión en Vivo' : 'Consulta Histórica' }}</span>
-                    </div>
+                        <label>Duración Visual</label>
+                        <div class="input-wrapper">
+                            <i class="bi bi-hourglass-split input-icon"></i>
+                            <select v-model="ventanaTiempo" class="form-control" :disabled="!dispositivoSeleccionadoId">
+                                <option value="5">Últimos 5 minutos (Live)</option>
+                                <option value="60">Última 1 hora</option>
+                                <option value="1440">Últimas 24 horas</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 🚨 AVISO SOLICITADO -->
+                        <div class="status-pill" :class="ventanaTiempo <= 5 ? 'live' : 'history'">
+                            <i class="bi" :class="ventanaTiempo <= 5 ? 'bi-broadcast' : 'bi-database-check'"></i>
+                            <span>{{ ventanaTiempo <= 5 ? 'Transmisión en Vivo' : 'Consulta Histórica' }}</span>
+                        </div>
+                        <small v-if="ventanaTiempo == 1440 && analisisActivo" class="info-text mt-1" style="color: #FFC107;">
+                            <i class="bi bi-lightbulb-fill"></i> Recomendado: El análisis de 24h es ideal para detectar patrones de actividad.
+                        </small>
+                    
                 </div>
+
+
             </div>
 
-            <!-- SECCIÓN 3: ANÁLISIS Y RENDIMIENTO -->
+            <!-- SECCIÓN 3: INTELIGENCIA Y RENDIMIENTO -->
             <div class="control-section config-section">
                 <h4 class="section-title"><i class="bi bi-activity"></i> Inteligencia</h4>
                 
-                <!-- Toggle de Análisis en Tiempo Real -->
+                <!-- 🚨 TOGGLE DE ANÁLISIS -->
                 <div class="form-group switch-group">
                     <label>Análisis de Datos</label>
                     <div class="toggle-wrapper">
@@ -102,7 +110,7 @@
             </div>
         </div>
          
-        <!-- SELECTOR DE VARIABLES -->
+        <!-- SELECTOR DE VARIABLES (GRID MODERNO) -->
         <div class="variables-panel" v-if="campos.length > 0">
             <div class="panel-header">
                 <h4><i class="bi bi-check2-square"></i> Variables Disponibles</h4>
@@ -110,7 +118,8 @@
             </div>
             
             <div v-if="loadingCampos" class="loading-state">
-                <div class="spinner"></div> Cargando configuración...
+                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                <span class="ms-2">Cargando configuración...</span>
             </div>
 
             <div class="variables-grid">
@@ -125,7 +134,6 @@
                         <i :class="getIcon(c.magnitud_tipo)"></i>
                     </div>
                     <div class="card-info">
-                        <!-- 🚨 AQUI: Color Morado Aplicado -->
                         <span class="var-name">{{ c.nombre }}</span>
                         <span class="var-unit">{{ c.simbolo_unidad || '-' }}</span>
                     </div>
@@ -149,6 +157,7 @@
         
         <!-- GRID DE GRÁFICOS -->
         <div class="charts-grid-realtime" v-if="camposFiltrados.length > 0">
+            <!-- 🚨 AQUI SE PASAN LOS PROPS MAESTROS A CADA GRÁFICO -->
             <GraficoEnTiempoReal
                 v-for="campo in camposFiltrados"
                 :key="campo.id"
@@ -156,6 +165,7 @@
                 :titulo="campo.nombre"
                 :is-dark="isDark"
                 :simbolo-unidad="campo.simbolo_unidad || ''"
+                
                 :metodo-carga="metodoCarga" 
                 :ventana-tiempo="parseInt(ventanaTiempo)"
                 :analisis-activo="analisisActivo"
@@ -194,10 +204,10 @@ export default {
       dispositivoSeleccionadoId: null,
       camposSeleccionadosIds: [],
       
-      // Configuración
+      // 🚨 CONFIGURACIÓN MAESTRA (Controla a los hijos)
       metodoCarga: 'optimizado', 
-      ventanaTiempo: '5', 
-      analisisActivo: true, // 🚨 Por defecto activo
+      ventanaTiempo: '5',    // Default: 5 minutos
+      analisisActivo: true,  // Default: Análisis encendido
 
       loadingProyectos: true,
       loadingDispositivos: false,
@@ -369,21 +379,37 @@ export default {
 <style scoped lang="scss">
 @use "sass:color";
 
-// VARIABLES
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS: #1ABC9C;
-$DANGER: #E74C3C;
-$WARNING: #c69a13;
-$GRAY: #99A2AD;
+// VARIABLES GLOBALES DE PALETA "IoT SPECTRUM"
 $WHITE: #FFFFFF;
+$BLACK: #000000;
+$WHITE-SOFT: #F7F9FC;
+$SUBTLE-BG-LIGHT: #FFFFFF;
 $DARK-BG-CONTRAST: #1E1E30;
 $SUBTLE-BG-DARK: #2B2B40;
 $BLUE-MIDNIGHT: #1A1A2E;
+
 $LIGHT-TEXT: #E4E6EB;
 $DARK-TEXT: #333333;
-$LIGHT-BORDER: #E0E0E0;
-$DARK-BORDER: #44475A;
-$DARK-INPUT-BG: #3C3C55;
+$GRAY-COLD: #99A2AD;
+$GRAY-LIGHT: #E0E0E0; 
+$DANGER: #E74C3C;
+$SUCCESS: #1ABC9C;
+$WARNING: #c69a13; 
+$GRAY: #E0E0E0; 
+
+$PRIMARY-PURPLE: #8A2BE2;
+$SUCCESS-COLOR: #1ABC9C;
+$MAINTENANCE-COLOR: #FFC107;
+$DANGER-COLOR: #E74C3C;
+$ERROR-COLOR: #FF5733; 
+$INFO-COLOR: #8A2BE2;
+$ALERT-COLOR: #c69a13; 
+$INACTIVE-COLOR: #7F8C8D; 
+$WARNING-COLOR: #FFC107; 
+$DARK-BORDER: #44475A; 
+$LIGHT-BORDER: #E0E0E0; 
+$DARK-INPUT-BG: #3C3C55; 
+$LIGHT-INPUT-BG: #FFFFFF; 
 
 .reportes-contenido {
     padding: 30px 40px;
@@ -414,7 +440,7 @@ $DARK-INPUT-BG: #3C3C55;
         font-size: 0.95rem;
         font-weight: 700;
         text-transform: uppercase;
-        color: $GRAY;
+        color: $GRAY-COLD;
         letter-spacing: 0.5px;
         margin-bottom: 5px;
         display: flex;
@@ -447,7 +473,7 @@ $DARK-INPUT-BG: #3C3C55;
         .input-icon {
             position: absolute;
             left: 12px;
-            color: $GRAY;
+            color: $GRAY-COLD;
             pointer-events: none;
             font-size: 1rem;
         }
@@ -475,14 +501,17 @@ $DARK-INPUT-BG: #3C3C55;
             }
         }
     }
+    
     .info-text { color: $SUCCESS; font-size: 0.8rem; margin-top: 4px; i { margin-right: 4px; } }
 }
 
 // ESTILOS DEL SWITCH (TOGGLE)
-.toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.switch-group {
+    .toggle-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
     
     .switch {
         position: relative;
@@ -496,7 +525,7 @@ $DARK-INPUT-BG: #3C3C55;
             position: absolute;
             cursor: pointer;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc;
+            background-color: $INACTIVE-COLOR;
             transition: .4s;
             border-radius: 24px;
             
@@ -515,13 +544,13 @@ $DARK-INPUT-BG: #3C3C55;
         
         input:checked + .slider { background-color: $PRIMARY-PURPLE; }
         input:checked + .slider:before { transform: translateX(22px); }
-        input:disabled + .slider { background-color: #eee; cursor: not-allowed; }
+        input:disabled + .slider { background-color: #eee; cursor: not-allowed; opacity: 0.5; }
     }
     
     .switch-label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: $GRAY;
+        color: $GRAY-COLD;
         &.active { color: $PRIMARY-PURPLE; }
     }
 }
@@ -548,7 +577,7 @@ $DARK-INPUT-BG: #3C3C55;
     .panel-header {
         margin-bottom: 15px;
         h4 { font-size: 1.1rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
-        .subtitle { font-size: 0.85rem; color: $GRAY; }
+        .subtitle { font-size: 0.85rem; color: $GRAY-COLD; }
         i { color: $PRIMARY-PURPLE; }
     }
     
@@ -583,17 +612,17 @@ $DARK-INPUT-BG: #3C3C55;
         
         .card-icon {
             width: 32px; height: 32px;
-            background-color: rgba($GRAY, 0.1);
+            background-color: rgba($GRAY-COLD, 0.1);
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            i { font-size: 1.1rem; color: $GRAY; transition: color 0.2s; }
+            i { font-size: 1.1rem; color: $GRAY-COLD; transition: color 0.2s; }
         }
         
         .card-info {
             display: flex; flex-direction: column;
-            // 🚨 TEXTO MORADO
+            // 🚨 TEXTO MORADO (Solicitud específica)
             .var-name { font-weight: 600; font-size: 0.9rem; color: $PRIMARY-PURPLE; }
-            .var-unit { font-size: 0.75rem; color: $GRAY; }
+            .var-unit { font-size: 0.75rem; color: $GRAY-COLD; }
         }
         
         .check-indicator {
@@ -617,12 +646,14 @@ $DARK-INPUT-BG: #3C3C55;
     padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0; font-weight: 500;
     display: flex; align-items: center; justify-content: center; gap: 10px;
     
-    &.empty { background-color: rgba($GRAY, 0.1); color: #555; }
+    &.empty { background-color: rgba($GRAY-COLD, 0.1); color: #555; }
     &.error { background-color: rgba($DANGER, 0.1); color: $DANGER; }
 }
-.alert-info { background-color: rgba($GRAY, 0.1); color: $DARK-TEXT; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+.alert-info { background-color: rgba($GRAY-COLD, 0.1); color: $DARK-TEXT; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
 
-// TEMAS
+// -----------------------------------
+// TEMAS (DARK MODE)
+// -----------------------------------
 .theme-dark {
     background-color: $DARK-BG-CONTRAST; 
     color: $LIGHT-TEXT;
@@ -649,10 +680,15 @@ $DARK-INPUT-BG: #3C3C55;
         background-color: $SUBTLE-BG-DARK;
         border-color: $DARK-BORDER;
         
+        // Mantener morado en dark mode
         .var-name { color: $PRIMARY-PURPLE; } 
         .card-icon { background-color: rgba($WHITE, 0.05); }
         
-        &:hover { border-color: $PRIMARY-PURPLE; background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); }
+        // SCSS Moderno (color.adjust en lugar de lighten)
+        &:hover { 
+            border-color: $PRIMARY-PURPLE; 
+            background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); 
+        }
         &.selected { background-color: rgba($PRIMARY-PURPLE, 0.15); }
     }
     
@@ -663,7 +699,7 @@ $DARK-INPUT-BG: #3C3C55;
 .theme-light {
     background-color: $WHITE-SOFT;
     .control-panel { border-color: $LIGHT-BORDER; }
-    // En light mode también aseguramos el morado
+    // Asegurar morado en light mode también
     .selectable-card { .var-name { color: $PRIMARY-PURPLE; } } 
 }
 </style>

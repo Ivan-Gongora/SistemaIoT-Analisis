@@ -100,6 +100,10 @@ async def procesar_datos_dispositivo_db(datos: PayloadDispositivo) -> Dict[str, 
     finally:
         if conn: 
             conn.close()
+
+
+
+
 # from fastapi import HTTPException
 # from datetime import datetime
 # import pymysql
