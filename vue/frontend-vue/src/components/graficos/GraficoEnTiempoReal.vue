@@ -4,7 +4,6 @@
     <div class="chart-header">
       <div class="title-group">
           <h4 class="chart-title">{{ chartTitle }}</h4>
-          <!-- Indicador visual de IA activa -->
           <span v-if="analisisActivo" class="analysis-badge" title="Detección activa">
             <span class="pulse-dot"></span> AI
           </span>
@@ -19,15 +18,18 @@
       </span>
     </div>
     
+    <!-- LOADING STATE -->
     <div v-if="loading && !chartOption.series" class="chart-loading">
       <div class="spinner-border"></div>
       <p>Sincronizando...</p>
     </div>
     
+    <!-- ERROR STATE -->
     <div v-else-if="error" class="chart-error">
         <i class="bi bi-exclamation-circle"></i> {{ error }}
     </div>
     
+    <!-- CHART CONTENT -->
     <div v-else class="chart-content">
         <div class="chart-wrapper">
             <v-chart :option="chartOption" autoresize />
@@ -71,7 +73,7 @@
 <script>
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart, BarChart } from 'echarts/charts';
+import { LineChart, BarChart } from 'echarts/charts'; // 🚨 Agregamos BarChart
 import {
   TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent, VisualMapComponent, MarkPointComponent, ToolboxComponent
 } from 'echarts/components';
@@ -83,7 +85,6 @@ use([
   LegendComponent, GridComponent, DataZoomComponent, VisualMapComponent, MarkPointComponent, ToolboxComponent
 ]);
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
 
 export default {
   name: 'GraficoEnTiempoReal',
@@ -106,6 +107,8 @@ export default {
     
     const ultimaLectura = ref('Esperando...');
     const isStale = ref(true);
+    
+    // 🚨 Estadísticas Reactivas
     const stats = ref({ ultimo: '-', promedio: '-', maximo: '-', totalEventos: 0 });
     
     let pollingInterval = null; 
@@ -117,96 +120,92 @@ export default {
     const colorPrincipal = '#8A2BE2'; 
     const colorAlerta = '#E74C3C';    
 
+    // Detectar si es un sensor de movimiento para cambiar la visualización
     const esMovimiento = computed(() => {
         const t = props.titulo.toLowerCase();
         return t.includes('movimiento') || t.includes('puerta') || t.includes('presencia') || t.includes('estado');
     });
 
     // ---------------------------------------------------------
-    // CÁLCULO DE ESTADÍSTICAS MEJORADO
+    // CÁLCULO DE ESTADÍSTICAS
     // ---------------------------------------------------------
     const calcularEstadisticas = (data) => {
         if (!data || data.length === 0) return;
         
-        const valores = data.map(item => item.value[1]);
+        const valores = data.map(item => item.value[1]); // Extraer solo el valor Y
         const ultimo = valores[valores.length - 1];
         const maximo = Math.max(...valores);
         const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
         
-        if (esMovimiento.value) {
-             // Para movimiento, sumamos todos los eventos detectados en el periodo
-             const total = valores.reduce((a,b) => a + b, 0);
-             
-             stats.value = {
-                ultimo: ultimo > 0 ? 'Activo' : 'Inactivo',
-                promedio: '-',
-                maximo: maximo.toFixed(0), // Muestra el pico más alto de actividad en un bloque
-                totalEventos: total.toFixed(0)
-            };
-        } else {
-            stats.value = {
-                ultimo: ultimo.toFixed(2),
-                promedio: promedio.toFixed(2),
-                maximo: maximo.toFixed(2),
-                totalEventos: 0
-            };
-        }
+        // Total de "1s" para movimiento (o suma de eventos en barras)
+        const totalEventos = valores.reduce((a,b) => a + b, 0);
+
+        // Formateo
+        const decimales = esMovimiento.value ? 0 : 2;
+        stats.value = {
+            ultimo: ultimo.toFixed(decimales),
+            promedio: promedio.toFixed(decimales),
+            maximo: maximo.toFixed(decimales),
+            totalEventos: totalEventos.toFixed(0)
+        };
     };
 
     // ---------------------------------------------------------
-    // PROCESAMIENTO DE MOVIMIENTO (AGREGACIÓN VISUAL)
+    // PROCESAMIENTO DE MOVIMIENTO (AGREGACIÓN)
     // ---------------------------------------------------------
     const procesarDatosMovimiento = (rawData) => {
-        // Si la ventana es corta (5 min), mostramos datos crudos (línea 0/1)
+        // Si la ventana es pequeña (5 min), mostramos raw (0/1)
         if (props.ventanaTiempo <= 5) return rawData;
 
-        // Si es ventana larga, agrupamos por bloques de tiempo para ver densidad
+        // Si es 1h o 24h, agrupamos por MINUTO para contar "Eventos por Minuto"
         const intervaloMinutos = props.ventanaTiempo > 60 ? 15 : 1;
         const intervaloMs = intervaloMinutos * 60 * 1000;
 
         const agrupado = {};
         
         rawData.forEach(item => {
+            // Redondear timestamp al bloque
             const timestamp = new Date(item.value[0]).getTime();
-            // "Redondear" al bloque de tiempo (Bucket)
             const bloque = Math.floor(timestamp / intervaloMs) * intervaloMs;
             
             if (!agrupado[bloque]) {
                 agrupado[bloque] = { sum: 0, anomalia: false, mensaje: '' };
             }
             
-            // Sumar actividad (si valor > 0.5 asumimos 1/true)
+            // Sumamos el valor (asumiendo 1=movimiento)
             if (item.value[1] > 0.5) {
                 agrupado[bloque].sum += 1;
             }
             
-            // Heredar anomalía del backend
+            // HEREDAR ANOMALÍA: Si el backend marcó algún punto como anómalo, la barra lo hereda
             if (item.anomalia) {
                 agrupado[bloque].anomalia = true;
-                if (!agrupado[bloque].mensaje) agrupado[bloque].mensaje = item.mensaje;
+                // Priorizamos mostrar el mensaje de alerta
+                if (!agrupado[bloque].mensaje || agrupado[bloque].mensaje.includes('eventos')) {
+                    agrupado[bloque].mensaje = item.mensaje; 
+                }
             }
         });
 
-        // Convertir objeto agrupado a array para ECharts
+        // DETECCIÓN LOCAL (DOBLE CHECK PARA BARRAS)
         const resultado = Object.keys(agrupado).sort().map(key => {
             const dataBloque = agrupado[key];
             return {
-                value: [parseInt(key), dataBloque.sum], // Y = Total de eventos en el lapso
+                value: [parseInt(key), dataBloque.sum], // Y = Total de eventos
                 anomalia: dataBloque.anomalia,
                 mensaje: dataBloque.mensaje || `${dataBloque.sum} eventos`
             };
         });
 
-        // 🚨 DETECCIÓN LOCAL DE PICOS (Frontend)
-        // Si la gráfica muestra mucha actividad en un bloque comparado con otros, márcalo
-        if (resultado.length > 5) {
+        // Refuerzo visual: Si una barra es muy alta comparada con la media local, marcarla
+        if (props.analisisActivo && resultado.length > 5) {
              const sumas = resultado.map(r => r.value[1]);
              const mediaLocal = sumas.reduce((a,b) => a+b, 0) / sumas.length;
              
              resultado.forEach(r => {
-                 if (r.value[1] > (mediaLocal * 3) && r.value[1] > 5) {
+                 if (r.value[1] > (mediaLocal * 3) && r.value[1] > 5 && !r.anomalia) {
                      r.anomalia = true;
-                     if (!r.mensaje.includes('Pico')) r.mensaje = `Pico de actividad (${r.value[1]} eventos)`;
+                     r.mensaje = `Pico local (${r.value[1]} eventos)`;
                  }
              });
         }
@@ -220,6 +219,7 @@ export default {
     const cargarDatosIniciales = async () => {
       if (!props.campoId || props.campoId <= 0) { loading.value = false; return; }
       
+      // Solo mostrar loading si no hay datos previos
       if (!chartOption.value.series) loading.value = true;
       
       error.value = null;
@@ -247,7 +247,7 @@ export default {
                 mensaje: v.mensaje_alerta
             }));
 
-            // Transformación si es movimiento
+            // 🚨 TRANSFORMACIÓN SI ES MOVIMIENTO
             if (esMovimiento.value) {
                 dataPoints = procesarDatosMovimiento(dataPoints);
             }
@@ -262,6 +262,7 @@ export default {
             actualizarOpciones([], props.titulo);
             ultimaLectura.value = "Sin datos recientes";
         }
+
       } catch (err) {
         error.value = err.message;
       } finally {
@@ -273,7 +274,7 @@ export default {
     // 2. POLLING (Adaptativo)
     // ---------------------------------------------------------
     const sondearUltimoValor = async () => {
-      // Si es ventana larga, recargamos todo para mantener la agregación correcta
+      // Si es ventana larga, recargamos todo para mantener la agregación correcta de las barras
       if (props.ventanaTiempo > 5) {
           await cargarDatosIniciales(); 
           return;
@@ -329,7 +330,6 @@ export default {
     // 3. CONFIGURACIÓN ECHARTS
     // ---------------------------------------------------------
     const actualizarOpciones = (data, seriesName) => {
-        // Filtrar anomalías para crear la serie de pines
         const anomalypoints = data.filter(item => item.anomalia).map(item => ({
             name: item.mensaje || 'Anomalía', 
             xAxis: item.value[0], 
@@ -338,6 +338,7 @@ export default {
             itemStyle: { color: colorAlerta }
         }));
         
+        // 🚨 CAMBIO VISUAL: Barras para movimiento histórico
         const isBarChart = esMovimiento.value && props.ventanaTiempo > 5;
         const chartType = isBarChart ? 'bar' : 'line';
 
@@ -360,16 +361,11 @@ export default {
                 formatter: (params) => {
                     const item = params[0];
                     if (!item || !item.value) return ''; 
-                    
-                    const fechaObj = new Date(item.value[0]);
-                    const fecha = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    const dia = fechaObj.toLocaleDateString([], {month: 'short', day: 'numeric'});
-                    
+                    const fecha = new Date(item.value[0]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const val = item.value[1];
                     const alerta = item.data.anomalia ? `<br/><span style="color:${colorAlerta}; font-weight:bold;">⚠️ ${item.data.mensaje || 'Anomalía'}</span>` : '';
                     const label = isBarChart ? 'Eventos' : item.seriesName;
-                    
-                    return `<b>${dia} ${fecha}</b><br/>${label}: ${val}${alerta}`;
+                    return `<b>${fecha}</b><br/>${label}: ${val}${alerta}`;
                 }
             },
             grid: { left: 40, right: 30, bottom: 40, top: 50, containLabel: true },
@@ -397,7 +393,6 @@ export default {
                 data: data.map(item => ({
                     value: item.value,
                     itemStyle: { color: item.anomalia ? colorAlerta : colorPrincipal },
-                    // Puntos solo en modo línea
                     symbol: (chartType === 'line' && item.anomalia) ? 'circle' : 'none',
                     symbolSize: 6,
                     anomalia: item.anomalia,
@@ -414,10 +409,10 @@ export default {
                     }
                 } : undefined,
                 
-                // 🚨 Pines activados en AMBOS modos (Línea y Barra)
+                // 🚨 PINES ACTIVOS EN TODO MOMENTO (si analysis es true)
                 markPoint: props.analisisActivo ? {
                     data: anomalypoints,
-                    symbol: 'pin', symbolSize: 40,
+                    symbol: 'pin', symbolSize: 35,
                     label: { show: true, formatter: '!', color: '#fff', fontWeight: 'bold' },
                     itemStyle: { color: colorAlerta, shadowBlur: 5, shadowColor: 'rgba(0,0,0,0.3)' },
                     animation: false 

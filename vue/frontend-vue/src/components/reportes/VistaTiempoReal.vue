@@ -39,7 +39,7 @@
                             <option v-for="d in dispositivos" :key="d.id" :value="d.id">{{ d.nombre }}</option>
                         </select>
                     </div>
-                    <!-- 🚨 INDICADOR DE SALUD DEL DISPOSITIVO -->
+                    <!-- INDICADOR DE SALUD -->
                     <div v-if="dispositivoSeleccionadoId" class="health-status" :class="dispositivoOnline ? 'online' : 'offline'">
                         <i class="bi" :class="dispositivoOnline ? 'bi-wifi' : 'bi-wifi-off'"></i>
                         {{ dispositivoOnline ? 'Conectado' : 'Sin señal reciente' }}
@@ -75,6 +75,7 @@
                 <div class="form-group switch-group">
                     <label>Análisis de Datos</label>
                     <div class="toggle-wrapper">
+                        <!-- 🚨 SWITCH QUE CONTROLA LA VARIABLE 'analisisActivo' -->
                         <label class="switch">
                             <input type="checkbox" v-model="analisisActivo" :disabled="!dispositivoSeleccionadoId">
                             <span class="slider round"></span>
@@ -85,7 +86,6 @@
                     </div>
                 </div>
 
-                <!-- 🚨 NUEVO: SENSIBILIDAD PERSONALIZABLE -->
                 <div class="form-group mt-2" v-if="analisisActivo">
                     <label>Sensibilidad</label>
                     <div class="range-wrapper">
@@ -96,14 +96,13 @@
                     </div>
                 </div>
                 
-                 <!-- 🚨 NUEVO: BOTÓN DE EXPORTAR ANOMALÍAS -->
                  <button v-if="analisisActivo && dispositivoSeleccionadoId" @click="descargarReporteAnomalias" class="btn-exportar-anomalias">
                     <i class="bi bi-file-earmark-arrow-down"></i> Reporte de Picos
                  </button>
             </div>
         </div>
         
-        <!-- 🚨 NUEVO: TARJETAS DE RESUMEN GLOBAL -->
+        <!-- TARJETAS DE RESUMEN GLOBAL -->
         <div class="dashboard-mini" v-if="dispositivoSeleccionadoId && !loadingCampos">
             <div class="mini-card">
                 <div class="icon-box purple"><i class="bi bi-exclamation-triangle"></i></div>
@@ -179,7 +178,9 @@
                 :simbolo-unidad="campo.simbolo_unidad || ''"
                 :metodo-carga="metodoCarga" 
                 :ventana-tiempo="parseInt(ventanaTiempo)"
-                :analisis-activo="analisisActivo"
+                
+                :analisis-activo="analisisActivo" 
+                
                 @stats-updated="actualizarResumenGlobal" 
             />  
         </div>
@@ -194,7 +195,7 @@ import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 import GraficoEnTiempoReal from '../graficos/GraficoEnTiempoReal.vue'; 
 
-const API_BASE_URL = 'http://127.0.0.1:8001';
+
 
 export default {
   name: 'VistaTiempoReal',
@@ -219,13 +220,10 @@ export default {
       // Configuración
       metodoCarga: 'optimizado', 
       ventanaTiempo: '5', 
-      analisisActivo: true,
-      sensibilidad: 2, // 1=Baja, 2=Media, 3=Alta (Para futuro uso en backend)
+      analisisActivo: true, // 🚨 Controla el análisis globalmente
+      sensibilidad: 2, 
 
-      // Estado del Dispositivo
       dispositivoOnline: false,
-      
-      // Resumen Global (Calculado desde los hijos)
       resumenGlobal: { alertas: 0, actividad: 0, horaPico: '--:--' },
 
       loadingProyectos: true,
@@ -262,26 +260,16 @@ export default {
         }
     },
 
-    // 🚨 LÓGICA DE RESUMEN GLOBAL (Recibe eventos de los gráficos hijos)
     actualizarResumenGlobal(statsHijo) {
-        // Esta es una simplificación. En una app real, usarías un store (Pinia/Vuex) 
-        // o sumarías los eventos de todos los hijos. Por ahora, mostraremos datos del último que actualizó.
-        // Para hacerlo bien, necesitaríamos guardar el estado de cada hijo en un objeto local.
-        
-        // Ejemplo simple acumulativo (Reiniciar al cambiar dispositivo)
         if (statsHijo.esMovimiento) {
              this.resumenGlobal.actividad = statsHijo.totalEventos;
         }
-        // Sumar alertas sería más complejo sin un store central, 
-        // pero podemos simularlo o dejarlo pendiente para una refactorización mayor.
     },
 
-    // 🚨 LÓGICA DE SALUD DEL DISPOSITIVO
     async verificarSaludDispositivo() {
         if (!this.dispositivoSeleccionadoId) return;
         const token = localStorage.getItem('accessToken');
         try {
-             // Usamos el primer campo disponible para checar la última conexión
              if (this.campos.length > 0) {
                  const campoId = this.campos[0].id;
                  const response = await fetch(`${API_BASE_URL}/api/valores/ultimo/${campoId}`, { 
@@ -290,18 +278,14 @@ export default {
                  if (response.ok) {
                      const data = await response.json();
                      const ultimaFecha = new Date(data.fecha_hora_lectura);
-                     // Si el dato es de hace menos de 5 minutos, está online
                      this.dispositivoOnline = (new Date() - ultimaFecha) < (5 * 60 * 1000);
                  }
              }
         } catch (e) { console.error("Error salud:", e); }
     },
 
-    // 🚨 DESCARGAR REPORTE DE ANOMALÍAS (CSV Simulado)
     descargarReporteAnomalias() {
         alert("Generando reporte de picos para las últimas 24 horas... (Funcionalidad Backend Pendiente)");
-        // Aquí llamarías a un endpoint real que genere el CSV en el backend
-        // window.open(`${API_BASE_URL}/api/reportes/anomalias/${this.dispositivoSeleccionadoId}`, '_blank');
     },
     
     // --- CARGA DE DATOS ---
@@ -407,7 +391,6 @@ export default {
         
         this.campos = todosLosCampos;
         
-        // Verificar salud después de cargar campos
         this.verificarSaludDispositivo();
 
       } catch (err) {
@@ -443,37 +426,6 @@ export default {
 <style scoped lang="scss">
 @use "sass:color";
 
-// VARIABLES GLOBALES DE PALETA "IoT SPECTRUM"
-$WHITE: #FFFFFF;
-$BLACK: #000000;
-$WHITE-SOFT: #F7F9FC;
-$SUBTLE-BG-LIGHT: #FFFFFF;
-$DARK-BG-CONTRAST: #1E1E30;
-$SUBTLE-BG-DARK: #2B2B40;
-$BLUE-MIDNIGHT: #1A1A2E;
-
-$LIGHT-TEXT: #E4E6EB;
-$DARK-TEXT: #333333;
-$GRAY-COLD: #99A2AD;
-$GRAY-LIGHT: #E0E0E0; 
-$DANGER: #E74C3C;
-$SUCCESS: #1ABC9C;
-$WARNING: #c69a13; 
-$GRAY: #E0E0E0; 
-
-$PRIMARY-PURPLE: #8A2BE2;
-$SUCCESS-COLOR: #1ABC9C;
-$MAINTENANCE-COLOR: #FFC107;
-$DANGER-COLOR: #E74C3C;
-$ERROR-COLOR: #FF5733; 
-$INFO-COLOR: #8A2BE2;
-$ALERT-COLOR: #c69a13; 
-$INACTIVE-COLOR: #7F8C8D; 
-$WARNING-COLOR: #FFC107; 
-$DARK-BORDER: #44475A; 
-$LIGHT-BORDER: #E0E0E0; 
-$DARK-INPUT-BG: #3C3C55; 
-$LIGHT-INPUT-BG: #FFFFFF; 
 
 .reportes-contenido {
     padding: 30px 40px;
@@ -515,7 +467,7 @@ $LIGHT-INPUT-BG: #FFFFFF;
     }
 }
 
-// MINI DASHBOARD (NUEVO)
+// MINI DASHBOARD
 .dashboard-mini {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

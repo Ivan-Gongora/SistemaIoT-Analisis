@@ -13,21 +13,26 @@ export default defineConfig({
     exclude: ['vue-plotly'] // Evita prebundling de vue-plotly
   },
   server: {
-    port: 8081,              // 👈 mismo puerto que usabas con Vue CLI
-    host: 'localhost',       // accesible desde localhost
-    open: true               // abre el navegador automáticamente
+   port: 8081,
+    host: true,      // permite accesos desde la red
+    open: false,     // opcional: no abrir navegador
+    cors: true       // opcio
   },
   build: {
     outDir: 'dist',          // carpeta de salida del build
     sourcemap: true,         // útil para debug
   },
   css: {
-    preprocessorOptions: {
-      scss: {
-        // Inyecta SÓLO la paleta de colores, no los estilos
-        additionalData: `@use "@/assets/scss/_variables.scss" as *;`
-      }
+  preprocessorOptions: {
+    scss: {
+      additionalData: `
+        @use "@/assets/scss/_variables.scss" as *;
+ 
+      `
     }
-  },
+  }
+},
+
   base: '/',                 // ruta base (importante para router con history)
 })
+        // @use "@/assets/scss/_mobile.scss" as *;

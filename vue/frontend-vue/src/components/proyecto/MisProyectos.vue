@@ -42,16 +42,17 @@
       </div>
       
       <!-- GRID DE PROYECTOS -->
-      <div v-else-if="proyectos.length > 0" class="proyectos-grid">
-        <TarjetaProyecto 
-            v-for="proyecto in proyectos" 
-            :key="proyecto.id" 
-            :proyecto="proyecto" 
-            :is-dark="isDark"
-            @editar="handleEditClick" 
-            @eliminar="confirmarEliminacion"
-        />
-      </div>
+     <div v-else-if="proyectos.length > 0" class="proyectos-grid">
+  <TarjetaProyecto 
+      v-for="proyecto in proyectos" 
+      :key="proyecto.id" 
+      :proyecto="proyecto" 
+      :is-dark="isDark"
+      @edit-project="handleEditClick" 
+      @confirmar-eliminar="confirmarEliminacion"
+      @open-share-modal="openShareModal"
+  />
+  </div>
       
       <div v-else class="alerta-vacio">
         <i class="bi bi-box-fill"></i> No se encontraron proyectos.
@@ -359,7 +360,7 @@ export default {
         gap: 5px;
 
         .count-total {
-            color: $GRAY-LIGHT;
+            color: $GRAY;
             font-size: 1.1rem;
             letter-spacing: .3px;
 
@@ -386,7 +387,7 @@ export default {
                 left: 14px;
                 top: 50%;
                 transform: translateY(-50%);
-                color: $GRAY-LIGHT;
+                color: $GRAY;
                 font-size: 1rem;
             }
 
@@ -408,7 +409,7 @@ export default {
         }
 
         .btn-nuevo-proyecto {
-            background: $SUCCESS-COLOR;
+            background: $SUCCESS;
             color: $WHITE;
             border: none;
             padding: 11px 24px;
@@ -420,7 +421,7 @@ export default {
             align-items: center;
             gap: 8px;
             white-space: nowrap;
-            box-shadow: 0 3px 12px rgba($SUCCESS-COLOR, .3);
+            box-shadow: 0 3px 12px rgba($SUCCESS, .35);
             transition: 0.15s;
 
             &:hover { transform: translateY(-2px); }
@@ -490,7 +491,7 @@ export default {
 
     .page-info {
         font-weight: 500;
-        color: $GRAY-LIGHT;
+        color: $GRAY;
     }
 }
 

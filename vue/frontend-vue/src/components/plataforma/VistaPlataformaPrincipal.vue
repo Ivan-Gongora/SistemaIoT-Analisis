@@ -74,17 +74,6 @@ export default {
 </script>
 
 <style scoped lang="scss">
-// ----------------------------------------
-// VARIABLES DEL LAYOUT
-// ----------------------------------------
-// $WIDTH-SIDEBAR: 280px; 
-// $WIDTH-CLOSED: 80px; // Ancho del sidebar colapsado
-// $WHITE-SOFT: #F7F9FC; 
-// $DARK-BG-CONTRAST: #1E1E30; 
-// $BLUE-MIDNIGHT: #1A1A2E; 
-// $DARK-TEXT: #333333;      
-// $LIGHT-TEXT: #E4E6EB;     
-// $GRAY-COLD: #99A2AD;
 
 
 // ----------------------------------------
@@ -99,18 +88,6 @@ export default {
   background-color: $WHITE-SOFT; 
 }
 
-// .plataforma-contenido {
-//   // // 🚨 CRÍTICO: Margen base (estado cerrado)
-//   // margin-left: $WIDTH-CLOSED;
-//   // flex-grow: 1;
-//   // padding: 0; 
-//   // transition: margin-left 0.3s ease-in-out; // 🚨 Transición suave
-  
-//   // // 🚨 CRÍTICO: Clase para el estado ABIERTO
-//   &.shifted {
-//     margin-left: $WIDTH-SIDEBAR;
-//   }
-// }
 
 // ----------------------------------------
 // DASHBOARD GRID (Distribución de Tarjetas y Módulos)
@@ -127,7 +104,6 @@ export default {
     gap: 20px; 
     padding: 0 40px 40px 40px; 
 }
-/* 🚨 RE-ASIGNAR las áreas dentro del grid para que los elementos floten */
 .grid-item-cards {
     /* La fila de las 4 tarjetas debe ocupar las 5 partes del ancho */
     grid-column: 1 / span 2; 
@@ -143,8 +119,6 @@ export default {
     grid-column: 2 / 3;
 }
 
-/* Modificamos la distribución de los módulos inferiores si es necesario, 
-   pero el error es en las variables. */
 
 // ----------------------------------------
 // ESTILOS DE MÓDULOS INFERIORES (TEMPORAL)
@@ -172,7 +146,6 @@ export default {
 // TEMAS (Para el fondo de la página)
 // ----------------------------------------
 
-// 🚨 1. MODO CLARO (theme-light) - Debe sobrescribir el oscuro si existe
 .theme-light {
   background-color: $WHITE-SOFT; 
   .plataforma-contenido {
@@ -180,11 +153,12 @@ export default {
   }
 }
 
-// 🚨 2. MODO OSCURO (theme-dark) - Aplicar solo si isDark = true
 .theme-dark {
   background-color: $DARK-BG-CONTRAST;
   .plataforma-contenido {
     background-color: $DARK-BG-CONTRAST;
   }
 }
+
+
 </style>

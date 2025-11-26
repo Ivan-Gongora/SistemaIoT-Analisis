@@ -680,7 +680,7 @@ export default {
         .var-name { color: $WHITE; }
         .card-icon { background-color: rgba($WHITE, 0.05); }
         
-        &:hover { border-color: $PRIMARY-PURPLE; background-color: lighten($SUBTLE-BG-DARK, 3%); }
+        &:hover { border-color: $PRIMARY-PURPLE;background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); }
         &.selected { background-color: rgba($PRIMARY-PURPLE, 0.15); }
     }
     

@@ -99,11 +99,9 @@ def udp_discovery():
         print(f"IP del servidor enviada: {mensaje_respuesta.decode()}")
 
 # -----------------------------------------------------
-# 🚨 2. LIFESPAN HANDLER CORREGIDO
+# 2. LIFESPAN HANDLER CORREGIDO
 # -----------------------------------------------------
-# -----------------------------------------------------
-# 🚨 2. LIFESPAN HANDLER CORREGIDO - VERSIÓN MEJORADA
-# -----------------------------------------------------
+
 
 def log_con_timestamp(mensaje, emoji="ℹ️"):
     """Función helper para logs con timestamp y emojis"""
@@ -125,7 +123,7 @@ async def lifespan(app: FastAPI):
     
     scheduler = AsyncIOScheduler()
     
-    # 🚨 EJECUCIÓN INICIAL DE AGREGACIÓN HISTÓRICA
+    # EJECUCIÓN INICIAL DE AGREGACIÓN HISTÓRICA
     log_con_timestamp("Ejecutando agregación histórica inicial...", "📅")
     try:
         resultado_historico = await ejecutar_agregacion_horaria(procesar_historico=True, dias_historia=30)
@@ -133,9 +131,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_con_timestamp(f"Error en agregación histórica: {e}", "❌")
     
-    # 🚨 PROGRAMAR EJECUCIONES FUTURAS (cada hora)
+    #  PROGRAMAR EJECUCIONES FUTURAS (cada hora)
     scheduler.add_job(
-        ejecutar_agregacion_horaria,  # 👈 Esta ahora funciona para datos recientes
+        ejecutar_agregacion_horaria,  
         trigger=IntervalTrigger(hours=1),
         id="trabajo_agregacion_horaria",
         name="Agregación Horaria de Datos IoT",
