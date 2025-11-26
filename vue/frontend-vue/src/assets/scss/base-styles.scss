@@ -6,6 +6,8 @@
 // LAYOUT PRINCIPAL
 // ----------------------------------------
 .plataforma-layout {
+  .theme-dark {    background-color: $DARK-BG-CONTRAST; 
+}
   display: flex;
   width: 100%;
   min-height: 100vh;
@@ -14,7 +16,8 @@
 
 .plataforma-contenido {
   position: relative; /* Necesario para que el contenido de los hijos se posicione */
-
+  .theme-dark {    background-color: $DARK-BG-CONTRAST; 
+}
   margin-left: $WIDTH-CLOSED;
   flex-grow: 1;
   padding: 0; 

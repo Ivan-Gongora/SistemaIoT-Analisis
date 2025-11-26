@@ -27,7 +27,8 @@ export default defineConfig({
     scss: {
       additionalData: `
         @use "@/assets/scss/_variables.scss" as *;
- 
+        @use "@/assets/scss/_global-responsive.scss" as *;
+
       `
     }
   }

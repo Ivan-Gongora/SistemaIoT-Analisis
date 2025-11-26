@@ -128,22 +128,21 @@ export default {
         this.detectarTemaSistema();
         this.loadMembers(); // Cargar la lista al abrir
     },
-    methods: {
+methods: {
         // -----------------------------------------------------
-        // LÓGICA DE FASTAPI: GENERAR LINK
+        // GENERAR LINK (API)
         // -----------------------------------------------------
         async generateLink() {
             this.loading = true;
             this.error = null;
-            this.invitationLink = ''; // Limpiar anterior
+            this.invitationLink = ''; 
             this.showQr = false;
             
             const token = localStorage.getItem('accessToken');
             if (!token) return;
 
             try {
-                // 🚨 ENVIAMOS EL ROL SELECCIONADO AL BACKEND
-                // Nota: Necesitarás actualizar tu endpoint para aceptar ?rol_id=...
+                // Asegúrate que API_BASE_URL esté definido (o impórtalo)
                 const url = new URL(`${API_BASE_URL}/api/proyectos/${this.proyectoId}/invitar`);
                 url.searchParams.append('rol_id', this.selectedRoleId);
 
@@ -163,41 +162,76 @@ export default {
                 this.loading = false;
             }
         },
-        
-        // 🚨 4. MÉTODO PARA DIBUJAR EL QR EN EL CANVAS
-        async copyLink() {
-        try {
-            // 🚨 SOLUCIÓN: Usar navigator.clipboard.writeText
-            // No necesitamos seleccionar el texto del input ($refs), 
-            // podemos pasarle directamente la variable del texto.
-            await navigator.clipboard.writeText(this.invitationLink);
-            
-            this.copySuccess = true;
-            setTimeout(() => {
-                this.copySuccess = false;
-            }, 2000);
-            
-        } catch (err) {
-            console.error('Error al copiar al portapapeles:', err);
-            alert('No se pudo copiar el link automáticamente.');
-        }
-    },
-        
-        // // -----------------------------------------------------
-        // // LÓGICA DE INTERFAZ: COPIAR
-        // // -----------------------------------------------------
-        // copyLink() {
-        //     const input = this.$refs.linkInput;
-        //     input.select();
-        //     document.execCommand('copy'); 
-            
-        //     this.copySuccess = true;
-        //     setTimeout(() => {
-        //         this.copySuccess = false;
-        //     }, 3000);
-        // },
+
         // -----------------------------------------------------
-        // LÓGICA DE TEMA Y MIEMBROS
+        // COPIAR LINK (ROBUSTO CON FALLBACK)
+        // -----------------------------------------------------
+        async copyLink() {
+            if (!this.invitationLink) return;
+
+            // Intento 1: API Moderna (Navigator) - Funciona en HTTPS/Localhost
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(this.invitationLink);
+                    this.mostrarExitoCopia();
+                    return;
+                } catch (err) {
+                    console.warn('Clipboard API falló, intentando método tradicional...');
+                }
+            }
+
+            // Intento 2: Fallback (Legacy) - Funciona en HTTP y móviles antiguos
+            try {
+                const input = this.$refs.linkInput; // Referencia al input
+                input.focus();
+                input.select();
+                input.setSelectionRange(0, 99999); // Para móviles iOS
+                
+                const exitoso = document.execCommand('copy');
+                if (exitoso) {
+                    this.mostrarExitoCopia();
+                } else {
+                    throw new Error('Comando copy falló');
+                }
+            } catch (err) {
+                console.error('Error al copiar:', err);
+                alert('No se pudo copiar automáticamente. Por favor selecciona el texto y cópialo manual.');
+            }
+        },
+
+        mostrarExitoCopia() {
+            this.copySuccess = true;
+            setTimeout(() => { this.copySuccess = false; }, 2000);
+        },
+        
+        // -----------------------------------------------------
+        // GENERAR QR (EL MÉTODO QUE FALTABA)
+        // -----------------------------------------------------
+        async generateQrCode(text) {
+            if (!text) return;
+            try {
+                // Esperamos al DOM update porque el canvas está dentro de un v-if
+                await this.$nextTick(); 
+                
+                const canvas = document.getElementById('qr-code-canvas');
+                if (canvas) {
+                    await QRCode.toCanvas(canvas, text, {
+                        width: 180,
+                        margin: 2,
+                        color: {
+                            dark: '#8A2BE2', // Tu color morado primario
+                            light: '#FFFFFF'
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Error generando QR:', err);
+                this.error = "Error al dibujar el código QR";
+            }
+        },
+
+        // -----------------------------------------------------
+        // UTILIDADES Y CARGA
         // -----------------------------------------------------
         detectarTemaSistema() {
             if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -206,8 +240,8 @@ export default {
                 this.isDark = false;
             }
         },
-       //  FUNCIÓN PARA REMOVER MIEMBRO (Funcional)
-async removeMember(userId) {
+
+        async removeMember(userId) {
             if (!confirm('¿Revocar acceso a este usuario?')) return;
             
             const token = localStorage.getItem('accessToken');
@@ -222,9 +256,7 @@ async removeMember(userId) {
                     throw new Error(data.detail || 'Error al remover.');
                 }
                 
-                // Actualizar lista localmente
                 this.members = this.members.filter(m => m.usuario_id !== userId);
-
             } catch (err) {
                 alert(err.message);
             }
@@ -243,6 +275,7 @@ async removeMember(userId) {
                 console.error(err);
             }
         },
+
         getRoleClass(roleName) {
             if (roleName === 'Propietario') return 'badge-owner';
             if (roleName === 'Colaborador') return 'badge-collab';
@@ -260,18 +293,37 @@ async removeMember(userId) {
     background-color: rgba(0, 0, 0, 0.6);
     display: flex; justify-content: center; align-items: center;
     z-index: 9999;
+    padding: 10px; // NUEVO: Evita que el modal toque los bordes en móviles
 }
-
 .modal-contenido {
-    width: 90%; max-width: 550px;
-    border-radius: 15px; padding: 25px;
+    width: 100%; // Ocupa el espacio disponible
+    max-width: 550px; // Pero detente en 550px
+    // NUEVO: Ajuste vertical automático
+    max-height: 90vh; // Nunca superes el 90% de la altura de la pantalla
+    display: flex;    // Convertimos el modal en flex vertical
+    flex-direction: column; 
+    
+    border-radius: 15px; 
+    padding: 25px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     transition: background-color 0.3s;
+
+    // NUEVO: En móviles, reduce el padding
+    @media (max-width: 480px) {
+        padding: 15px;
+    }
+}
+
+// NUEVO: Permite scroll si el contenido es muy alto (ej. landscape en celular)
+.modal-body {
+    overflow-y: auto;
+    padding-right: 5px; // Espacio para scrollbar
 }
 
 .modal-header {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 20px;
+    flex-shrink: 0; // Evita que el header se aplaste
     h2 { font-size: 1.3rem; margin: 0; }
 }
 
@@ -292,27 +344,32 @@ async removeMember(userId) {
 .invite-controls {
     display: flex;
     gap: 10px;
-    align-items: flex-end; /* Alinea el botón con el input */
+    align-items: flex-end;
     margin-bottom: 15px;
+    flex-wrap: wrap; // NUEVO: Clave para responsividad. Si no cabe, baja.
     
     .role-select-group {
         flex-grow: 1;
+        min-width: 150px; // NUEVO: Ancho mínimo antes de hacer wrap
         label { display: block; font-size: 0.85rem; margin-bottom: 5px; font-weight: 500; }
     }
     
     .form-control {
         width: 100%; padding: 10px; border-radius: 8px; border: 1px solid;
         font-size: 0.95rem;
-        height: 42px; /* Altura fija para alinear con el botón */
+        height: 42px;
         box-sizing: border-box;
     }
     
     .btn-generate {
         background-color: $PRIMARY-PURPLE; color: white; border: none;
         padding: 0 20px; border-radius: 8px; cursor: pointer;
-        font-weight: 600; height: 42px; /* Misma altura que el input */
+        font-weight: 600; height: 42px;
         transition: opacity 0.2s;
         white-space: nowrap;
+        
+        // NUEVO: En móvil ocupa todo el ancho
+        flex-grow: 1; 
         
         &:disabled { opacity: 0.7; cursor: not-allowed; }
         &:hover:not(:disabled) { opacity: 0.9; }
@@ -330,13 +387,16 @@ async removeMember(userId) {
     
     .link-input-group {
         display: flex; gap: 5px; align-items: center;
-        background: rgba(255,255,255,0.5); /* Fondo sutil para el input */
+        background: rgba(255,255,255,0.5);
         padding: 5px 10px; border-radius: 6px;
+        flex-wrap: wrap; // NUEVO: Evita rotura en pantallas muy pequeñas
 
         .link-input { 
             flex-grow: 1; background: transparent; border: none; 
             font-family: monospace; color: $PRIMARY-PURPLE; font-weight: 600; font-size: 0.9rem;
             outline: none;
+            min-width: 150px; // NUEVO
+            text-overflow: ellipsis; // NUEVO: Puntos suspensivos si es largo
         }
         .btn-copy { 
             background: none; border: none; color: $PRIMARY-PURPLE; cursor: pointer; font-size: 1.1rem; padding: 5px;
@@ -350,21 +410,29 @@ async removeMember(userId) {
         display: block; width: 100%; text-align: center;
         &:hover { color: $PRIMARY-PURPLE; }
     }
-    .qr-box { margin-top: 10px; text-align: center; }
+    .qr-box { margin-top: 10px; text-align: center; 
+        canvas { max-width: 100%; height: auto; } // NUEVO: QR responsive
+    }
 }
 
 .divider { border: 0; border-top: 1px solid rgba(150,150,150, 0.2); margin: 25px 0; }
-
 // ----------------------------------------
 // SECCIÓN 2: LISTA DE MIEMBROS
 // ----------------------------------------
 .section-members {
     h4 { font-size: 1rem; font-weight: 600; margin-bottom: 15px; }
+    // NUEVO: Flex para que ocupe el espacio restante si sobra altura
+    flex-grow: 1; 
+    display: flex; 
+    flex-direction: column;
+    min-height: 0; // Importante para que el scroll funcione dentro de flex
 }
 
 .member-list-container {
-    max-height: 250px; overflow-y: auto; // Scroll si hay muchos usuarios
-    padding-right: 5px; // Espacio para el scrollbar
+    // NUEVO: Quitamos max-height fija y usamos flex
+    overflow-y: auto; 
+    padding-right: 5px;
+    flex-grow: 1; // Ocupa el espacio que sobre
 }
 
 .user-list {
@@ -380,13 +448,20 @@ async removeMember(userId) {
     padding: 10px 12px; border-radius: 8px; margin-bottom: 8px;
     transition: background 0.2s;
     border: 1px solid transparent;
+    flex-wrap: wrap; // NUEVO: Permite que el botón de borrar baje si es necesario
+    gap: 10px; // NUEVO
     
     &:hover { background-color: rgba(0,0,0,0.03); }
     
-    .user-info { display: flex; align-items: center; gap: 12px; }
+    .user-info { 
+        display: flex; align-items: center; gap: 12px; 
+        flex-grow: 1; // Ocupa espacio disponible
+        min-width: 200px;
+    }
     
     .user-avatar {
-        width: 38px; height: 38px; background-color: rgba($PRIMARY-PURPLE, 0.1); color: $PRIMARY-PURPLE;
+        width: 38px; height: 38px; flex-shrink: 0; // No aplastar avatar
+        background-color: rgba($PRIMARY-PURPLE, 0.1); color: $PRIMARY-PURPLE;
         border-radius: 50%; display: flex; justify-content: center; align-items: center;
         font-size: 1.1rem;
     }
@@ -394,16 +469,14 @@ async removeMember(userId) {
     .user-text {
         display: flex; flex-direction: column;
         line-height: 1.3;
-        .member-name { font-weight: 600; font-size: 0.95rem; }
+        .member-name { font-weight: 600; font-size: 0.95rem; word-break: break-word; } // Word break por si el nombre es largo
     }
     
-    // BADGES DE ROL (Usamos tus variables de color)
     .member-role-badge {
         font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;
         display: inline-block; width: fit-content;
         
         &.badge-owner { color: $SUCCESS-COLOR; background-color: rgba($SUCCESS-COLOR, 0.1); border: 1px solid rgba($SUCCESS-COLOR, 0.2); }
-        // Usamos una variante de azul para colaborador, si no tienes variable usa un hex directo o $INFO-COLOR si existe
         &.badge-collab { color: #3498DB; background-color: rgba(#3498DB, 0.1); border: 1px solid rgba(#3498DB, 0.2); }
         &.badge-observer { color: $GRAY-COLD; background-color: rgba($GRAY-COLD, 0.1); border: 1px solid rgba($GRAY-COLD, 0.2); }
     }
@@ -411,10 +484,10 @@ async removeMember(userId) {
     .btn-remove-member {
         background: none; border: none; color: $DANGER-COLOR; opacity: 0.5; cursor: pointer; padding: 5px;
         font-size: 1rem; transition: all 0.2s;
+        flex-shrink: 0; // No aplastar botón
         &:hover { opacity: 1; background-color: rgba($DANGER-COLOR, 0.1); border-radius: 50%; }
     }
     
-    // Estilo especial para el item del propietario en la lista
     &.is-owner {
         border-color: rgba($SUCCESS-COLOR, 0.2);
         background-color: rgba($SUCCESS-COLOR, 0.02);
@@ -457,6 +530,8 @@ async removeMember(userId) {
     .alert-error { color: $DANGER-COLOR; }
 }
 </style>
+
+
 <!-- <style scoped lang="scss">
 // ----------------------------------------
 // VARIABLES DE LA PALETA

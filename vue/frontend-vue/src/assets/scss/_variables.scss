@@ -19,6 +19,25 @@ $DANGER: #E74C3C;
 $SUCCESS: #1ABC9C;
 $WARNING: #c69a13; 
 $GRAY: #b6b6b69e; 
+/* ---------------------------------------------------
+   SOMBRAS GLOBALES
+   Compatibles con tema claro y oscuro
+--------------------------------------------------- */
+
+/* Sombra suave (para tarjetas, inputs, hover liviano) */
+$shadow-soft: 0 3px 10px rgba(0, 0, 0, 0.12);
+
+/* Sombra fuerte (para modals, popovers, dropdowns) */
+$shadow-strong: 0 8px 28px rgba(0, 0, 0, 0.22);
+
+/* Sombra profunda para elementos superpuestos (sidebars, overlays) */
+$shadow-dark: 0 12px 32px rgba(0, 0, 0, 0.35);
+
+$shadow-purple: 0 4px 12px rgba(125, 89, 255, 0.35);
+
+$hover-light: rgba(255, 255, 255, 0.05);
+$dark-hover: rgba(0, 0, 0, 0.25);
+
 
 // Colores de Acento
 $color: #fff; // Esto es una variable genérica, si no la usas, podrías quitarla.

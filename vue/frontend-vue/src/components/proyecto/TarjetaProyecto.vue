@@ -189,14 +189,15 @@ this.$emit('edit-project', this.proyecto);            }
 </script>
 
 <style scoped lang="scss">
+// 1. IMPORTAR MÓDULO DE COLOR (Necesario para color.adjust)
+@use "sass:color";
 
 // ----------------------------------------
-// TARJETA BASE (Ajustado para más espacio inferior)
+// TARJETA BASE
 // ----------------------------------------
 .proyecto-tarjeta {
     border-radius: 16px; 
     padding: 24px; 
-    // 🚨 CRÍTICO: Se aumentó de 28px a 35px para garantizar visibilidad del botón eliminar
     padding-bottom: 35px; 
     margin-bottom: 20px;
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -288,7 +289,7 @@ this.$emit('edit-project', this.proyecto);            }
     font-size: 0.9rem; 
     margin-bottom: 20px;
     line-height: 1.5;
-    height: 2.8em; // Limita a ~2 líneas
+    height: 2.8em;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -338,13 +339,12 @@ this.$emit('edit-project', this.proyecto);            }
 }
 
 // ----------------------------------------
-// FOOTER (Ajustado para visibilidad completa)
+// FOOTER
 // ----------------------------------------
 .card-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    // 🚨 Ajuste: Mayor espacio superior y gap para que no se aprieten
     padding-top: 20px; 
     border-top: 1px solid transparent;
     margin-top: auto;
@@ -368,7 +368,6 @@ this.$emit('edit-project', this.proyecto);            }
         gap: 5px; 
         flex-shrink: 0; 
         
-        // Role Badge
         .role-badge {
             font-size: 0.65rem;
             padding: 2px 6px;
@@ -431,6 +430,10 @@ this.$emit('edit-project', this.proyecto);            }
 
 .theme-dark {
     background-color: $SUBTLE-BG-DARK;
+    .proyecto-tarjeta {
+            background-color: $SUBTLE-BG-DARK;
+
+    }
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     border-color: rgba($WHITE, 0.05);
     
@@ -444,6 +447,10 @@ this.$emit('edit-project', this.proyecto);            }
         .count { color: $LIGHT-TEXT; }
     }
     
-    &:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5); background-color: lighten($SUBTLE-BG-DARK, 2%); }
+    // 2. CORREGIDO AQUÍ: Se eliminó el código duplicado y se usa color.adjust correctamente
+    &:hover { 
+        box-shadow: 0 8px 25px rgba(0,0,0,0.5);  
+        background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); 
+    }
 }
 </style>
