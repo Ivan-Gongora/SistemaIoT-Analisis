@@ -18,39 +18,48 @@
       </span>
     </div>
     
-    <div v-if="loading" class="chart-loading">
+    <div v-if="loading && !chartOption.series" class="chart-loading">
       <div class="spinner-border"></div>
       <p>Sincronizando...</p>
     </div>
+    
     <div v-else-if="error" class="chart-error">
         <i class="bi bi-exclamation-circle"></i> {{ error }}
     </div>
     
     <div v-else class="chart-content">
-        <!-- Gráfico -->
         <div class="chart-wrapper">
             <v-chart :option="chartOption" autoresize />
         </div>
 
-        <!-- 🚨 NUEVO: PANEL DE ESTADÍSTICAS -->
+        <!-- PANEL DE ESTADÍSTICAS -->
         <div class="stats-footer">
             <div class="stat-item">
                 <span class="label">Último</span>
                 <span class="value">{{ stats.ultimo }}</span>
             </div>
-            <div class="stat-item">
-                <span class="label">Promedio</span>
-                <span class="value">{{ stats.promedio }}</span>
-            </div>
-            <div class="stat-item highlight">
-                <span class="label">Pico Máx</span>
-                <span class="value">{{ stats.maximo }}</span>
-            </div>
-            <!-- Si es movimiento, mostramos el total de eventos -->
-            <div class="stat-item" v-if="esMovimiento">
-                <span class="label">Eventos</span>
-                <span class="value">{{ stats.totalEventos }}</span>
-            </div>
+            
+            <template v-if="!esMovimiento">
+                <div class="stat-item">
+                    <span class="label">Promedio</span>
+                    <span class="value">{{ stats.promedio }}</span>
+                </div>
+                <div class="stat-item highlight">
+                    <span class="label">Pico Máx</span>
+                    <span class="value">{{ stats.maximo }}</span>
+                </div>
+            </template>
+
+            <template v-else>
+                <div class="stat-item highlight">
+                    <span class="label">Total Eventos</span>
+                    <span class="value">{{ stats.totalEventos }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Densidad Máx</span>
+                    <span class="value">{{ stats.maximo }} <small>/min</small></span>
+                </div>
+            </template>
         </div>
     </div>
   </div>
@@ -59,7 +68,7 @@
 <script>
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart, BarChart } from 'echarts/charts'; // 🚨 Agregamos BarChart
+import { LineChart, BarChart } from 'echarts/charts';
 import {
   TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent, VisualMapComponent, MarkPointComponent, ToolboxComponent
 } from 'echarts/components';
@@ -94,8 +103,6 @@ export default {
     
     const ultimaLectura = ref('Esperando...');
     const isStale = ref(true);
-    
-    // 🚨 Estadísticas Reactivas
     const stats = ref({ ultimo: '-', promedio: '-', maximo: '-', totalEventos: 0 });
     
     let pollingInterval = null; 
@@ -107,73 +114,101 @@ export default {
     const colorPrincipal = '#8A2BE2'; 
     const colorAlerta = '#E74C3C';    
 
-    // Detectar si es un sensor de movimiento para cambiar la visualización
     const esMovimiento = computed(() => {
         const t = props.titulo.toLowerCase();
         return t.includes('movimiento') || t.includes('puerta') || t.includes('presencia');
     });
 
-    // ---------------------------------------------------------
-    // CÁLCULO DE ESTADÍSTICAS
-    // ---------------------------------------------------------
+    // --- ESTADÍSTICAS ---
     const calcularEstadisticas = (data) => {
         if (!data || data.length === 0) return;
-        
-        const valores = data.map(item => item.value[1]); // Extraer solo el valor Y
+        const valores = data.map(item => item.value[1]);
         const ultimo = valores[valores.length - 1];
         const maximo = Math.max(...valores);
         const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
         
-        // Total de "1s" para movimiento
-        const totalEventos = valores.filter(v => v > 0).reduce((a,b) => a + b, 0);
-
-        // Formateo
-        const decimales = esMovimiento.value ? 0 : 2;
-        stats.value = {
-            ultimo: ultimo.toFixed(decimales),
-            promedio: promedio.toFixed(decimales),
-            maximo: maximo.toFixed(decimales),
-            totalEventos: totalEventos.toFixed(0)
-        };
+        if (esMovimiento.value) {
+             const total = valores.reduce((a,b) => a + b, 0);
+             stats.value = {
+                ultimo: ultimo > 0 ? 'Activo' : 'Inactivo',
+                promedio: '-',
+                maximo: maximo.toFixed(0), 
+                totalEventos: total.toFixed(0)
+            };
+        } else {
+            stats.value = {
+                ultimo: ultimo.toFixed(2),
+                promedio: promedio.toFixed(2),
+                maximo: maximo.toFixed(2),
+                totalEventos: 0
+            };
+        }
     };
 
-    // ---------------------------------------------------------
-    // PROCESAMIENTO DE MOVIMIENTO (AGREGACIÓN)
-    // ---------------------------------------------------------
+    // --- PROCESAMIENTO MOVIMIENTO (CORREGIDO) ---
     const procesarDatosMovimiento = (rawData) => {
-        // Si la ventana es pequeña (5 min), mostramos raw (0/1)
         if (props.ventanaTiempo <= 5) return rawData;
 
-        // Si es 1h o 24h, agrupamos por MINUTO para contar "Eventos por Minuto"
+        const intervaloMinutos = props.ventanaTiempo > 60 ? 15 : 1;
+        const intervaloMs = intervaloMinutos * 60 * 1000;
+
         const agrupado = {};
         
         rawData.forEach(item => {
-            // Redondear timestamp al minuto
-            const fecha = new Date(item.value[0]);
-            fecha.setSeconds(0);
-            fecha.setMilliseconds(0);
-            const key = fecha.getTime();
+            const timestamp = new Date(item.value[0]).getTime();
+            const bloque = Math.floor(timestamp / intervaloMs) * intervaloMs;
             
-            if (!agrupado[key]) agrupado[key] = 0;
-            // Sumamos el valor (asumiendo 1=movimiento)
-            agrupado[key] += item.value[1]; 
+            if (!agrupado[bloque]) {
+                agrupado[bloque] = { sum: 0, anomalia: false, mensaje: '' };
+            }
+            
+            if (item.value[1] > 0.5) {
+                agrupado[bloque].sum += 1;
+            }
+            
+            // 🚨 HERENCIA DE ANOMALÍA CORREGIDA
+            // Si el backend marcó este dato como anómalo, la barra entera es anómala
+            if (item.anomalia) {
+                agrupado[bloque].anomalia = true;
+                // Priorizar el mensaje del backend
+                if (!agrupado[bloque].mensaje || agrupado[bloque].mensaje.includes('eventos')) {
+                    agrupado[bloque].mensaje = item.mensaje; 
+                }
+            }
         });
 
-        // Convertir de vuelta a array [timestamp, count]
-        return Object.keys(agrupado).sort().map(key => ({
-            value: [parseInt(key), agrupado[key]],
-            anomalia: false, // Perderemos la anomalía individual al agrupar, es aceptable
-            mensaje: `Detectados ${agrupado[key]} eventos`
-        }));
+        // 🚨 DETECCIÓN LOCAL DE PICOS (Doble Check)
+        // Calculamos la media de eventos por bloque para detectar picos locales
+        const bloques = Object.values(agrupado);
+        if (bloques.length > 5) {
+             const sumas = bloques.map(b => b.sum);
+             const mediaLocal = sumas.reduce((a,b) => a+b, 0) / sumas.length;
+             
+             // Si un bloque tiene 3 veces más eventos que el promedio local, márcalo
+             Object.keys(agrupado).forEach(key => {
+                 if (agrupado[key].sum > (mediaLocal * 3) && agrupado[key].sum > 5) {
+                     agrupado[key].anomalia = true;
+                     if (!agrupado[key].mensaje) agrupado[key].mensaje = `Pico de actividad (${agrupado[key].sum} eventos)`;
+                 }
+             });
+        }
+
+        return Object.keys(agrupado).sort().map(key => {
+            const dataBloque = agrupado[key];
+            return {
+                value: [parseInt(key), dataBloque.sum],
+                anomalia: dataBloque.anomalia,
+                mensaje: dataBloque.mensaje || `${dataBloque.sum} eventos`
+            };
+        });
     };
 
-    // ---------------------------------------------------------
-    // 1. CARGA INICIAL
-    // ---------------------------------------------------------
+    // --- CARGA INICIAL ---
     const cargarDatosIniciales = async () => {
       if (!props.campoId || props.campoId <= 0) { loading.value = false; return; }
       
-      loading.value = true;
+      if (!chartOption.value.series) loading.value = true;
+      
       error.value = null;
       const token = localStorage.getItem('accessToken');
 
@@ -199,13 +234,13 @@ export default {
                 mensaje: v.mensaje_alerta
             }));
 
-            // 🚨 LÓGICA ESPECIAL MOVIMIENTO
+            // Procesar Movimiento
             if (esMovimiento.value) {
                 dataPoints = procesarDatosMovimiento(dataPoints);
             }
             
             actualizarOpciones(dataPoints, magnitud);
-            calcularEstadisticas(dataPoints); // Calcular stats iniciales
+            calcularEstadisticas(dataPoints);
 
             const ultimaFecha = new Date(valores[valores.length - 1].fecha_hora_lectura);
             ultimaLectura.value = ultimaFecha.toLocaleTimeString();
@@ -214,7 +249,6 @@ export default {
             actualizarOpciones([], props.titulo);
             ultimaLectura.value = "Sin datos recientes";
         }
-
       } catch (err) {
         error.value = err.message;
       } finally {
@@ -222,10 +256,13 @@ export default {
       }
     };
 
-    // ---------------------------------------------------------
-    // 2. POLLING
-    // ---------------------------------------------------------
+    // --- POLLING ---
     const sondearUltimoValor = async () => {
+      if (props.ventanaTiempo > 5) {
+          await cargarDatosIniciales(); 
+          return;
+      }
+
       const token = localStorage.getItem('accessToken');
       if (!props.campoId || !token) return;
 
@@ -239,7 +276,6 @@ export default {
         const ultimoValor = await response.json();
         const nuevaFecha = new Date(ultimoValor.fecha_hora_lectura);
         
-        // Punto crudo
         const nuevoPunto = {
             value: [ultimoValor.fecha_hora_lectura, parseFloat(ultimoValor.valor)],
             anomalia: ultimoValor.anomalia || false,
@@ -256,40 +292,36 @@ export default {
 
         let seriesData = chartOption.value.series[0].data;
         const lastTimestamp = seriesData.length > 0 ? seriesData[seriesData.length - 1].value[0] : null;
-        
-        // Si es movimiento y ventana larga, necesitamos lógica especial de agregación en tiempo real
-        // (Simplificación: Para polling en ventanas largas, simplemente agregamos el punto. 
-        // Si se quiere agregación perfecta en tiempo real, sería complejo. 
-        // Aquí simplemente añadimos el punto crudo para ver actividad inmediata).
         if (lastTimestamp === nuevoPunto.value[0]) return;
 
         seriesData.push(nuevoPunto); 
         
-        // Limpieza (Ventana deslizante)
         const minTime = new Date(nuevaFecha.getTime() - (props.ventanaTiempo * 60 * 1000)).getTime();
         while (seriesData.length > 0 && new Date(seriesData[0].value[0]).getTime() < minTime) {
              seriesData.shift();
         }
         
         actualizarOpciones(seriesData, chartTitle.value.split(' ')[0]); 
-        calcularEstadisticas(seriesData); // Actualizar stats en vivo
+        calcularEstadisticas(seriesData);
 
       } catch (err) {
         isStale.value = true;
       }
     };
 
-    // ---------------------------------------------------------
-    // 3. CONFIGURACIÓN ECHARTS
-    // ---------------------------------------------------------
+    // --- ECHARTS OPTION ---
     const actualizarOpciones = (data, seriesName) => {
+        // Filtrar anomalías para crear la serie de pines
         const anomalypoints = data.filter(item => item.anomalia).map(item => ({
-            name: 'Anomalía', xAxis: item.value[0], yAxis: item.value[1], value: item.value[1],
+            name: item.mensaje || 'Anomalía', 
+            xAxis: item.value[0], 
+            yAxis: item.value[1], 
+            value: item.value[1],
             itemStyle: { color: colorAlerta }
         }));
         
-        // Tipo de gráfico: Barra para movimiento (histórico), Línea para lo demás
-        const chartType = (esMovimiento.value && props.ventanaTiempo > 5) ? 'bar' : 'line';
+        const isBarChart = esMovimiento.value && props.ventanaTiempo > 5;
+        const chartType = isBarChart ? 'bar' : 'line';
 
         chartOption.value = {
             toolbox: {
@@ -303,24 +335,26 @@ export default {
             },
             tooltip: { 
                 trigger: 'axis', 
-                axisPointer: { type: 'line' },
-                backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                axisPointer: { type: isBarChart ? 'shadow' : 'line' },
+                backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                 borderColor: props.isDark ? '#444' : '#ddd',
                 textStyle: { color: textColor.value },
                 formatter: (params) => {
                     const item = params[0];
                     if (!item || !item.value) return ''; 
-                    const fecha = new Date(item.value[0]).toLocaleTimeString();
+                    const fecha = new Date(item.value[0]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const val = item.value[1];
-                    const alerta = item.data.anomalia ? `<br/><span style="color:${colorAlerta}">⚠️ ${item.data.mensaje || 'Anomalía'}</span>` : '';
-                    return `<b>${fecha}</b><br/>${item.seriesName}: ${val}${alerta}`;
+                    const alerta = item.data.anomalia ? `<br/><span style="color:${colorAlerta}; font-weight:bold;">⚠️ ${item.data.mensaje || 'Anomalía'}</span>` : '';
+                    const label = isBarChart ? 'Eventos' : item.seriesName;
+                    return `<b>${fecha}</b><br/>${label}: ${val}${alerta}`;
                 }
             },
-            grid: { left: 40, right: 30, bottom: 40, top: 40, containLabel: true },
+            grid: { left: 40, right: 30, bottom: 40, top: 50, containLabel: true },
             xAxis: {
                 type: 'time',
-                boundaryGap: chartType === 'bar', // Barras necesitan gap
+                boundaryGap: isBarChart,
                 axisLine: { show: false },
+                axisTick: { show: false },
                 axisLabel: { color: textColor.value, fontSize: 11 },
                 splitLine: { show: false }
             },
@@ -330,34 +364,41 @@ export default {
                 axisLabel: { color: textColor.value, fontSize: 11 },
                 splitLine: { lineStyle: { color: gridColor.value, type: 'dashed' } }
             },
-            dataZoom: [ { type: 'slider', show: true, bottom: 5, height: 15, borderColor: 'transparent', textStyle: { color: textColor.value } }, { type: 'inside' } ], 
+            dataZoom: [ 
+                { type: 'slider', show: true, bottom: 5, height: 15, borderColor: 'transparent', textStyle: { color: textColor.value } }, 
+                { type: 'inside' } 
+            ], 
             series: [{
                 name: seriesName,
                 type: chartType,
                 data: data.map(item => ({
                     value: item.value,
-                    itemStyle: item.anomalia ? { color: colorAlerta } : null,
-                    // Puntos solo en modo línea
+                    itemStyle: { color: item.anomalia ? colorAlerta : colorPrincipal },
+                    // Icono de punto en líneas
                     symbol: (chartType === 'line' && item.anomalia) ? 'circle' : 'none',
                     symbolSize: 6,
                     anomalia: item.anomalia,
                     mensaje: item.mensaje
                 })),
                 smooth: true,
-                barMaxWidth: 20, // Para barras
+                barMaxWidth: 40, 
                 lineStyle: { width: 2, color: colorPrincipal },
-                itemStyle: { color: colorPrincipal }, // Color base para barras
+                itemStyle: { color: colorPrincipal },
                 areaStyle: chartType === 'line' ? {
                     color: {
                         type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
                         colorStops: [{ offset: 0, color: 'rgba(138, 43, 226, 0.3)' }, { offset: 1, color: 'rgba(138, 43, 226, 0)' }]
                     }
                 } : undefined,
-                markPoint: props.analisisActivo && chartType === 'line' ? {
+                
+                // 🚨 MARKPOINT ACTIVADO EN TODOS LOS TIPOS (Barras y Líneas)
+                markPoint: props.analisisActivo ? {
                     data: anomalypoints,
-                    symbol: 'pin', symbolSize: 35,
+                    symbol: 'pin', 
+                    symbolSize: 40,
                     label: { show: true, formatter: '!', color: '#fff', fontWeight: 'bold' },
-                    itemStyle: { color: colorAlerta }
+                    itemStyle: { color: colorAlerta, shadowBlur: 5, shadowColor: 'rgba(0,0,0,0.3)' },
+                    animation: false 
                 } : null
             }]
         };
@@ -400,34 +441,19 @@ $SUBTLE-BG-LIGHT: #FFFFFF;
 .chart-card {
     border-radius: 16px;
     padding: 20px;
-    height: 450px; /* 🚨 Aumentamos altura para acomodar el footer de stats */
+    height: 450px; 
     display: flex;
     flex-direction: column;
     transition: background-color 0.3s, box-shadow 0.3s;
     border: 1px solid transparent;
 }
 
-.chart-content {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
+.chart-content { flex-grow: 1; display: flex; flex-direction: column; height: 100%; }
+.chart-wrapper { flex-grow: 1; width: 100%; min-height: 0; }
 
-.chart-wrapper {
-    flex-grow: 1; /* Ocupa el espacio disponible */
-    width: 100%;
-    min-height: 0; /* Importante para flexbox */
-}
-
-/* HEADER */
 .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,0.05);
     
     .title-group {
         display: flex; align-items: center; gap: 12px;
@@ -443,41 +469,23 @@ $SUBTLE-BG-LIGHT: #FFFFFF;
 }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba($PRIMARY-PURPLE, 0.7); } 70% { box-shadow: 0 0 0 6px rgba($PRIMARY-PURPLE, 0); } 100% { box-shadow: 0 0 0 0 rgba($PRIMARY-PURPLE, 0); } }
 
-/* 🚨 NUEVO: FOOTER DE ESTADÍSTICAS */
 .stats-footer {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    gap: 10px;
-    padding-top: 15px;
-    margin-top: 10px;
-    border-top: 1px solid rgba(0,0,0,0.05);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px;
+    padding-top: 15px; margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.05);
     
     .stat-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        
+        display: flex; flex-direction: column; align-items: center;
         .label { font-size: 0.7rem; text-transform: uppercase; color: $GRAY-COLD; font-weight: 600; margin-bottom: 2px; }
         .value { font-size: 1rem; font-weight: 700; }
-        
         &.highlight .value { color: $PRIMARY-PURPLE; }
     }
 }
 
-/* ESTADOS */
 .chart-loading, .chart-error { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: $GRAY-COLD; gap: 10px; }
 .spinner-border { width: 2rem; height: 2rem; border: 3px solid rgba($PRIMARY-PURPLE, 0.3); border-top-color: $PRIMARY-PURPLE; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .chart-error { color: $DANGER-COLOR; }
 
-/* TEMAS */
-.theme-light .chart-card {
-    background-color: $SUBTLE-BG-LIGHT; box-shadow: 0 4px 20px rgba(0,0,0,0.05); color: $DARK-TEXT;
-    .chart-header, .stats-footer { border-color: rgba(0,0,0,0.05); }
-}
-.theme-dark .chart-card {
-    background-color: $SUBTLE-BG-DARK; box-shadow: 0 4px 20px rgba(0,0,0,0.2); color: $LIGHT-TEXT;
-    .chart-header, .stats-footer { border-color: rgba(255,255,255,0.05); }
-    .chart-title { color: $LIGHT-TEXT; }
-}
+.theme-light .chart-card { background-color: $SUBTLE-BG-LIGHT; box-shadow: 0 4px 20px rgba(0,0,0,0.05); color: $DARK-TEXT; .chart-header, .stats-footer { border-color: rgba(0,0,0,0.05); } }
+.theme-dark .chart-card { background-color: $SUBTLE-BG-DARK; box-shadow: 0 4px 20px rgba(0,0,0,0.2); color: $LIGHT-TEXT; .chart-header, .stats-footer { border-color: rgba(255,255,255,0.05); } .chart-title { color: $LIGHT-TEXT; } .stats-footer { border-color: rgba(255,255,255,0.05); } }
 </style>
