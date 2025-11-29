@@ -27,8 +27,7 @@ export default {
 
 <style scoped lang="scss">
 @use "sass:color";
-// NOTA: Asumimos que $spacer, $primary-color, $LIGHT_TEXT, $SUBTLE_BG_DARK, etc.
-// están definidos en tu archivo _variables.scss o pasados a la raíz SCSS.
+
 
 $spacer: 1rem;
 $border-radius: 12px;

@@ -304,17 +304,7 @@ export default {
 
     &:hover { opacity: .9; }
   }
-  &::before {
-  content: "";
-  position: absolute;
-  left: -6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 60%;
-  border-radius: 10px;
-  background: $ACCENT-COLOR;
-  box-shadow: 0 0 8px $ACCENT-COLOR;}
+
 }
 
 // -----------------------------

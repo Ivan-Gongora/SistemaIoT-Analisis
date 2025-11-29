@@ -1,27 +1,27 @@
 <template>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
-      <a class="navbar-brand" href="#">Plataforma IoT</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navegacionPrincipal" aria-controls="navegacionPrincipal" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
+  <nav class="navbar navbar-expand-lg fixed-top custom-nav" :class="{ 'scrolled': isScrolled }">
+    <div class="container">
+      
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <div class="logo-icon">
+          <i class="bi bi-cpu-fill"></i>
+        </div>
+        <span class="brand-text">Plataforma IoT</span>
+      </a>
+
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navegacionPrincipal">
+        <i class="bi bi-list fs-2 toggle-icon"></i>
       </button>
+
       <div class="collapse navbar-collapse" id="navegacionPrincipal">
-        <ul class="navbar-nav me-auto">
+        <ul class="navbar-nav ms-auto align-items-center">
           <li class="nav-item">
-            <router-link to="/" class="nav-link">Acerca de</router-link>
+            <a class="nav-link custom-link" href="#">Acerca de</a>
           </li>
-        
-        </ul>
-        <form class="d-flex me-2">
-          <input class="form-control me-2" type="search" placeholder="Buscar" aria-label="Buscar">
-          <button class="btn btn-outline-light" type="submit">Buscar</button>
-        </form>
-        <ul class="navbar-nav">
-          <li class="nav-item">
-            <a class="nav-link" href="#">Cerrar Sesión</a>
-          </li>
-          <li class="nav-item">
-            <router-link to="/registros" class="nav-link btn btn-success ms-2">Registrarse</router-link>
+          <li class="nav-item ms-lg-3">
+            <router-link to="/registros" class="btn-nav-outline">
+              Registrarse
+            </router-link>
           </li>
         </ul>
       </div>
@@ -31,68 +31,78 @@
 
 <script>
 export default {
-  name: 'BarraNavegacion'
+  name: 'BarraNavegacion',
+  data() { return { isScrolled: false } },
+  mounted() { window.addEventListener('scroll', this.handleScroll); },
+  unmounted() { window.removeEventListener('scroll', this.handleScroll); },
+  methods: {
+    handleScroll() { this.isScrolled = window.scrollY > 20; }
+  }
 }
 </script>
   
-  <style scoped>
-  .navbar {
-    background-color: #007bff; /* Example blue color */
-    color: white;
-    padding: 15px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  
-  .logo {
-    font-size: 1.5em;
-    font-weight: bold;
-  }
-  
-  .menu a {
-    color: white;
-    text-decoration: none;
-    margin-left: 15px;
-  }
-  
-  .search-bar {
-    display: flex;
-    align-items: center;
-  }
-  
-  .search-bar input {
-    padding: 8px;
-    border: none;
-    border-radius: 5px 0 0 5px;
-  }
-  
-  .search-bar button {
-    background-color: #0056b3;
-    color: white;
-    border: none;
-    padding: 8px 10px;
-    border-radius: 0 5px 5px 0;
-    cursor: pointer;
-  }
-  
-  .search-bar button img {
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
-  }
-  
-  .auth {
-    display: flex; /* Ensure items are in a row */
-    align-items: center; /* Vertically align items */
-  }
-  
-  .auth a {
-    color: white;
-    text-decoration: none;
-  }
-  
-  .auth a:first-child {
-    margin-right: 15px; /* Add margin to the right of the first link */
-  }
-  </style>
+<style scoped>
+/* NAV BASE */
+.custom-nav {
+  padding: 1.5rem 0;
+  transition: all 0.3s ease;
+  background: transparent;
+}
+
+.custom-nav.scrolled {
+  background: var(--nav-bg-scrolled); /* Variable Adaptable */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--card-shadow);
+}
+
+/* LOGO */
+.logo-icon {
+  width: 35px; height: 35px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: #fff;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+}
+
+.brand-text {
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+/* LINKS */
+.custom-link {
+  color: var(--text-muted) !important;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.custom-link:hover {
+  color: var(--primary) !important;
+}
+
+/* Icono Toggler (Móvil) */
+.toggle-icon { color: var(--text-main); }
+
+/* BOTÓN REGISTRO */
+.btn-nav-outline {
+  color: var(--text-main);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  padding: 8px 20px;
+  border-radius: 50px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-nav-outline:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(124, 58, 237, 0.05);
+}
+</style>
