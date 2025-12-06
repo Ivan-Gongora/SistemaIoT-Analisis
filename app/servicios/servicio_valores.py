@@ -438,6 +438,8 @@ async def obtener_valores_ventana_db(campo_id: int, minutos: int) -> List[Dict[s
         if conn: conn.close()
 
 
+
+
 def aplicar_analisis_historico(
     datos: List[Dict[str, Any]], 
     config: Dict[str, float] = None
@@ -456,14 +458,15 @@ def aplicar_analisis_historico(
     es_temperatura = 'temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw
     es_humedad = 'humedad' in nombre_raw or 'hum' in tipo_raw
     
-    # Agrupamos todo lo que debe "aprenderse solo" (Eléctrico + Luz)
-    es_auto_aprendizaje = not (es_movimiento or es_temperatura or es_humedad)
+    # 2. Grupo Eléctrico/Consumo (El que estaba fallando)
+    es_consumo = ('corriente' in nombre_raw or 'potencia' in nombre_raw or 'energia' in nombre_raw or 
+                  'iluminacion' in nombre_raw or 'amp' in tipo_raw or 'watt' in tipo_raw or 'kwh' in tipo_raw or 'lux' in tipo_raw)
 
     valores_float = [float(d['valor']) for d in datos]
     n = len(valores_float)
 
     # -------------------------------------------------------------------------
-    # CASO A: MOVIMIENTO (Densidad) - Se mantiene igual, funciona bien
+    # CASO A: MOVIMIENTO (Densidad)
     # -------------------------------------------------------------------------
     if es_movimiento:
         media_total = sum(valores_float) / n
@@ -478,7 +481,7 @@ def aplicar_analisis_historico(
                 d['mensaje_alerta'] = f"Ráfaga de Actividad ({int(val)})"
 
     # -------------------------------------------------------------------------
-    # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort - Usuario manda)
+    # CASO B: TEMPERATURA Y HUMEDAD (Límites Fijos)
     # -------------------------------------------------------------------------
     elif es_temperatura or es_humedad:
         if es_temperatura:
@@ -508,32 +511,27 @@ def aplicar_analisis_historico(
                 d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad}"
 
     # -------------------------------------------------------------------------
-    # CASO C: AUTO-APRENDIZAJE (Energía, Potencia, Luz, Corriente)
-    # Algoritmo: Z-Score Robusto con MAD (Median Absolute Deviation)
+    # CASO C: CONSUMO (Energía, Potencia, Corriente, Luz)
+    # ESTRATEGIA: Z-Score LOCAL + Piso de Ruido Aprendido
     # -------------------------------------------------------------------------
-    elif es_auto_aprendizaje:
-        
-        # 1. Aprender la "Variabilidad Normal" de todo el set de datos histórico
-        # Usamos la mediana porque ignora los picos locos al aprender.
+    elif es_consumo:
         try:
+            # 1. Aprender la ESCALA de los datos (no la varianza, solo la magnitud)
+            # Si la mediana es 5000W, un cambio de 1W es ruido. 
+            # Si la mediana es 5W, un cambio de 1W es enorme.
             mediana_global = statistics.median(valores_float)
-            # Calculamos la desviación absoluta de cada punto respecto a la mediana
-            desviaciones = [abs(x - mediana_global) for x in valores_float]
-            # La mediana de esas desviaciones es nuestro "MAD" (Qué tanto varía normalmente)
-            mad = statistics.median(desviaciones)
             
-            # Si el MAD es 0 (datos planos), forzamos un mínimo técnico para no dividir por 0
-            if mad == 0: mad = 0.001 
-            
-            # Factor de escala para hacer el MAD comparable a la Desviación Estándar (constante estadística)
-            sigma_estimada = mad * 1.4826
+            # Piso de ruido dinámico: 10% de la mediana o un mínimo absoluto técnico
+            if mediana_global == 0: 
+                ruido_minimo = 0.1 # Caso borde: todo está apagado
+            else:
+                ruido_minimo = abs(mediana_global * 0.10) 
 
         except statistics.StatisticsError:
-            # Fallback si hay muy pocos datos
-            sigma_estimada = 1.0
-            mediana_global = sum(valores_float)/n
+            ruido_minimo = 1.0
 
-        RADIO = 3 # Ventana de contexto local
+        # Ventana pequeña para reaccionar rápido a los picos de "sierra"
+        RADIO = 2 
 
         for i in range(n):
             d = datos[i]
@@ -541,40 +539,202 @@ def aplicar_analisis_historico(
             d['anomalia'] = False
             d['mensaje_alerta'] = None
 
-            # --- SUB-LÓGICA: Contexto Local ---
+            # --- Contexto Local (Vecinos) ---
             start = max(0, i - RADIO)
             end = min(n, i + RADIO + 1)
             vecinos = valores_float[start:end]
             
-            # Limpiamos al propio valor para comparar contra "el resto"
+            # Quitamos el valor actual para no ensuciar el promedio de los vecinos
             vecinos_limpios = [v for v in vecinos if v != val]
             if not vecinos_limpios: vecinos_limpios = vecinos
 
             media_local = sum(vecinos_limpios) / len(vecinos_limpios)
             
-            # --- DETECCIÓN INTELIGENTE ---
-            # Comparamos la distancia del valor actual a su media local.
-            # Y dividimos esa distancia entre la variabilidad que APRENDIMOS del conjunto (sigma_estimada).
+            # --- Desviación Local ---
+            varianza = sum([((x - media_local) ** 2) for x in vecinos_limpios]) / len(vecinos_limpios)
+            std_local = math.sqrt(varianza)
             
-            distancia = val - media_local
-            z_score_robusto = distancia / sigma_estimada
+            # 🟢 CLAVE DEL ÉXITO: 
+            # Usamos la desviación local, PERO si es muy pequeña (línea plana),
+            # usamos el "Piso de Ruido" que aprendimos de la mediana global.
+            sigma_efectiva = max(std_local, ruido_minimo)
 
-            # UMBRAL 3.5: Significa "3.5 veces más variación de lo que aprendí que es normal"
-            # Como usamos MAD, esto funciona igual para 0.5 Amperes que para 1000 Watts.
-            if abs(z_score_robusto) > 3.5:
+            # Cálculo Z-Score Local
+            distancia = val - media_local
+            z_score = distancia / sigma_efectiva
+
+            # Umbral 3.0: Detecta anomalías claras
+            if abs(z_score) > 3.0:
                 d['anomalia'] = True
-                
-                # Mensajes inteligentes
                 if val > media_local:
-                    d['mensaje_alerta'] = f"Pico Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
+                    d['mensaje_alerta'] = f"Pico: {val:.2f} (Ref: {media_local:.2f})"
                 else:
-                    # Detección especial de "Cortes" (Caída a casi 0 cuando la tendencia no es 0)
-                    if val < 0.1 and media_local > (sigma_estimada * 2):
-                        d['mensaje_alerta'] = "Corte Súbito / Apagado"
+                    # Solo marcamos caídas si realmente bajan mucho
+                    if val < (media_local * 0.5): 
+                        d['mensaje_alerta'] = f"Caída: {val:.2f} (Ref: {media_local:.2f})"
                     else:
-                        d['mensaje_alerta'] = f"Caída Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
+                        d['anomalia'] = False # Falsa alarma (bajada suave)
+
+    # -------------------------------------------------------------------------
+    # CASO D: RESTO (Fallback Genérico)
+    # -------------------------------------------------------------------------
+    else:
+        # Z-Score Global Simple
+        media = sum(valores_float) / n
+        varianza = sum([((x - media) ** 2) for x in valores_float]) / n
+        std_dev = math.sqrt(varianza)
+        if std_dev < 0.1: std_dev = 0.1
+        
+        for d in datos:
+            val = float(d['valor'])
+            z_score = (val - media) / std_dev
+            d['anomalia'] = False
+            d['mensaje_alerta'] = None
+            if abs(z_score) > 3.5:
+                d['anomalia'] = True
+                d['mensaje_alerta'] = f"Valor atípico: {val:.2f}"
 
     return datos
+
+# def aplicar_analisis_historico(
+#     datos: List[Dict[str, Any]], 
+#     config: Dict[str, float] = None
+# ) -> List[Dict[str, Any]]:
+    
+#     if not datos or len(datos) < 5: return datos
+
+#     if not config:
+#         config = {'temp_min': 20.0, 'temp_max': 26.0, 'hum_min': 30.0, 'hum_max': 60.0}
+
+#     # 1. Normalización
+#     nombre_raw = str(datos[0].get('nombre_campo') or '').lower()
+#     tipo_raw = str(datos[0].get('magnitud_tipo') or '').lower()
+    
+#     es_movimiento = 'movimiento' in nombre_raw or 'estado' in nombre_raw
+#     es_temperatura = 'temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw
+#     es_humedad = 'humedad' in nombre_raw or 'hum' in tipo_raw
+    
+#     # Agrupamos todo lo que debe "aprenderse solo" (Eléctrico + Luz)
+#     es_auto_aprendizaje = not (es_movimiento or es_temperatura or es_humedad)
+
+#     valores_float = [float(d['valor']) for d in datos]
+#     n = len(valores_float)
+
+#     # -------------------------------------------------------------------------
+#     # CASO A: MOVIMIENTO (Densidad) - Se mantiene igual, funciona bien
+#     # -------------------------------------------------------------------------
+#     if es_movimiento:
+#         media_total = sum(valores_float) / n
+#         umbral = max(5.0, media_total * 3.0) 
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+#             if val > umbral: 
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Ráfaga de Actividad ({int(val)})"
+
+#     # -------------------------------------------------------------------------
+#     # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort - Usuario manda)
+#     # -------------------------------------------------------------------------
+#     elif es_temperatura or es_humedad:
+#         if es_temperatura:
+#             MIN_LIMITE = config.get('temp_min', 20.0)
+#             MAX_LIMITE = config.get('temp_max', 26.0)
+#             unidad = "°C"
+#         else: 
+#             MIN_LIMITE = config.get('hum_min', 30.0)
+#             MAX_LIMITE = config.get('hum_max', 60.0)
+#             unidad = "%"
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+
+#             if val == 0.0:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = "Posible Error (0.0)"
+#                 continue
+
+#             if val > MAX_LIMITE:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Alto: {val:.1f}{unidad}"
+#             elif val < MIN_LIMITE:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad}"
+
+#     # -------------------------------------------------------------------------
+#     # CASO C: AUTO-APRENDIZAJE (Energía, Potencia, Luz, Corriente)
+#     # Algoritmo: Z-Score Robusto con MAD (Median Absolute Deviation)
+#     # -------------------------------------------------------------------------
+#     elif es_auto_aprendizaje:
+        
+#         # 1. Aprender la "Variabilidad Normal" de todo el set de datos histórico
+#         # Usamos la mediana porque ignora los picos locos al aprender.
+#         try:
+#             mediana_global = statistics.median(valores_float)
+#             # Calculamos la desviación absoluta de cada punto respecto a la mediana
+#             desviaciones = [abs(x - mediana_global) for x in valores_float]
+#             # La mediana de esas desviaciones es nuestro "MAD" (Qué tanto varía normalmente)
+#             mad = statistics.median(desviaciones)
+            
+#             # Si el MAD es 0 (datos planos), forzamos un mínimo técnico para no dividir por 0
+#             if mad == 0: mad = 0.001 
+            
+#             # Factor de escala para hacer el MAD comparable a la Desviación Estándar (constante estadística)
+#             sigma_estimada = mad * 1.4826
+
+#         except statistics.StatisticsError:
+#             # Fallback si hay muy pocos datos
+#             sigma_estimada = 1.0
+#             mediana_global = sum(valores_float)/n
+
+#         RADIO = 3 # Ventana de contexto local
+
+#         for i in range(n):
+#             d = datos[i]
+#             val = valores_float[i]
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+
+#             # --- SUB-LÓGICA: Contexto Local ---
+#             start = max(0, i - RADIO)
+#             end = min(n, i + RADIO + 1)
+#             vecinos = valores_float[start:end]
+            
+#             # Limpiamos al propio valor para comparar contra "el resto"
+#             vecinos_limpios = [v for v in vecinos if v != val]
+#             if not vecinos_limpios: vecinos_limpios = vecinos
+
+#             media_local = sum(vecinos_limpios) / len(vecinos_limpios)
+            
+#             # --- DETECCIÓN INTELIGENTE ---
+#             # Comparamos la distancia del valor actual a su media local.
+#             # Y dividimos esa distancia entre la variabilidad que APRENDIMOS del conjunto (sigma_estimada).
+            
+#             distancia = val - media_local
+#             z_score_robusto = distancia / sigma_estimada
+
+#             # UMBRAL 3.5: Significa "3.5 veces más variación de lo que aprendí que es normal"
+#             # Como usamos MAD, esto funciona igual para 0.5 Amperes que para 1000 Watts.
+#             if abs(z_score_robusto) > 3.5:
+#                 d['anomalia'] = True
+                
+#                 # Mensajes inteligentes
+#                 if val > media_local:
+#                     d['mensaje_alerta'] = f"Pico Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
+#                 else:
+#                     # Detección especial de "Cortes" (Caída a casi 0 cuando la tendencia no es 0)
+#                     if val < 0.1 and media_local > (sigma_estimada * 2):
+#                         d['mensaje_alerta'] = "Corte Súbito / Apagado"
+#                     else:
+#                         d['mensaje_alerta'] = f"Caída Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
+
+#     return datos
+
+
 
 # def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 #     """
