@@ -46,7 +46,12 @@ export default {
     fechaFin: { type: String, required: true },
     isDark: { type: Boolean, default: false },
     metodoCarga: { type: String, default: 'optimizado' },
-    incluirAnalisis: { type: Boolean, default: false } 
+    incluirAnalisis: { type: Boolean, default: false },
+    // 🟢 NUEVO: Recibir límites del padre (VistaReportes)
+    limitesPersonalizados: { 
+        type: Object, 
+        default: () => ({ tempMin: 20, tempMax: 26, humMin: 30, humMax: 60 }) 
+    }
   },
   
   setup(props) {
@@ -75,14 +80,24 @@ export default {
 
       loading.value = true;
       error.value = null;
-      let valores = []; // 🟢 CORRECCIÓN: Definimos variable fuera del try para que el catch la vea
+      let valores = []; // Variable scope fix
 
       const token = localStorage.getItem('accessToken');
+      
+      // 2. Construcción de URL con TODOS los parámetros
       const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
       url.searchParams.append('fecha_inicio', props.fechaInicio);
       url.searchParams.append('fecha_fin', props.fechaFin);
       url.searchParams.append('metodo_carga', props.metodoCarga); 
       url.searchParams.append('incluir_analisis', props.incluirAnalisis.toString());
+
+      // 🟢 NUEVO: Si el análisis está activo, enviamos los límites personalizados
+      if (props.incluirAnalisis && props.limitesPersonalizados) {
+          url.searchParams.append('temp_min', props.limitesPersonalizados.tempMin);
+          url.searchParams.append('temp_max', props.limitesPersonalizados.tempMax);
+          url.searchParams.append('hum_min', props.limitesPersonalizados.humMin);
+          url.searchParams.append('hum_max', props.limitesPersonalizados.humMax);
+      }
 
       try {
         const response = await fetch(url.toString(), {
@@ -113,13 +128,13 @@ export default {
         // B. Datos de Anomalías (Pines Rojos)
         const anomaliasDetectadas = valores.filter(v => v.anomalia === true);
         
-        // 🟢 DEBUG: Muestra en consola cuántas anomalías llegaron
-        console.log(`[Gráfico] Total datos: ${valores.length}, Anomalías: ${anomaliasDetectadas.length}`);
+        // Debugging
+        console.log(`[Gráfico ID:${props.campoId}] Datos: ${valores.length}, Alertas: ${anomaliasDetectadas.length}`);
 
         const puntosAnomalos = anomaliasDetectadas.map(v => ({
-            // 🟢 CORRECCIÓN: 'coord' es más preciso que xAxis/yAxis para series de tiempo
+            // Usamos 'coord' para precisión absoluta en gráficos de tiempo
             coord: [v.fecha_hora_lectura, parseFloat(v.valor)],
-            value: parseFloat(v.valor).toFixed(1), // Redondear valor visual
+            value: parseFloat(v.valor).toFixed(1), 
             name: 'Anomalía',
             itemStyle: { color: '#ff4500' },
             tooltip: { 
@@ -145,7 +160,7 @@ export default {
           axisPointer: { type: 'cross' }
         },
         grid: {
-          left: '50px', right: '20px', bottom: '70px', top: '40px', // 🟢 Ajuste de márgenes para que quepan los pines
+          left: '50px', right: '20px', bottom: '70px', top: '40px', // Margen superior para los pines
           containLabel: true
         },
         xAxis: {
@@ -176,7 +191,7 @@ export default {
             data: anomalias,
             symbol: 'pin',
             symbolSize: 40,
-            symbolOffset: [0, -10], // 🟢 Levantar un poco el pin para que apunte al dato
+            symbolOffset: [0, -10], // Levantar pin
             label: {
                 show: true,
                 fontSize: 10,
@@ -188,10 +203,19 @@ export default {
       };
     };
 
+    // --- WATCHERS ---
+    // Agregamos 'props.limitesPersonalizados' para reactividad total
     watch(
-      () => [props.campoId, props.fechaInicio, props.fechaFin, props.metodoCarga, props.incluirAnalisis], 
+      () => [
+        props.campoId, 
+        props.fechaInicio, 
+        props.fechaFin, 
+        props.metodoCarga, 
+        props.incluirAnalisis,
+        props.limitesPersonalizados // 🟢 Si cambian los números en el menú, recarga
+      ], 
       cargarDatosHistoricos, 
-      { immediate: true } 
+      { immediate: true, deep: true } // 'deep: true' es vital para ver cambios dentro del objeto limites
     );
 
     watch(

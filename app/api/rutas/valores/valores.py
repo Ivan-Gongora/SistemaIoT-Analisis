@@ -63,21 +63,37 @@ async def get_valores_historicos(
     fecha_inicio: Optional[datetime] = Query(None),
     fecha_fin: Optional[datetime] = Query(None),
     metodo_carga: str = Query("optimizado"), 
-    incluir_analisis: bool = Query(False), 
+    incluir_analisis: bool = Query(False),
+    
+    # 🟢 NUEVOS PARÁMETROS (Con valores por defecto seguros)
+    temp_min: float = Query(20.0),
+    temp_max: float = Query(26.0),
+    hum_min: float = Query(30.0),
+    hum_max: float = Query(60.0),
+    
     current_user_id: int = Depends(get_current_user_id)
 ):
     try:
         if not fecha_fin: fecha_fin = datetime.now()
         if not fecha_inicio: fecha_inicio = fecha_fin - timedelta(days=7)
 
-        # 1. Obtener datos de DB (Recuerda que ya corregimos la SQL aquí para traer el nombre)
+        # 1. Obtener datos
         valores = await obtener_historico_campo_db(campo_id, fecha_inicio, fecha_fin, metodo_carga)
         
-        # 2. Aplicar Análisis HISTÓRICO
+        # 2. Aplicar Análisis HISTÓRICO con CONFIGURACIÓN
         if valores and incluir_analisis:
             try:
-                # 🟢 CAMBIO: Usamos la función especializada para históricos
-                valores = aplicar_analisis_historico(valores)
+                # 🟢 Preparamos el diccionario de configuración
+                config_analisis = {
+                    'temp_min': temp_min,
+                    'temp_max': temp_max,
+                    'hum_min': hum_min,
+                    'hum_max': hum_max
+                }
+                
+                # 🟢 Pasamos la configuración a la función
+                valores = aplicar_analisis_historico(valores, config=config_analisis)
+                
             except Exception as analysis_error:
                 print(f"Advertencia: Falló el análisis histórico: {analysis_error}")
 
@@ -85,6 +101,34 @@ async def get_valores_historicos(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error histórico: {str(e)}")
+# @router.get("/valores/historico-campo/{campo_id}", response_model=List[ValorGrafico])
+# async def get_valores_historicos(
+#     campo_id: int,
+#     fecha_inicio: Optional[datetime] = Query(None),
+#     fecha_fin: Optional[datetime] = Query(None),
+#     metodo_carga: str = Query("optimizado"), 
+#     incluir_analisis: bool = Query(False), 
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     try:
+#         if not fecha_fin: fecha_fin = datetime.now()
+#         if not fecha_inicio: fecha_inicio = fecha_fin - timedelta(days=7)
+
+#         # 1. Obtener datos de DB (Recuerda que ya corregimos la SQL aquí para traer el nombre)
+#         valores = await obtener_historico_campo_db(campo_id, fecha_inicio, fecha_fin, metodo_carga)
+        
+#         # 2. Aplicar Análisis HISTÓRICO
+#         if valores and incluir_analisis:
+#             try:
+#                 # 🟢 CAMBIO: Usamos la función especializada para históricos
+#                 valores = aplicar_analisis_historico(valores)
+#             except Exception as analysis_error:
+#                 print(f"Advertencia: Falló el análisis histórico: {analysis_error}")
+
+#         return valores or []
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error histórico: {str(e)}")
 
 # @router.get("/valores/historico-campo/{campo_id}", response_model=List[ValorGrafico])
 # async def get_valores_historicos(

@@ -124,6 +124,28 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="limits-config" v-if="activarAnalisis">
+                        <h5 class="limits-title">Límites de Alerta</h5>
+                        
+                        <div class="limit-group">
+                            <label><i class="bi bi-thermometer-half"></i> Temp (°C)</label>
+                            <div class="limit-inputs">
+                                <input type="number" v-model.number="limites.tempMin" class="limit-input" placeholder="Min">
+                                <span>-</span>
+                                <input type="number" v-model.number="limites.tempMax" class="limit-input" placeholder="Max">
+                            </div>
+                        </div>
+
+                        <div class="limit-group">
+                            <label><i class="bi bi-droplet-half"></i> Humedad (%)</label>
+                            <div class="limit-inputs">
+                                <input type="number" v-model.number="limites.humMin" class="limit-input" placeholder="Min">
+                                <span>-</span>
+                                <input type="number" v-model.number="limites.humMax" class="limit-input" placeholder="Max">
+                            </div>
+                        </div>
+                    </div>
             </div>
         </div>
         
@@ -181,6 +203,7 @@
                     :is-dark="isDark"
                     :metodo-carga="metodoCarga"
                     :incluir-analisis="activarAnalisis"
+                    :limites-personalizados="limites"
                 />
             </div>
             
@@ -244,6 +267,12 @@ export default {
             errorCampos: null,
             error: null,
             activarAnalisis: false,
+            limites: {
+                tempMin: 20,
+                tempMax: 26,
+                humMin: 30,
+                humMax: 60
+            }
         };
     },
     
@@ -276,15 +305,28 @@ export default {
         if (window.matchMedia) {
             window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.handleThemeChange);
         }
-    },
+    },watch: {
+    metodoCarga(nuevoModo) {
+        if (nuevoModo === 'puro' && this.camposSeleccionadosIds.length > 2) {
+            this.camposSeleccionadosIds = this.camposSeleccionadosIds.slice(0, 2);
+            alert("⚠️ Se han reducido las gráficas a 2 por seguridad en modo Datos Puros.");
+        }
+    }
+},
     methods: {
         toggleCampo(id) {
             const index = this.camposSeleccionadosIds.indexOf(id);
             if (index === -1) {
+        // Intentando agregar uno nuevo
+                if (this.metodoCarga === 'puro' && this.camposSeleccionadosIds.length >= 2) {
+                    alert("⚠️ Rendimiento: En modo 'Datos Puros' solo puedes ver máximo 2 gráficas a la vez.");
+                    return; 
+                }
                 this.camposSeleccionadosIds.push(id);
             } else {
+                // Quitando uno existente
                 this.camposSeleccionadosIds.splice(index, 1);
-            }
+    }
         },
         // ------------------------------------------------------
         // 1. CARGAR PROYECTOS 
@@ -460,50 +502,63 @@ export default {
 <style scoped lang="scss">
 @use "sass:color";
 
-
+// =============================================================================
+// 1. LAYOUT PRINCIPAL & RESPONSIVIDAD
+// =============================================================================
 .reportes-contenido {
     padding: 30px 40px;
     max-width: 1600px;
     margin: 0 auto;
+    transition: all 0.3s ease;
+
+    @media (max-width: 768px) {
+        padding: 15px 20px;
+    }
 }
 
 // -----------------------------------
-// 1. PANEL DE CONTROL MODERNO
+// 2. PANEL DE CONTROL (GRID)
 // -----------------------------------
 .control-panel {
-    background-color: $WHITE;
-    border-radius: 16px;
+    border-radius: 16px; 
     padding: 25px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    box-shadow: $shadow-soft; 
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 30px;
     margin-bottom: 30px;
     border: 1px solid transparent;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+
+    @media (max-width: 768px) {
+        grid-template-columns: 1fr; 
+        gap: 20px;
+        padding: 20px;
+    }
 }
 
 .control-section {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    position: relative;
     
     .section-title {
         font-size: 0.95rem;
         font-weight: 700;
         text-transform: uppercase;
-        color: $GRAY-COLD;
         letter-spacing: 0.5px;
         margin-bottom: 5px;
         display: flex;
         align-items: center;
         gap: 8px;
         
-        i { color: $PRIMARY-PURPLE; font-size: 1.1rem; }
+        i { font-size: 1.1rem; color: $PRIMARY-PURPLE; }
     }
 }
 
-// INPUTS MODERNOS CON ICONO INTERNO
+// -----------------------------------
+// 3. ELEMENTOS DE FORMULARIO
+// -----------------------------------
 .form-group {
     display: flex;
     flex-direction: column;
@@ -512,7 +567,6 @@ export default {
     label {
         font-size: 0.85rem;
         font-weight: 600;
-        color: $DARK-TEXT;
     }
     
     .input-wrapper {
@@ -526,25 +580,25 @@ export default {
             color: $GRAY-COLD;
             pointer-events: none;
             font-size: 1rem;
+            z-index: 2;
         }
         
         .form-control {
             width: 100%;
-            padding: 10px 15px 10px 40px; // Espacio para icono
+            padding: 10px 15px 10px 40px; 
             border-radius: 10px;
-            border: 1px solid $LIGHT-BORDER;
+            border: 1px solid transparent; 
             font-size: 0.95rem;
             transition: all 0.2s ease;
-            background-color: $WHITE;
             appearance: none; 
             
             &:focus {
-                border-color: $PRIMARY-PURPLE;
+                border-color: $PRIMARY-PURPLE !important;
                 box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.1);
                 outline: none;
             }
+            
             &:disabled {
-                background-color: #f5f5f5;
                 cursor: not-allowed;
                 opacity: 0.7;
             }
@@ -552,15 +606,15 @@ export default {
     }
 }
 
-// FILA DE TIEMPO
 .time-row {
     display: flex;
     gap: 10px;
-    .flex-grow { flex: 1; }
+    flex-wrap: wrap; 
+
+    .flex-grow { flex: 1; min-width: 140px; }
     .time-input { width: 110px; flex-shrink: 0; }
 }
 
-// PILL DE ESTADO
 .status-pill {
     margin-top: 5px;
     font-size: 0.75rem;
@@ -571,11 +625,108 @@ export default {
     padding: 4px 0;
     
     &.optimizado { color: $SUCCESS; }
-    &.puro { color: $WARNING; }
+    &.puro { color: $WARNING; } 
 }
 
 // -----------------------------------
-// 2. SELECTOR DE VARIABLES (GRID)
+// 4. SECCIÓN DE LÍMITES (NUEVO)
+// -----------------------------------
+.limits-config {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid; 
+    animation: fadeIn 0.3s ease-in-out;
+
+    .limits-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        opacity: 0.8;
+    }
+
+    .limit-group {
+        margin-bottom: 15px;
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: $GRAY-COLD;
+            margin-bottom: 6px;
+            
+            i { margin-right: 6px; color: $PRIMARY-PURPLE; }
+        }
+
+        .limit-inputs {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            span { color: $GRAY-COLD; font-weight: bold; }
+
+            .limit-input {
+                width: 100%;
+                padding: 8px 12px;
+                font-size: 0.9rem;
+                border-radius: 6px; 
+                border: 1px solid; 
+                transition: all 0.2s ease;
+                box-shadow: $box-shadow-sm; 
+
+                &:focus {
+                    outline: none;
+                    border-color: $PRIMARY-PURPLE !important;
+                    box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.15);
+                }
+                
+                &::-webkit-inner-spin-button, &::-webkit-outer-spin-button { 
+                    -webkit-appearance: none; margin: 0; 
+                }
+            }
+        }
+    }
+}
+
+// Switch iOS Style
+.toggle-wrapper { display: flex; align-items: center; gap: 10px; }
+.toggle-label { font-size: 0.85rem; font-weight: 500; color: $GRAY-COLD; }
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px; 
+    height: 24px;
+    
+    input { opacity: 0; width: 0; height: 0; }
+    
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+        
+        &:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    }
+    
+    input:checked + .slider { background-color: $PRIMARY-PURPLE; }
+    input:checked + .slider:before { transform: translateX(20px); }
+}
+
+// -----------------------------------
+// 5. GRID DE VARIABLES
 // -----------------------------------
 .variables-panel {
     margin-bottom: 30px;
@@ -594,8 +745,7 @@ export default {
     }
     
     .selectable-card {
-        background-color: $WHITE;
-        border: 1px solid $LIGHT-BORDER;
+        border: 1px solid; 
         border-radius: 12px;
         padding: 12px 15px;
         display: flex;
@@ -606,11 +756,11 @@ export default {
         position: relative;
         overflow: hidden;
         
-        &:hover { transform: translateY(-2px); border-color: $PRIMARY-PURPLE; }
+        &:hover { transform: translateY(-2px); border-color: $PRIMARY-PURPLE !important; }
         
         &.selected {
-            background-color: rgba($PRIMARY-PURPLE, 0.08);
-            border-color: $PRIMARY-PURPLE;
+            background-color: rgba($PRIMARY-PURPLE, 0.08) !important;
+            border-color: $PRIMARY-PURPLE !important;
             
             .card-icon i { color: $PRIMARY-PURPLE; }
             .check-indicator { opacity: 1; transform: scale(1); }
@@ -618,15 +768,14 @@ export default {
         
         .card-icon {
             width: 32px; height: 32px;
-            background-color: rgba($GRAY-COLD, 0.1);
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            i { font-size: 1.1rem; color: $GRAY-COLD; transition: color 0.2s; }
+            i { font-size: 1.1rem; transition: color 0.2s; }
         }
         
         .card-info {
             display: flex; flex-direction: column;
-            .var-name { font-weight: 600; font-size: 0.9rem; color:$GRAY-COLD; }
+            .var-name { font-weight: 600; font-size: 0.9rem; }
             .var-unit { font-size: 0.75rem; color: $GRAY-COLD; }
         }
         
@@ -639,47 +788,24 @@ export default {
         }
     }
 }
-/* Estilo para el Switch tipo iOS */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-  margin-right: 10px;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #ccc;
-  transition: .4s;
-  border-radius: 34px;
-}
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 16px; width: 16px;
-  left: 3px; bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-}
-input:checked + .slider { background-color: #8A2BE2; } /* Morado */
-input:checked + .slider:before { transform: translateX(18px); }
-.toggle-wrapper { display: flex; align-items: center; }
+
 // -----------------------------------
-// 3. GRÁFICOS Y ALERTAS
+// 6. GRÁFICOS Y ALERTAS
 // -----------------------------------
-.charts-container {
-    margin-top: 30px;
-}
-.charts-grid-multiple, .charts-grid-single {
-    display: grid;
+.charts-container { margin-top: 30px; }
+
+.charts-grid-multiple { 
+    display: grid; 
     gap: 25px;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); 
+    @media (max-width: 768px) { grid-template-columns: 1fr; }
 }
-.charts-grid-multiple { grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); }
-.charts-grid-single { grid-template-columns: 1fr; }
+
+.charts-grid-single { 
+    display: grid; 
+    gap: 25px; 
+    grid-template-columns: 1fr; 
+}
 
 .alert-box {
     padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0; font-weight: 500;
@@ -689,17 +815,58 @@ input:checked + .slider:before { transform: translateX(18px); }
     &.error { background-color: rgba($DANGER, 0.1); color: $DANGER; }
 }
 
-// -----------------------------------
-// TEMAS (DARK MODE)
-// -----------------------------------
+// =============================================================================
+// 7. DEFINICIÓN DE TEMAS (CLARO / OSCURO)
+// =============================================================================
+
+// --- TEMA CLARO ---
+.theme-light {
+    background-color: $WHITE-SOFT;
+    
+    .control-panel {
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+    }
+
+    .form-group label { color: $DARK-TEXT; }
+
+    .form-control {
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+        color: $DARK-TEXT;
+        &:disabled { background-color: #f5f5f5; }
+    }
+
+    .section-title { color: $GRAY-COLD; }
+
+    .limits-config {
+        border-top-color: $LIGHT-BORDER;
+        .limits-title { color: $DARK-TEXT; }
+        .limit-input {
+            background-color: $WHITE;
+            border-color: $LIGHT-BORDER;
+            color: $DARK-TEXT;
+            &::placeholder { color: rgba($GRAY-COLD, 0.6); }
+        }
+    }
+
+    .selectable-card {
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+        .card-icon { background-color: rgba($GRAY-COLD, 0.1); i { color: $GRAY-COLD; } }
+        .var-name { color: $BLACK; }
+    }
+}
+
+// --- TEMA OSCURO ---
 .theme-dark {
-    // Fondo general oscuro para que no se vea blanco
-    background-color: $DARK-BG-CONTRAST;
+    background-color: $DARK-BG-CONTRAST; // Fondo principal oscuro
     color: $LIGHT-TEXT;
 
     .control-panel {
-        background-color: $SUBTLE-BG-DARK;
+        background-color: $SUBTLE-BG-DARK; // Tarjeta oscura
         border-color: rgba($WHITE, 0.05);
+        box-shadow: $shadow-dark;
     }
     
     .form-group label { color: $GRAY-LIGHT; }
@@ -709,33 +876,54 @@ input:checked + .slider:before { transform: translateX(18px); }
         border-color: $DARK-BORDER !important;
         color: $WHITE !important;
         
-        &:focus { border-color: $PRIMARY-PURPLE !important; }
-        &:disabled { background-color: rgba(0,0,0,0.2) !important; }
+        &:disabled { background-color: rgba(0,0,0,0.2) !important; color: $GRAY-COLD !important; }
+        
+        &:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 30px $DARK-INPUT-BG inset !important;
+            -webkit-text-fill-color: $WHITE !important;
+        }
     }
     
     .section-title { color: $WHITE; }
+    
+    // Configuración de límites en oscuro
+    .limits-config {
+        border-top-color: $DARK-BORDER;
+        .limits-title { color: $LIGHT-TEXT; }
+        
+        .limit-input {
+            background-color: $DARK-INPUT-BG;
+            border-color: $DARK-BORDER;
+            color: $LIGHT-TEXT;
+            box-shadow: none; 
+            
+            // 🟢 SOLUCIÓN: Usar color.adjust en lugar de lighten
+            &:focus { 
+                border-color: $PRIMARY-PURPLE;
+                background-color: color.adjust($DARK-INPUT-BG, $lightness: 5%); 
+            }
+        }
+    }
     
     .selectable-card {
         background-color: $SUBTLE-BG-DARK;
         border-color: $DARK-BORDER;
         
         .var-name { color: $WHITE; }
-        .card-icon { background-color: rgba($WHITE, 0.05); }
+        .card-icon { background-color: rgba($WHITE, 0.05); i { color: $GRAY-COLD; } }
         
-        &:hover { border-color: $PRIMARY-PURPLE;background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); }
-        &.selected { background-color: rgba($PRIMARY-PURPLE, 0.15); }
+        &:hover { 
+            // 🟢 SOLUCIÓN: Usar color.adjust
+            background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); 
+        }
     }
     
     .alert-box.empty { background-color: rgba($WHITE, 0.05); color: $GRAY-LIGHT; }
 }
 
-.theme-light {
-    background-color: $WHITE-SOFT;
-    .control-panel { border-color: $LIGHT-BORDER; }
-      .card-info {
-            display: flex; flex-direction: column;
-            .var-name { font-weight: 600; font-size: 0.9rem; color:$BLACK; }
-            .var-unit { font-size: 0.75rem; color: $GRAY-COLD; }
-        }
+// Animación Global
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 </style>

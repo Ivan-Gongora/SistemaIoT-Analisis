@@ -1,5 +1,6 @@
 import pymysql
 import math
+import statistics
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.servicios.servicio_simulacion import get_db_connection, simular_datos_json
@@ -437,59 +438,56 @@ async def obtener_valores_ventana_db(campo_id: int, minutos: int) -> List[Dict[s
         if conn: conn.close()
 
 
-def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Analiza datos históricos. 
-    - Temperatura/Humedad: Usa rangos fijos de confort (20-26°C, 30-60%).
-    - Resto: Usa Ventana Deslizante (Z-Score Local) para detectar picos inusuales.
-    """
+def aplicar_analisis_historico(
+    datos: List[Dict[str, Any]], 
+    config: Dict[str, float] = None
+) -> List[Dict[str, Any]]:
+    
     if not datos or len(datos) < 5: return datos
 
-    # 1. Normalización de Identificadores (A prueba de balas)
+    if not config:
+        config = {'temp_min': 20.0, 'temp_max': 26.0, 'hum_min': 30.0, 'hum_max': 60.0}
+
+    # 1. Normalización
     nombre_raw = str(datos[0].get('nombre_campo') or '').lower()
     tipo_raw = str(datos[0].get('magnitud_tipo') or '').lower()
     
-    # Banderas de identificación (Detecta cualquier variante)
-    es_movimiento = 'movimiento' in nombre_raw or 'estado' in nombre_raw or 'puerta' in nombre_raw
+    es_movimiento = 'movimiento' in nombre_raw or 'estado' in nombre_raw
+    es_temperatura = 'temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw
+    es_humedad = 'humedad' in nombre_raw or 'hum' in tipo_raw
     
-    es_temperatura = ('temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw or 'grad' in tipo_raw)
-    es_humedad = ('humedad' in nombre_raw or 'hum' in tipo_raw)
-    
+    # Agrupamos todo lo que debe "aprenderse solo" (Eléctrico + Luz)
+    es_auto_aprendizaje = not (es_movimiento or es_temperatura or es_humedad)
+
+    valores_float = [float(d['valor']) for d in datos]
+    n = len(valores_float)
+
     # -------------------------------------------------------------------------
-    # CASO A: MOVIMIENTO (Densidad / Ráfagas)
+    # CASO A: MOVIMIENTO (Densidad) - Se mantiene igual, funciona bien
     # -------------------------------------------------------------------------
     if es_movimiento:
-        valores_float = [float(d['valor']) for d in datos]
-        n = len(valores_float)
         media_total = sum(valores_float) / n
-        
-        # Umbral Adaptativo:
-        # Si es puro (agrupado por minuto), el valor puede ser 12. 
-        # Si es optimizado (hora), puede ser 60.
-        # La media nos dice la escala.
         umbral = max(5.0, media_total * 3.0) 
 
         for d in datos:
             val = float(d['valor'])
             d['anomalia'] = False
             d['mensaje_alerta'] = None
-            
             if val > umbral: 
                 d['anomalia'] = True
                 d['mensaje_alerta'] = f"Ráfaga de Actividad ({int(val)})"
 
     # -------------------------------------------------------------------------
-    # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort)
+    # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort - Usuario manda)
     # -------------------------------------------------------------------------
     elif es_temperatura or es_humedad:
-        # Definición de límites según el tipo
         if es_temperatura:
-            MIN_LIMITE = 20.0
-            MAX_LIMITE = 26.0
+            MIN_LIMITE = config.get('temp_min', 20.0)
+            MAX_LIMITE = config.get('temp_max', 26.0)
             unidad = "°C"
-        else: # Humedad
-            MIN_LIMITE = 30.0
-            MAX_LIMITE = 60.0
+        else: 
+            MIN_LIMITE = config.get('hum_min', 30.0)
+            MAX_LIMITE = config.get('hum_max', 60.0)
             unidad = "%"
 
         for d in datos:
@@ -497,27 +495,45 @@ def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, An
             d['anomalia'] = False
             d['mensaje_alerta'] = None
 
-            # IMPORTANTE: Si es 0.0 exacto en temperatura/humedad, suele ser error de sensor
             if val == 0.0:
                 d['anomalia'] = True
-                d['mensaje_alerta'] = "Posible Error de Sensor (0.0)"
+                d['mensaje_alerta'] = "Posible Error (0.0)"
                 continue
 
             if val > MAX_LIMITE:
                 d['anomalia'] = True
-                d['mensaje_alerta'] = f"Alto: {val:.1f}{unidad} (Límite: {MAX_LIMITE}{unidad})"
-            
+                d['mensaje_alerta'] = f"Alto: {val:.1f}{unidad}"
             elif val < MIN_LIMITE:
                 d['anomalia'] = True
-                d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad} (Límite: {MIN_LIMITE}{unidad})"
+                d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad}"
 
     # -------------------------------------------------------------------------
-    # CASO C: GENÉRICOS (Energía, Potencia, Corriente, Luminosidad...)
+    # CASO C: AUTO-APRENDIZAJE (Energía, Potencia, Luz, Corriente)
+    # Algoritmo: Z-Score Robusto con MAD (Median Absolute Deviation)
     # -------------------------------------------------------------------------
-    else:
-        valores_float = [float(d['valor']) for d in datos]
-        n = len(valores_float)
-        RADIO = 3 
+    elif es_auto_aprendizaje:
+        
+        # 1. Aprender la "Variabilidad Normal" de todo el set de datos histórico
+        # Usamos la mediana porque ignora los picos locos al aprender.
+        try:
+            mediana_global = statistics.median(valores_float)
+            # Calculamos la desviación absoluta de cada punto respecto a la mediana
+            desviaciones = [abs(x - mediana_global) for x in valores_float]
+            # La mediana de esas desviaciones es nuestro "MAD" (Qué tanto varía normalmente)
+            mad = statistics.median(desviaciones)
+            
+            # Si el MAD es 0 (datos planos), forzamos un mínimo técnico para no dividir por 0
+            if mad == 0: mad = 0.001 
+            
+            # Factor de escala para hacer el MAD comparable a la Desviación Estándar (constante estadística)
+            sigma_estimada = mad * 1.4826
+
+        except statistics.StatisticsError:
+            # Fallback si hay muy pocos datos
+            sigma_estimada = 1.0
+            mediana_global = sum(valores_float)/n
+
+        RADIO = 3 # Ventana de contexto local
 
         for i in range(n):
             d = datos[i]
@@ -525,36 +541,159 @@ def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, An
             d['anomalia'] = False
             d['mensaje_alerta'] = None
 
-            # 1. Definir vecindario
+            # --- SUB-LÓGICA: Contexto Local ---
             start = max(0, i - RADIO)
             end = min(n, i + RADIO + 1)
             vecinos = valores_float[start:end]
             
-            # 2. Estadística local
+            # Limpiamos al propio valor para comparar contra "el resto"
             vecinos_limpios = [v for v in vecinos if v != val]
             if not vecinos_limpios: vecinos_limpios = vecinos
 
             media_local = sum(vecinos_limpios) / len(vecinos_limpios)
-            varianza = sum([((x - media_local) ** 2) for x in vecinos_limpios]) / len(vecinos_limpios)
-            std_local = math.sqrt(varianza)
             
-            # Ajuste de Sensibilidad:
-            # Si el valor es pequeño (< 10), la desviación mínima permitida es pequeña (0.1)
-            # Si el valor es grande (> 100), la desviación mínima aumenta (5.0)
-            min_std = 0.1 if val < 10 else 2.0
-            if std_local < min_std: std_local = min_std
+            # --- DETECCIÓN INTELIGENTE ---
+            # Comparamos la distancia del valor actual a su media local.
+            # Y dividimos esa distancia entre la variabilidad que APRENDIMOS del conjunto (sigma_estimada).
+            
+            distancia = val - media_local
+            z_score_robusto = distancia / sigma_estimada
 
-            # 3. Z-Score Local
-            z_score = (val - media_local) / std_local
-            
-            if abs(z_score) > 3.5:
+            # UMBRAL 3.5: Significa "3.5 veces más variación de lo que aprendí que es normal"
+            # Como usamos MAD, esto funciona igual para 0.5 Amperes que para 1000 Watts.
+            if abs(z_score_robusto) > 3.5:
                 d['anomalia'] = True
+                
+                # Mensajes inteligentes
                 if val > media_local:
-                    d['mensaje_alerta'] = f"Pico: {val:.2f} (Contexto: {media_local:.2f})"
+                    d['mensaje_alerta'] = f"Pico Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
                 else:
-                    d['mensaje_alerta'] = f"Caída: {val:.2f} (Contexto: {media_local:.2f})"
+                    # Detección especial de "Cortes" (Caída a casi 0 cuando la tendencia no es 0)
+                    if val < 0.1 and media_local > (sigma_estimada * 2):
+                        d['mensaje_alerta'] = "Corte Súbito / Apagado"
+                    else:
+                        d['mensaje_alerta'] = f"Caída Anormal: {val:.2f} (Tendencia: {media_local:.2f})"
 
     return datos
+
+# def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+#     """
+#     Analiza datos históricos. 
+#     - Temperatura/Humedad: Usa rangos fijos de confort (20-26°C, 30-60%).
+#     - Resto: Usa Ventana Deslizante (Z-Score Local) para detectar picos inusuales.
+#     """
+#     if not datos or len(datos) < 5: return datos
+
+#     # 1. Normalización de Identificadores (A prueba de balas)
+#     nombre_raw = str(datos[0].get('nombre_campo') or '').lower()
+#     tipo_raw = str(datos[0].get('magnitud_tipo') or '').lower()
+    
+#     # Banderas de identificación (Detecta cualquier variante)
+#     es_movimiento = 'movimiento' in nombre_raw or 'estado' in nombre_raw or 'puerta' in nombre_raw
+    
+#     es_temperatura = ('temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw or 'grad' in tipo_raw)
+#     es_humedad = ('humedad' in nombre_raw or 'hum' in tipo_raw)
+    
+#     # -------------------------------------------------------------------------
+#     # CASO A: MOVIMIENTO (Densidad / Ráfagas)
+#     # -------------------------------------------------------------------------
+#     if es_movimiento:
+#         valores_float = [float(d['valor']) for d in datos]
+#         n = len(valores_float)
+#         media_total = sum(valores_float) / n
+        
+#         # Umbral Adaptativo:
+#         # Si es puro (agrupado por minuto), el valor puede ser 12. 
+#         # Si es optimizado (hora), puede ser 60.
+#         # La media nos dice la escala.
+#         umbral = max(5.0, media_total * 3.0) 
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+            
+#             if val > umbral: 
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Ráfaga de Actividad ({int(val)})"
+
+#     # -------------------------------------------------------------------------
+#     # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort)
+#     # -------------------------------------------------------------------------
+#     elif es_temperatura or es_humedad:
+#         # Definición de límites según el tipo
+#         if es_temperatura:
+#             MIN_LIMITE = 20.0
+#             MAX_LIMITE = 26.0
+#             unidad = "°C"
+#         else: # Humedad
+#             MIN_LIMITE = 30.0
+#             MAX_LIMITE = 60.0
+#             unidad = "%"
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+
+#             # IMPORTANTE: Si es 0.0 exacto en temperatura/humedad, suele ser error de sensor
+#             if val == 0.0:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = "Posible Error de Sensor (0.0)"
+#                 continue
+
+#             if val > MAX_LIMITE:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Alto: {val:.1f}{unidad} (Límite: {MAX_LIMITE}{unidad})"
+            
+#             elif val < MIN_LIMITE:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad} (Límite: {MIN_LIMITE}{unidad})"
+
+#     # -------------------------------------------------------------------------
+#     # CASO C: GENÉRICOS (Energía, Potencia, Corriente, Luminosidad...)
+#     # -------------------------------------------------------------------------
+#     else:
+#         valores_float = [float(d['valor']) for d in datos]
+#         n = len(valores_float)
+#         RADIO = 3 
+
+#         for i in range(n):
+#             d = datos[i]
+#             val = valores_float[i]
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+
+#             # 1. Definir vecindario
+#             start = max(0, i - RADIO)
+#             end = min(n, i + RADIO + 1)
+#             vecinos = valores_float[start:end]
+            
+#             # 2. Estadística local
+#             vecinos_limpios = [v for v in vecinos if v != val]
+#             if not vecinos_limpios: vecinos_limpios = vecinos
+
+#             media_local = sum(vecinos_limpios) / len(vecinos_limpios)
+#             varianza = sum([((x - media_local) ** 2) for x in vecinos_limpios]) / len(vecinos_limpios)
+#             std_local = math.sqrt(varianza)
+            
+#             # Ajuste de Sensibilidad:
+#             # Si el valor es pequeño (< 10), la desviación mínima permitida es pequeña (0.1)
+#             # Si el valor es grande (> 100), la desviación mínima aumenta (5.0)
+#             min_std = 0.1 if val < 10 else 2.0
+#             if std_local < min_std: std_local = min_std
+
+#             # 3. Z-Score Local
+#             z_score = (val - media_local) / std_local
+            
+#             if abs(z_score) > 3.5:
+#                 d['anomalia'] = True
+#                 if val > media_local:
+#                     d['mensaje_alerta'] = f"Pico: {val:.2f} (Contexto: {media_local:.2f})"
+#                 else:
+#                     d['mensaje_alerta'] = f"Caída: {val:.2f} (Contexto: {media_local:.2f})"
+
+#     return datos
 
 # -----------------------------------------------------------------------------
 # 3. HISTÓRICO (OPTIMIZADO)
@@ -568,7 +707,7 @@ async def obtener_historico_campo_db(
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         if metodo_carga == 'puro':
-            print(f"⚡ [DB] Modo: PURO (Analizando tipo de dato...)")
+            print(f" [DB] Modo: PURO (Analizando tipo de dato...)")
             
             # A. Identificar si es Movimiento
             cursor.execute("SELECT nombre, unidad_medida_id FROM campos_sensores WHERE id = %s", (campo_id,))
@@ -581,7 +720,6 @@ async def obtener_historico_campo_db(
             es_movimiento = 'movimiento' in nombre_c or 'estado' in nombre_c or 'puerta' in nombre_c
 
             if es_movimiento:
-                # 🟢 ESTRATEGIA: MOVIMIENTO (Smart Raw - Agrupado por Minuto)
                 # En lugar de 0s y 1s, obtenemos la "Intensidad" del movimiento por minuto.
                 # SUM(v.valor) cuenta cuántas veces el sensor dijo "1" en ese minuto.
                 print(f"   -> Detectado Movimiento: Agrupando por MINUTO (Densidad).")
@@ -610,7 +748,6 @@ async def obtener_historico_campo_db(
                 return cursor.fetchall()
 
             else:
-                # 🟢 ESTRATEGIA: ANALÓGICOS (Temperatura, Voltaje, etc.)
                 # Aquí sí queremos cada milímetro de variación, traemos todo crudo.
                 print(f"   -> Sensor Analógico: Trayendo datos 100% crudos.")
                 
@@ -633,10 +770,9 @@ async def obtener_historico_campo_db(
             # ---------------------------------------------------------
             # ESTRATEGIA B: OPTIMIZADO (PROMEDIOS POR HORA)
             # ---------------------------------------------------------
-            print(f"📊 [DB] Modo: OPTIMIZADO (Solicitado explícitamente o Default)")
+            print(f" [DB] Modo: OPTIMIZADO (Solicitado explícitamente o Default)")
             
             # 1. Tabla pre-agregada
-            # 🟢 CORRECCIÓN: Agregado cs.nombre AS nombre_campo
             sql_agregada = """
             SELECT TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) as fecha_hora_lectura,
                 CASE WHEN cs.nombre LIKE '%%Movimiento%%' THEN va.valor_sum ELSE va.valor_avg END as valor,
