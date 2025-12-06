@@ -1,7 +1,6 @@
 <template>
   <div class="chart-card" :class="{ 'theme-dark': isDark }">
     <div class="card-body">
-  
       <v-chart class="chart" :option="chartOption" autoresize />
     </div>
   </div>
@@ -43,27 +42,80 @@ export default {
   },
   methods: {
     crearChartOption() {
-      const { labels, datasets } = this.chartData;
-      if (!labels || labels.length === 0 || !datasets || datasets.length < 2) {
+      const datosCompletos = this.chartData;
+
+      if (!datosCompletos || !datosCompletos.datos_historicos_usados || !datosCompletos.predicciones_escenario) {
         this.chartOption = {};
         return;
       }
       
+      const historico = datosCompletos.datos_historicos_usados;
+      const proyeccion = datosCompletos.predicciones_escenario;
+      const historicoLength = historico.length;
+      
+      // 1. Preparar Etiquetas (X-Axis)
+      const labels = [
+        ...historico.map(d => d.periodo.slice(0, 7)),
+        ...proyeccion.map(d => d.periodo.slice(0, 7))
+      ];
+      
+      // 2. Preparar Datos de Consumo
+      // Consumo Real (histórico)
+      const datosReales = historico.map(d => d.consumo_total_kwh);
+      
+      // Consumo Base Proyectado
+      const datosBaseProyectado = proyeccion.map(d => d.consumo_base_kwh);
+      
+      // Consumo Escenario Simulado
+      const datosSimulado = proyeccion.map(d => d.consumo_escenario_kwh);
+
+      // 3. Definir series para ECharts
+      
+      // Serie 1: Consumo Base
+      // Combinamos datos: Histórico REAL + Proyección BASE
+      const serieBase = [
+        // Datos Reales
+        ...datosReales.slice(0, historicoLength), 
+        // Proyección Base
+        ...datosBaseProyectado
+      ];
+      
+      // Serie 2: Consumo Simulado
+      // Combinamos datos: Nulls en histórico + Proyección SIMULADA
+      const serieSimulado = [
+        // Rellenar el histórico con null para que la línea simulada empiece en la proyección
+        ...Array(historicoLength).fill(null),
+        // Proyección Simulado
+        ...datosSimulado
+      ];
+
+      // 4. Configuración de Estilos
       const textColor = this.isDark ? '#E4E6EB' : '#333333';
       const axisColor = this.isDark ? '#99A2AD' : '#555555';
       const gridLineColor = this.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      const colorBase = this.isDark ? '#99A2AD' : '#B0B0B0'; // Gris base
-      const colorSimulado = '#8A2BE2'; // Morado principal
+      
+      // Colores de línea
+      const colorBase = this.isDark ? '#6A5ACD' : '#3399CC'; // Azul/Morado claro para Base
+      const colorSimulado = '#8A2BE2'; // Morado Principal
 
+      // 5. Configuración ECharts
       this.chartOption = {
         color: [colorBase, colorSimulado],
         tooltip: {
           trigger: 'axis',
           formatter: (params) => {
             let tooltipContent = `<b>Periodo: ${params[0].name}</b><br/>`;
-            params.forEach(item => {
-              const value = item.value;
-              tooltipContent += `${item.marker} ${item.seriesName}: <b>${value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })}</b><br/>`;
+            params.forEach((item, index) => {
+              if (item.value !== null) {
+                const value = item.value;
+                const isReal = item.dataIndex < historicoLength;
+                const seriesName = isReal && item.seriesName === 'Consumo Base Proyectado' 
+                    ? 'Consumo Histórico REAL' 
+                    : item.seriesName;
+                const lineStyle = isReal ? 'SÓLIDA - Real' : 'PUNTEADA - Proyectado'; // Etiqueta para el usuario
+                
+                tooltipContent += `${item.marker} ${seriesName}: <b>${value.toLocaleString('es-MX', { maximumFractionDigits: 0 })} kWh</b> (${lineStyle})<br/>`;
+              }
             });
             return tooltipContent;
           },
@@ -71,7 +123,7 @@ export default {
           textStyle: { color: textColor },
         },
         legend: {
-          data: datasets.map(d => d.label),
+          data: ['Consumo Base Proyectado', 'Consumo Escenario Simulado'],
           textStyle: { color: textColor },
           top: 30,
         },
@@ -92,28 +144,48 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: 'Costo Proyectado (MXN)',
-          axisLabel: { formatter: (value) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }), color: axisColor },
+          name: 'Consumo Total (kWh)',
+          axisLabel: { formatter: (value) => value.toLocaleString('es-MX', { maximumFractionDigits: 0 }) + ' kWh', color: axisColor },
           axisLine: { lineStyle: { color: axisColor } },
           splitLine: { lineStyle: { color: gridLineColor } },
         },
         series: [
           {
-            name: datasets[0].label, // Costo Base
+            name: 'Consumo Base Proyectado', 
             type: 'line',
-            data: datasets[0].data,
+            data: serieBase.map((value, index) => ({
+                value: value,
+                // Usamos un styleFunction para cambiar el tipo de línea
+                itemStyle: {
+                    color: colorBase
+                },
+                lineStyle: {
+                    type: index < historicoLength ? 'solid' : 'dashed', // Sólida para Histórico, Punteada para Proyección Base
+                    width: 2,
+                    color: colorBase
+                }
+            })),
             smooth: true,
-            lineStyle: { width: 2, type: 'dashed' }, // Línea base más sutil
-            itemStyle: { color: colorBase },
+            showSymbol: false, // Ocultar símbolos para una línea más limpia
           },
           {
-            name: datasets[1].label, // Costo Simulado
+            name: 'Consumo Escenario Simulado', 
             type: 'line',
-            data: datasets[1].data,
+            data: serieSimulado.map(value => ({
+                value: value,
+                lineStyle: {
+                    type: 'solid', // Línea simulada siempre sólida
+                    width: 4
+                },
+                itemStyle: {
+                    color: colorSimulado
+                }
+            })),
             smooth: true,
-            lineStyle: { width: 4 }, // Línea simulada más gruesa
+            showSymbol: false,
+            lineStyle: { width: 4, color: colorSimulado }, 
             itemStyle: { color: colorSimulado },
-            areaStyle: { // Relleno de área debajo de la línea simulada
+            areaStyle: {
               opacity: 0.3,
               color: colorSimulado
             },

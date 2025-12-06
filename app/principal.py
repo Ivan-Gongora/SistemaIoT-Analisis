@@ -286,75 +286,75 @@ async def ejecutar_agregacion_historica(dias: int = 30):
     """Ejecutar agregación para datos históricos"""
     return await ejecutar_agregacion_horaria(procesar_historico=True, dias_historia=dias)
 
-# @aplicacion.post("/api/agregacion/completa")
-# async def ejecutar_agregacion_completa():
-    """Forzar agregación completa (sin filtro de existencia)"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+# # @aplicacion.post("/api/agregacion/completa")
+# # async def ejecutar_agregacion_completa():
+#     """Forzar agregación completa (sin filtro de existencia)"""
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔄 INICIANDO AGREGACIÓN COMPLETA")
+#             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔄 INICIANDO AGREGACIÓN COMPLETA")
             
-            # 🚨 CONSULTA SIN FILTRO NOT EXISTS - PROCESA TODO
-            sql_aggregate = """
-            INSERT INTO valores_agregados 
-                (campo_id, fecha, hora, valor_min, valor_max, valor_avg, valor_sum, total_registros)
-            SELECT
-                v.campo_id,
-                DATE(v.fecha_hora_lectura) AS fecha,
-                HOUR(v.fecha_hora_lectura) AS hora,
+#             # 🚨 CONSULTA SIN FILTRO NOT EXISTS - PROCESA TODO
+#             sql_aggregate = """
+#             INSERT INTO valores_agregados 
+#                 (campo_id, fecha, hora, valor_min, valor_max, valor_avg, valor_sum, total_registros)
+#             SELECT
+#                 v.campo_id,
+#                 DATE(v.fecha_hora_lectura) AS fecha,
+#                 HOUR(v.fecha_hora_lectura) AS hora,
                 
-                MIN(v.valor) AS valor_min,
-                MAX(v.valor) AS valor_max,
+#                 MIN(v.valor) AS valor_min,
+#                 MAX(v.valor) AS valor_max,
                 
-                CASE 
-                    WHEN cs.nombre = 'Movimiento' THEN NULL
-                    ELSE AVG(v.valor)
-                END AS valor_avg,
+#                 CASE 
+#                     WHEN cs.nombre = 'Movimiento' THEN NULL
+#                     ELSE AVG(v.valor)
+#                 END AS valor_avg,
                 
-                CASE
-                    WHEN cs.nombre = 'Movimiento' THEN SUM(v.valor)
-                    ELSE NULL
-                END AS valor_sum,
+#                 CASE
+#                     WHEN cs.nombre = 'Movimiento' THEN SUM(v.valor)
+#                     ELSE NULL
+#                 END AS valor_sum,
                 
-                COUNT(*) AS total_registros
-            FROM
-                valores v
-            JOIN 
-                campos_sensores cs ON v.campo_id = cs.id
-            WHERE
-                v.fecha_hora_lectura >= NOW() - INTERVAL 90 DAY  -- Últimos 90 días
-            GROUP BY
-                v.campo_id, cs.nombre, fecha, hora
-            ON DUPLICATE KEY UPDATE
-                valor_min = VALUES(valor_min),
-                valor_max = VALUES(valor_max),
-                valor_avg = VALUES(valor_avg),
-                valor_sum = VALUES(valor_sum),
-                total_registros = VALUES(total_registros);
-            """
+#                 COUNT(*) AS total_registros
+#             FROM
+#                 valores v
+#             JOIN 
+#                 campos_sensores cs ON v.campo_id = cs.id
+#             WHERE
+#                 v.fecha_hora_lectura >= NOW() - INTERVAL 90 DAY  -- Últimos 90 días
+#             GROUP BY
+#                 v.campo_id, cs.nombre, fecha, hora
+#             ON DUPLICATE KEY UPDATE
+#                 valor_min = VALUES(valor_min),
+#                 valor_max = VALUES(valor_max),
+#                 valor_avg = VALUES(valor_avg),
+#                 valor_sum = VALUES(valor_sum),
+#                 total_registros = VALUES(total_registros);
+#             """
             
-            affected_rows = cursor.execute(sql_aggregate)
-            conn.commit()
+#             affected_rows = cursor.execute(sql_aggregate)
+#             conn.commit()
             
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ AGREGACIÓN COMPLETA TERMINADA")
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Registros AFECTADOS: {affected_rows}")
+#             print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ AGREGACIÓN COMPLETA TERMINADA")
+#             print(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Registros AFECTADOS: {affected_rows}")
             
-            return {
-                "status": "success", 
-                "message": "Agregación completa ejecutada",
-                "affected_rows": affected_rows
-            }
+#             return {
+#                 "status": "success", 
+#                 "message": "Agregación completa ejecutada",
+#                 "affected_rows": affected_rows
+#             }
             
-    except Exception as e:
-        print(f"Error en agregación completa: {e}")
-        if conn:
-            conn.rollback()
-        return {"status": "error", "message": str(e)}
-    finally:
-        if conn:
-            conn.close()
+#     except Exception as e:
+#         print(f"Error en agregación completa: {e}")
+#         if conn:
+#             conn.rollback()
+#         return {"status": "error", "message": str(e)}
+#     finally:
+#         if conn:
+#             conn.close()
 
 
 # # app/principal.py (CÓDIGO ESTABLE Y LIMPIO) - 08/11/2025

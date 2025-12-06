@@ -22,17 +22,19 @@ import {
   TooltipComponent,
   LegendComponent,
   GridComponent,
-  DataZoomComponent, // 👈 Para el Zoom/Drill-down
+  DataZoomComponent, 
+  MarkPointComponent, 
+  MarkLineComponent
 } from 'echarts/components';
 import VChart from 'vue-echarts';
-import { ref, watch, onMounted, computed } from 'vue';
+import { ref, watch, computed } from 'vue';
 
 // Registro de componentes de ECharts
 use([
   CanvasRenderer, LineChart, TitleComponent, TooltipComponent, 
-  LegendComponent, GridComponent, DataZoomComponent
+  LegendComponent, GridComponent, DataZoomComponent,
+  MarkPointComponent, MarkLineComponent
 ]);
-
 
 export default {
   name: 'GraficoHistorico',
@@ -40,150 +42,164 @@ export default {
   props: {
     campoId: { type: Number, required: true },
     titulo: { type: String, default: 'Histórico de Datos' },
-    fechaInicio: { type: String, required: true }, // ISO String
-    fechaFin: { type: String, required: true },   // ISO String
-    isDark: { type: Boolean, default: false }
+    fechaInicio: { type: String, required: true },
+    fechaFin: { type: String, required: true },
+    isDark: { type: Boolean, default: false },
+    metodoCarga: { type: String, default: 'optimizado' },
+    incluirAnalisis: { type: Boolean, default: false } 
   },
   
   setup(props) {
     const loading = ref(true);
     const error = ref(null);
     const chartOption = ref({});
-    const chartTitle = ref(props.titulo); // Título dinámico
+    const chartTitle = ref(props.titulo);
 
     // Colores del tema
     const gridColor = computed(() => props.isDark ? 'rgba(228, 230, 235, 0.2)' : 'rgba(51, 51, 51, 0.2)');
     const textColor = computed(() => props.isDark ? '#E4E6EB' : '#333333');
 
     // --- LÓGICA PRINCIPAL DE CARGA DE DATOS ---
-   const cargarDatosHistoricos = async () => {
-  // 1. Validar que tenemos un ID
-  if (!props.campoId || props.campoId <= 0) {
-    loading.value = false;
-    error.value = 'ID de campo no válido.';
-    return;
-  }
-  // 🚨 NUEVA VALIDACIÓN: Validar fechas
+    const cargarDatosHistoricos = async () => {
+      // 1. Validaciones
+      if (!props.campoId || props.campoId <= 0) {
+        loading.value = false;
+        error.value = 'ID de campo no válido.';
+        return;
+      }
       if (!props.fechaInicio || !props.fechaFin) {
         loading.value = false;
         error.value = 'Rango de fechas no válido.';
         return; 
       }
-  loading.value = true;
-  error.value = null;
-  const token = localStorage.getItem('accessToken');
 
-  // 🚨 CORRECCIÓN: Mover la construcción de la URL aquí (ANTES de usarla)
-  const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
-  url.searchParams.append('fecha_inicio', props.fechaInicio);
-  url.searchParams.append('fecha_fin', props.fechaFin);
+      loading.value = true;
+      error.value = null;
+      let valores = []; // 🟢 CORRECCIÓN: Definimos variable fuera del try para que el catch la vea
 
-  try {
-    // Ahora 'url' ya está definida y se puede usar
-    const response = await fetch(url.toString(), {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+      const token = localStorage.getItem('accessToken');
+      const url = new URL(`${API_BASE_URL}/api/valores/historico-campo/${props.campoId}`);
+      url.searchParams.append('fecha_inicio', props.fechaInicio);
+      url.searchParams.append('fecha_fin', props.fechaFin);
+      url.searchParams.append('metodo_carga', props.metodoCarga); 
+      url.searchParams.append('incluir_analisis', props.incluirAnalisis.toString());
 
-    if (!response.ok) throw new Error('Fallo al cargar datos del gráfico.');
-    
-    const valores = await response.json();
-    
-    if (valores.length === 0) {
-      chartOption.value = {}; // Limpia el gráfico
-      throw new Error('No se encontraron valores históricos para este rango.');
-    }
+      try {
+        const response = await fetch(url.toString(), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-    // 3. Procesar datos para ECharts
-    const primerValor = valores[0];
-    const magnitud = primerValor.magnitud_tipo || props.titulo;
-    // 🚨 CORRECCIÓN: Asumir que el backend devuelve 'simbolo_unidad'
-    const simbolo = primerValor.simbolo_unidad || ''; 
-    chartTitle.value = `${magnitud} (${simbolo})`; // Actualiza el título
-    
-    // ECharts prefiere pares [timestamp, valor]
-    const dataPoints = valores.map(v => [
-      v.fecha_hora_lectura, 
-      parseFloat(v.valor)
-    ]);
+        if (!response.ok) throw new Error('Fallo al cargar datos del gráfico.');
+        
+        valores = await response.json();
+        
+        if (!valores || valores.length === 0) {
+          chartOption.value = {}; 
+          throw new Error('No se encontraron valores históricos para este rango.');
+        }
 
-    // 4. Actualizar las opciones del gráfico
-    actualizarOpciones(dataPoints, magnitud);
+        // 3. Procesar datos
+        const primerValor = valores[0];
+        const magnitud = primerValor.magnitud_tipo || props.titulo;
+        const simbolo = primerValor.simbolo_unidad || ''; 
+        chartTitle.value = `${magnitud} (${simbolo})`;
 
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    loading.value = false;
-  }
-};
+        // A. Datos de la Línea
+        const dataPoints = valores.map(v => [
+          v.fecha_hora_lectura, 
+          parseFloat(v.valor)
+        ]);
 
-    // --- FUNCIÓN PARA CONSTRUIR EL GRÁFICO ECHARTS ---
-    const actualizarOpciones = (data, magnitud) => {
+        // B. Datos de Anomalías (Pines Rojos)
+        const anomaliasDetectadas = valores.filter(v => v.anomalia === true);
+        
+        // 🟢 DEBUG: Muestra en consola cuántas anomalías llegaron
+        console.log(`[Gráfico] Total datos: ${valores.length}, Anomalías: ${anomaliasDetectadas.length}`);
+
+        const puntosAnomalos = anomaliasDetectadas.map(v => ({
+            // 🟢 CORRECCIÓN: 'coord' es más preciso que xAxis/yAxis para series de tiempo
+            coord: [v.fecha_hora_lectura, parseFloat(v.valor)],
+            value: parseFloat(v.valor).toFixed(1), // Redondear valor visual
+            name: 'Anomalía',
+            itemStyle: { color: '#ff4500' },
+            tooltip: { 
+                formatter: `⚠️ ${v.mensaje_alerta || 'Valor Atípico'}` 
+            }
+        }));
+
+        actualizarOpciones(dataPoints, magnitud, puntosAnomalos);
+
+      } catch (err) {
+        error.value = err.message;
+        if(valores.length === 0) chartOption.value = {};
+      } finally {
+        loading.value = false;
+      }
+    };
+
+    // --- FUNCIÓN PARA CONSTRUIR EL GRÁFICO ---
+    const actualizarOpciones = (data, magnitud, anomalias = []) => {
       chartOption.value = {
         tooltip: {
           trigger: 'axis',
           axisPointer: { type: 'cross' }
         },
         grid: {
-          left: '50px', // Espacio para el eje Y
-          right: '20px',
-          bottom: '70px' // Espacio para el DataZoom
+          left: '50px', right: '20px', bottom: '70px', top: '40px', // 🟢 Ajuste de márgenes para que quepan los pines
+          containLabel: true
         },
         xAxis: {
           type: 'time',
+          boundaryGap: false,
           axisLine: { lineStyle: { color: gridColor.value } },
           axisLabel: { color: textColor.value }
         },
         yAxis: {
           type: 'value',
-          scale: true, // Permite que el eje se ajuste
-          axisLabel: { 
-            color: textColor.value,
-            formatter: '{value}' // Aquí podrías añadir el símbolo si es fijo
-          },
+          scale: true,
+          axisLabel: { color: textColor.value },
           splitLine: { lineStyle: { color: gridColor.value } }
         },
-        // 🚨 CRÍTICO: Habilita el Zoom y el Drill-down
         dataZoom: [
-          {
-            type: 'slider', // Barra de deslizamiento inferior
-            start: 0,
-            end: 100,
-            bottom: 10,
-            height: 25,
-            backgroundColor: props.isDark ? 'rgba(43, 43, 64, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-            borderColor: gridColor.value,
-            textStyle: { color: textColor.value }
-          },
-          {
-            type: 'inside' // Zoom con la rueda del ratón
-          }
+          { type: 'slider', bottom: 10, height: 25 },
+          { type: 'inside' }
         ],
         series: [{
           name: magnitud,
           data: data,
           type: 'line',
-          showSymbol: false,
-          color: '#8A2BE2', // Color púrpura
+          showSymbol: false, 
+          color: '#8A2BE2',
           lineStyle: { width: 2 },
+          
+          markPoint: {
+            data: anomalias,
+            symbol: 'pin',
+            symbolSize: 40,
+            symbolOffset: [0, -10], // 🟢 Levantar un poco el pin para que apunte al dato
+            label: {
+                show: true,
+                fontSize: 10,
+                color: '#fff',
+                formatter: '{c}' 
+            }
+          }
         }]
       };
     };
 
-    // --- WATCHERS ---
-    // Observa los props y recarga el gráfico si cambian
     watch(
-      () => [props.campoId, props.fechaInicio, props.fechaFin], 
+      () => [props.campoId, props.fechaInicio, props.fechaFin, props.metodoCarga, props.incluirAnalisis], 
       cargarDatosHistoricos, 
-      { immediate: true } // Carga los datos al montar
+      { immediate: true } 
     );
 
-    // Observa el tema para cambiar colores
     watch(
       () => props.isDark, 
       () => {
-        // Recarga las opciones con los nuevos colores
         if (chartOption.value && chartOption.value.series) {
-          actualizarOpciones(chartOption.value.series[0].data, chartOption.value.series[0].name);
+            const serie = chartOption.value.series[0];
+            actualizarOpciones(serie.data, serie.name, serie.markPoint?.data);
         }
       }
     );

@@ -135,10 +135,6 @@ async def endpoint_actualizar_datos_proyecto(
     datos: ProyectoActualizar,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 1. ELIMINAR ESTA VALIDACIÓN ANTIGUA:
-    # if datos.usuario_id != current_user_id: ...
-
-    # 🚨 2. CONFIAR EN EL GUARDIÁN (RBAC):
     # Este verificará si eres dueño O si tienes el permiso 'CRUD_PROYECTO' como colaborador
     await verificar_permiso_proyecto(current_user_id, id, 'CRUD_PROYECTO') 
     
@@ -159,17 +155,14 @@ async def endpoint_actualizar_datos_proyecto(
 # -----------------------------------------------------------
 # ELIMINAR PROYECTO (DELETE)
 # -----------------------------------------------------------
-@router_proyecto.delete("/proyectos/{id}") # 👈 Usar Path param {id}, es más limpio REST
+@router_proyecto.delete("/proyectos/{id}")
 async def eliminar_proyecto(
     id: int, # Recibimos ID directamente del Path
-    # usuario_id: int = Query(...)  <-- 🚨 ELIMINAR ESTE PARÁMETRO. No debemos pedirle al usuario su ID, ya lo tenemos en el token.
     current_user_id: int = Depends(get_current_user_id)
 ) -> Dict:
     
-    # 🚨 1. ELIMINAR VALIDACIÓN ANTIGUA:
-    # if usuario_id != current_user_id: ...
+ 
     
-    # 🚨 2. CONFIAR EN EL GUARDIÁN:
     # Solo permitirá pasar si tiene 'CRUD_PROYECTO_PROPIO' (que solo el dueño tiene)
     await verificar_permiso_proyecto(current_user_id, id, 'CRUD_PROYECTO_PROPIO')
     
@@ -232,7 +225,7 @@ async def remove_project_member(
     usuario_id_a_remover: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 1. VERIFICACIÓN DE SEGURIDAD (Usando el servicio centralizado)
+    #VERIFICACIÓN DE SEGURIDAD (Usando el servicio centralizado)
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'GESTIONAR_ACCESO_PROYECTO')
     
     if usuario_id_a_remover == current_user_id:
@@ -262,7 +255,7 @@ async def remove_project_member(
             
         conn.commit()
 
-        # 🚨 2. REGISTRAR ACTIVIDAD
+        #  REGISTRAR ACTIVIDAD
         await registrar_actividad_db(
             usuario_id=current_user_id,
             proyecto_id=proyecto_id,
@@ -292,7 +285,7 @@ async def process_join_project(
         project_id = invitation_data.get("project_id")
         inviter_id = int(invitation_data.get("sub")) 
         
-        # 🚨 4. LEER EL ROL DEL TOKEN (Si no existe, usa 3 por defecto)
+        # LEER EL ROL DEL TOKEN (Si no existe, usa 3 por defecto)
         rol_a_asignar = invitation_data.get("role_id", 3) 
         
         conn = get_db_connection()
@@ -303,7 +296,7 @@ async def process_join_project(
         proyecto_row = cursor.fetchone()
         nombre_proyecto = proyecto_row['nombre'] if proyecto_row else "Proyecto Desconocido"
 
-        # 🚨 5. USAR EL ROL DINÁMICO EN EL INSERT
+        #  USAR EL ROL DINÁMICO EN EL INSERT
         cursor.execute(
             """
             INSERT INTO proyecto_usuarios (proyecto_id, usuario_id, rol_id) 
@@ -336,14 +329,14 @@ async def process_join_project(
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
     finally:
         if conn: conn.close()
-# app/api/rutas/proyectos/proyectos.py
+
 #  Endpoint para obtener miembros de un proyecto específico (AÑADIDO)
 @router_proyecto.get("/proyectos/{proyecto_id}/miembros")
 async def get_project_members(
     proyecto_id: int,
     current_user_id: int = Depends(get_current_user_id)
 ):
-    # 🚨 VERIFICACIÓN DE SEGURIDAD (Cualquiera con acceso de lectura puede ver miembros)
+    #  VERIFICACIÓN DE SEGURIDAD (Cualquiera con acceso de lectura puede ver miembros)
     await verificar_permiso_proyecto(current_user_id, proyecto_id, 'VER_DATOS_IOT')
 
     conn = None
@@ -394,7 +387,6 @@ async def set_proyecto(datos: ProyectoCrear) -> List[Dict[str, Any]]:
         if not usuario_row:
             return [{"status": "error", "message": f"El usuario con id: '{datos.usuario_id}' no existe"}]
     
-        # 🚨 1. CORRECCIÓN CRÍTICA: Incluir 'tipo_industria' en la consulta SQL
         cursor.execute(
             "INSERT INTO proyectos (nombre, descripcion, usuario_id, tipo_industria) VALUES (%s, %s, %s, %s)",
             (datos.nombre, datos.descripcion, datos.usuario_id, datos.tipo_industria) # 🚨 Pasar el nuevo valor
@@ -614,6 +606,8 @@ async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:
         raise HTTPException(status_code=500, detail=f"Fallo de DB: {str(e)}")
     finally:
         if conn: conn.close()
+
+
 
 
 # async def eliminar_proyecto_db(id: Optional[int], usuario_id: int) -> Dict:

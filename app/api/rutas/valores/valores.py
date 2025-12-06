@@ -10,8 +10,8 @@ from app.servicios.servicio_valores import (
     obtener_rango_fechas_db,
     obtener_valores_ventana_db,
     aplicar_analisis_anomalias, 
-    detectar_anomalia_individual 
-
+    detectar_anomalia_individual, 
+aplicar_analisis_historico
 )
 
 router = APIRouter()
@@ -63,16 +63,51 @@ async def get_valores_historicos(
     fecha_inicio: Optional[datetime] = Query(None),
     fecha_fin: Optional[datetime] = Query(None),
     metodo_carga: str = Query("optimizado"), 
+    incluir_analisis: bool = Query(False), 
     current_user_id: int = Depends(get_current_user_id)
 ):
     try:
         if not fecha_fin: fecha_fin = datetime.now()
         if not fecha_inicio: fecha_inicio = fecha_fin - timedelta(days=7)
 
+        # 1. Obtener datos de DB (Recuerda que ya corregimos la SQL aquí para traer el nombre)
         valores = await obtener_historico_campo_db(campo_id, fecha_inicio, fecha_fin, metodo_carga)
+        
+        # 2. Aplicar Análisis HISTÓRICO
+        if valores and incluir_analisis:
+            try:
+                # 🟢 CAMBIO: Usamos la función especializada para históricos
+                valores = aplicar_analisis_historico(valores)
+            except Exception as analysis_error:
+                print(f"Advertencia: Falló el análisis histórico: {analysis_error}")
+
         return valores or []
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error histórico: {str(e)}")
+
+# @router.get("/valores/historico-campo/{campo_id}", response_model=List[ValorGrafico])
+# async def get_valores_historicos(
+#     campo_id: int,
+#     fecha_inicio: Optional[datetime] = Query(None),
+#     fecha_fin: Optional[datetime] = Query(None),
+#     metodo_carga: str = Query("optimizado"), 
+#     current_user_id: int = Depends(get_current_user_id)
+# ):
+#     try:
+#         if not fecha_fin: fecha_fin = datetime.now()
+#         if not fecha_inicio: fecha_inicio = fecha_fin - timedelta(days=7)
+
+#         # 1. Obtener datos crudos/agregados de la DB
+#         valores = await obtener_historico_campo_db(campo_id, fecha_inicio, fecha_fin, metodo_carga)
+        
+ 
+#         if valores:
+#             valores = aplicar_analisis_anomalias(valores)
+
+#         return valores or []
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error histórico: {str(e)}")
 
 # ----------------------------------------------------------------------
 # 3. ÚLTIMO VALOR (TIEMPO REAL)

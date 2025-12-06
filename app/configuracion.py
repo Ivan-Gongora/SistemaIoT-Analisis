@@ -116,8 +116,7 @@ class ConfiguracionSimulacion(BaseSettings):
     IA_MAX_TOKENS: int = 2000
     IA_TIMEOUT: int = 25
 
-    # --- Configuración Frontend (Clave para producción) ---
-    # Si no está en el .env, usa localhost. En producción, el .env lo sobrescribe.
+    # --- Configuración Frontend  ---
     FRONTEND_URL: str = Field(default="http://localhost:8081", description="URL base del frontend (Vue)")
 
     class Config:

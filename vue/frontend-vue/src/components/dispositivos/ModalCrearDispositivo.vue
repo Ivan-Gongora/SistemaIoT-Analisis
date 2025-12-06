@@ -70,190 +70,130 @@
 </template>
 
 <script>
-import L from 'leaflet'; 
-import 'leaflet-control-geocoder'; 
-// No necesitamos importar leaflet.locatecontrol/dist/L.Control.Locate.min.js
+import L from 'leaflet';
 
-// Importación de imágenes de marcador de Leaflet (para evitar que se rompan)
+// ⭐ Agregar esta línea obligatoria
+import 'leaflet/dist/leaflet.css';
+
+import 'leaflet-control-geocoder/dist/Control.Geocoder.css';
+import 'leaflet-control-geocoder';
+
 import marker2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// CRÍTICO: Arreglar los íconos de marcador rotos de Leaflet
 L.Icon.Default.mergeOptions({
-    iconRetinaUrl: marker2x,
-    iconUrl: markerIcon,
-    shadowUrl: markerShadow,
+  iconRetinaUrl: marker2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
-
-
-// 🚨 Definición del control de ubicación personalizado (Método estable para el botón de geolocalización)
+// ⭐ FIX → Control de localización personalizado
 L.Control.CustomLocate = L.Control.extend({
     onAdd: function(map) {
-        var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-        container.style.backgroundColor = 'white';
-        container.style.width = '30px';
-        container.style.height = '30px';
+        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+        container.innerHTML = '<i class="bi bi-geo-alt-fill" style="font-size:18px; margin:auto; display:flex; justify-content:center; align-items:center;"></i>';
         container.style.cursor = 'pointer';
-        container.style.borderRadius = '4px';
-        
-        // Usamos el icono de Bootstrap Icons
-        container.innerHTML = '<i class="bi bi-geo-alt-fill" style="font-size: 1.2rem; line-height: 30px; text-align: center; width: 100%; color: #007bff;"></i>';
-        
-        // 🚨 Acción: Al hacer clic, usa la función nativa de Leaflet para localizar
-        container.onclick = function() {
-            map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
-        };
-
+        container.onclick = () => map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
         return container;
     },
-     onRemove: function() {} 
+    onRemove: function() {}
 });
-
-L.control.customLocate = function(opts) {
-    return new L.Control.CustomLocate(opts);
-}
-
+L.control.customLocate = function(opts) { return new L.Control.CustomLocate(opts); }
 
 export default {
     name: 'ModalCrearDispositivo',
-    props: {
-        proyectoId: {
-            type: [Number, String],
-            required: true
-        }
-    },
+    props: ['proyectoId'],
     data() {
         return {
             isDark: false,
             loading: false,
             error: null,
             tiposDispositivo: ['Microcontrolador', 'Raspberry Pi', 'Sensor Gateway', 'Controlador'],
-            
             map: null,
             marker: null,
-            
-            tipoSeleccionado: 'Microcontrolador', 
-            
+            tipoSeleccionado: 'Microcontrolador',
             form: {
                 nombre: '',
                 descripcion: '',
-                tipo: 'Microcontrolador', 
+                tipo: 'Microcontrolador',
                 latitud: null,
                 longitud: null,
-                habilitado: true, 
-                proyecto_id: this.proyectoId 
+                habilitado: true,
+                proyecto_id: this.proyectoId
             }
         };
     },
     watch: {
-        tipoSeleccionado(newValue) {
-            this.form.tipo = (newValue !== 'Otro') ? newValue : ''; 
+        tipoSeleccionado(v) {
+            this.form.tipo = (v !== 'Otro') ? v : '';
         },
     },
     mounted() {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            this.isDark = true;
-        }
-        
-        const resultado = JSON.parse(localStorage.getItem('resultado'));
-        if (!resultado || !resultado.usuario) {
-            this.$router.push('/'); 
-        }
+        this.isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-        this.$nextTick(this.initMap); 
+        this.$nextTick(() => this.initMap());
     },
     methods: {
-        // -----------------------------------------------------
-        // LÓGICA DEL MAPA
-        // -----------------------------------------------------
         initMap() {
-            const defaultLat = 20.501;
-            const defaultLng = -87.001; 
-            const defaultZoom = 13;
+            const lat = 20.501, lng = -87.001;
 
-            this.map = L.map('leaflet-map-container').setView([defaultLat, defaultLng], defaultZoom);
+            this.map = L.map('leaflet-map-container').setView([lat, lng], 13);
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
+
+            this.marker = L.marker([lat, lng], { draggable: true }).addTo(this.map);
+            this.updateCoordinates(lat, lng);
+
+            // ⭐ FIX → Geocoder con estilos cargados
+            L.Control.geocoder({ defaultMarkGeocode: false })
+            .on('markgeocode', e => {
+                const pos = e.geocode.center;
+                this.marker.setLatLng(pos);
+                this.map.fitBounds(e.geocode.bbox);
+                this.updateCoordinates(pos.lat, pos.lng);
             }).addTo(this.map);
 
-            this.marker = L.marker([defaultLat, defaultLng], {
-                draggable: true 
-            }).addTo(this.map);
+            // ⭐ FIX → Botón de localizar estable
+            L.control.customLocate({ position: 'topleft' }).addTo(this.map);
 
-            this.updateCoordinates(defaultLat, defaultLng);
+            // ⭐ FIX → Handler de error de geolocalización
+            this.map.on('locationerror', () => {
+                alert("No se pudo obtener la ubicación. Revisar permisos de GPS.");
+            });
 
-            // 🚨 1. INTEGRACIÓN DE LA BARRA DE BÚSQUEDA (GEOCODER)
-            L.Control.geocoder({
-                defaultMarkGeocode: false, 
-                placeholder: 'Buscar dirección o lugar...',
-            })
-            .on('markgeocode', (event) => {
-                const latlng = event.geocode.center;
-                
-                if (this.marker) {
-                    this.marker.setLatLng(latlng);
-                }
-                
-                this.map.fitBounds(event.geocode.bbox, { padding: [100, 100] });
-                this.updateCoordinates(latlng.lat, latlng.lng);
-            })
-            .addTo(this.map);
-            
-            // 🚨 2. INTEGRACIÓN DEL BOTÓN DE GEOLOCALIZACIÓN ESTABLE (CustomLocate)
-            L.control.customLocate({position: 'topleft'}).addTo(this.map);
-            
-            // 3. EVENTOS: Manejar la actualización de coordenadas al encontrar la ubicación
-            this.map.on('locationfound', (e) => {
+            this.map.on('locationfound', e => {
+                this.marker.setLatLng(e.latlng);
                 this.updateCoordinates(e.latlng.lat, e.latlng.lng);
-                if (this.marker) {
-                    this.marker.setLatLng(e.latlng);
-                }
             });
 
-
-            // 4. EVENTO: Actualizar coordenadas al mover el marcador
-            this.marker.on('dragend', (event) => {
-                const latlng = event.target.getLatLng();
-                this.updateCoordinates(latlng.lat, latlng.lng);
+            this.marker.on('dragend', e => {
+                const p = e.target.getLatLng();
+                this.updateCoordinates(p.lat, p.lng);
             });
 
-            // 5. EVENTO: Actualizar coordenadas al hacer clic en el mapa (Mueve el pin)
-            this.map.on('click', (event) => {
-                if (this.marker) {
-                    this.marker.setLatLng(event.latlng);
-                }
-                this.updateCoordinates(event.latlng.lat, event.latlng.lng);
+            this.map.on('click', e => {
+                this.marker.setLatLng(e.latlng);
+                this.updateCoordinates(e.latlng.lat, e.latlng.lng);
             });
 
-            // CRÍTICO: El mapa necesita ser invalidado
-            setTimeout(() => { this.map.invalidateSize(); }, 10);
+            setTimeout(() => this.map.invalidateSize(), 200);
         },
         updateCoordinates(lat, lng) {
-            this.form.latitud = parseFloat(lat).toFixed(6);
-            this.form.longitud = parseFloat(lng).toFixed(6);
+            this.form.latitud = Number(lat).toFixed(6);
+            this.form.longitud = Number(lng).toFixed(6);
         },
-        // -----------------------------------------------------
-        // LÓGICA DE ENVÍO
-        // -----------------------------------------------------
         async submitDispositivo() {
-            if (this.tipoSeleccionado === 'Otro' && !this.form.tipo) {
-                this.error = "Por favor, especifique el tipo de dispositivo.";
-                return;
-            }
-            if (!this.form.nombre || !this.form.descripcion || !this.form.tipo) {
-                this.error = "Faltan campos obligatorios.";
-                return;
-            }
-            
+            if (!this.form.nombre || !this.form.tipo)
+                return this.error = "Faltan campos obligatorios.";
+
             this.loading = true;
             this.error = null;
-            const token = localStorage.getItem('accessToken');
-            
+
             try {
-                const response = await fetch(`${API_BASE_URL}/api/dispositivos/`, {
+                const token = localStorage.getItem('accessToken');
+
+                const res = await fetch(`${API_BASE_URL}/api/dispositivos/`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -262,17 +202,15 @@ export default {
                     body: JSON.stringify(this.form)
                 });
 
-                const data = await response.json();
+                const data = await res.json();
 
-                if (!response.ok) {
-                    throw new Error(data.message || data.detail || 'Fallo al crear el dispositivo.');
-                }
-                
+                if (!res.ok) throw new Error(data.message || 'Error al crear el dispositivo.');
+
                 this.$emit('dispositivo-creado', data.resultados[0]);
                 this.$emit('close');
 
             } catch (err) {
-                this.error = err.message || 'Error de conexión.';
+                this.error = err.message;
             } finally {
                 this.loading = false;
             }
@@ -281,21 +219,11 @@ export default {
 };
 </script>
 
+
+
+
 <style scoped lang="scss">
-// // ----------------------------------------
-// // VARIABLES DE LA PALETA
-// // ----------------------------------------
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $BLUE-MIDNIGHT: #1A1A2E;
-// $DARK-TEXT: #333333;
-// $LIGHT-TEXT: #E4E6EB;
-// $SUBTLE-BG-DARK: #2B2B40; 
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-// $WHITE-SOFT: #F7F9FC;
-// $GRAY-COLD: #99A2AD;
-
-
+@use 'sass:color'; // 🚨 CRÍTICO: Importar el módulo de color para usar color.adjust()
 // ----------------------------------------
 // BASE DEL MODAL (POSICIONAMIENTO)
 // ----------------------------------------

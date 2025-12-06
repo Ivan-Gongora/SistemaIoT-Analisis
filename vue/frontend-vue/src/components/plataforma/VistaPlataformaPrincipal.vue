@@ -25,8 +25,8 @@
 import BarraLateralPlataforma from './BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from './EncabezadoPlataforma.vue';
 import TarjetasPlataforma from './TarjetasPlataforma.vue';
-import EstadoSistema from './EstadoSistema.vue'; // 🚨 IMPORTAR
-import ActividadReciente from './ActividadReciente.vue'; // 🚨 IMPORTAR
+import EstadoSistema from './EstadoSistema.vue'; 
+import ActividadReciente from './ActividadReciente.vue';
 
 export default {
   name: 'VistaPlataformaPrincipal',
@@ -40,7 +40,7 @@ export default {
   data() {
     return {
       isDark: false, 
-      isSidebarOpen: true, // 🚨 NUEVO: Estado de la barra lateral
+      isSidebarOpen: true, 
     };
   },
   mounted() {
@@ -55,7 +55,6 @@ export default {
     }
   },
   methods: {
-    // 🚨 NUEVO MÉTODO: Cambia el estado del sidebar
     toggleSidebar() {
       this.isSidebarOpen = !this.isSidebarOpen;
     },
@@ -84,7 +83,6 @@ export default {
   width: 100%;
   min-height: 100vh;
   transition: background-color 0.3s;
-  // 🚨 CRÍTICO: Establecer un fondo inicial (opcionalmente el más común: el claro)
   background-color: $WHITE-SOFT; 
 }
 
@@ -98,7 +96,6 @@ export default {
     // Habilitar la rejilla de 2 columnas para los módulos inferiores
     display: grid; 
     
-    // 🚨 AJUSTE DE COLUMNAS PARA MÓDULOS INFERIORES: 40% y 60%
     grid-template-columns: 2fr 3fr; /* Divide el espacio restante en 5 partes, 2 para la izquierda, 3 para la derecha */
     
     gap: 20px; 

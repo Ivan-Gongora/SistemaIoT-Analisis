@@ -111,7 +111,19 @@
                         <i :class="metodoCarga === 'puro' ? 'bi bi-exclamation-triangle-fill' : 'bi bi-lightning-charge-fill'"></i>
                         <span>{{ metodoCarga === 'puro' ? 'Carga intensiva' : 'Rendimiento óptimo' }}</span>
                     </div>
-                </div>
+                    <div class="form-group">
+                            <label>Análisis</label>
+                            <div class="input-wrapper toggle-wrapper">
+                                <label class="switch">
+                                    <input type="checkbox" v-model="activarAnalisis" :disabled="!dispositivoSeleccionadoId">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    {{ activarAnalisis ? 'Detección Activa' : 'Desactivado' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
             </div>
         </div>
         
@@ -168,6 +180,7 @@
                     :fecha-fin="dateRange.fin"
                     :is-dark="isDark"
                     :metodo-carga="metodoCarga"
+                    :incluir-analisis="activarAnalisis"
                 />
             </div>
             
@@ -230,6 +243,7 @@ export default {
             loadingCampos: false,
             errorCampos: null,
             error: null,
+            activarAnalisis: false,
         };
     },
     
@@ -625,7 +639,35 @@ export default {
         }
     }
 }
-
+/* Estilo para el Switch tipo iOS */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  margin-right: 10px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider { background-color: #8A2BE2; } /* Morado */
+input:checked + .slider:before { transform: translateX(18px); }
+.toggle-wrapper { display: flex; align-items: center; }
 // -----------------------------------
 // 3. GRÁFICOS Y ALERTAS
 // -----------------------------------

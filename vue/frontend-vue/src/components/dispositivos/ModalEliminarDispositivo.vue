@@ -150,13 +150,12 @@ line-height: 1.4;
 
 .btn-confirmar-accion {
  background-color: $ERROR-COLOR;
- color: #fff;
+ color:$WHITE;
  border: none;
  padding: 10px 15px;
  border-radius: 8px;
  cursor: pointer;
  transition: background-color 0.2s;
- // 🚨 CORRECCIÓN CLAVE: Reemplazo de darken()
  &:hover { 
     background-color: color.adjust($DANGER-COLOR, $lightness: -10%);
  }

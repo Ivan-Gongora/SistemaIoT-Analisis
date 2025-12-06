@@ -61,21 +61,124 @@ async def _fallback_ultimo_valor_maestro(campo_id: int):
     finally:
         if conn: conn.close()
 
-# -----------------------------------------------------------------------------
-# 🧠 MOTOR DE ANÁLISIS 1: INDIVIDUAL (Tiempo Real / Polling)
-# -----------------------------------------------------------------------------
+# # -----------------------------------------------------------------------------
+# #  MOTOR DE ANÁLISIS 1: INDIVIDUAL (Tiempo Real / Polling)
+# # -----------------------------------------------------------------------------
+# async def detectar_anomalia_individual(campo_id: int, valor_actual: float) -> tuple[bool, Optional[str]]:
+#     """
+#     Detecta anomalías comparando con la historia reciente.
+#     """
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 300 registros ~ 25 minutos (a 5s/dato). Suficiente para ver la tendencia reciente.
+#         sql = """
+#         SELECT v.valor, cs.nombre, cs.tipo_valor 
+#         FROM valores v 
+#         JOIN campos_sensores cs ON v.campo_id = cs.id
+#         WHERE v.campo_id = %s 
+#         ORDER BY v.fecha_hora_lectura DESC 
+#         LIMIT 300
+#         """
+#         cursor.execute(sql, (campo_id,))
+#         rows = cursor.fetchall()
+        
+#         if not rows or len(rows) < 20:
+#             return False, None 
+
+#         # Detección de Tipo
+#         tipo = (rows[0].get('tipo_valor') or '').lower()
+#         nombre = (rows[0].get('nombre') or '').lower()
+#         es_movimiento = 'bool' in tipo or 'movimiento' in nombre or 'estado' in nombre
+
+#         # --- RAMA A: ANÁLISIS DE MOVIMIENTO (FRECUENCIA ADAPTATIVA) ---
+#         if es_movimiento:
+#             # Ventana "Ahora" (Último minuto ~ 12 registros)
+#             ventana_reciente = rows[:12]
+#             actividad_actual = sum(float(r['valor']) for r in ventana_reciente) # Suma de 1s
+            
+#             # Ventana "Base" (Los 24 minutos anteriores)
+#             historia_base = rows[12:]
+            
+#             # Calculamos el promedio de actividad por minuto en el pasado
+#             # Agrupamos en bloques de 12 (1 min)
+#             bloques = [historia_base[i:i + 12] for i in range(0, len(historia_base), 12)]
+#             sumas_bloques = [sum(float(r['valor']) for r in b) for b in bloques]
+            
+#             # Promedio histórico de eventos por minuto
+#             promedio_actividad = sum(sumas_bloques) / len(sumas_bloques) if sumas_bloques else 0
+            
+#             # --- REGLAS DINÁMICAS ---
+            
+#             # Caso 1: Lugar Tranquilo (Promedio < 2 eventos/min)
+#             if promedio_actividad < 2:
+#                 # Si de repente hay mucha actividad (> 8 eventos/min), es anomalía clara.
+#                 if actividad_actual > 8:
+#                     return True, f"Actividad Inusual ({int(actividad_actual)} eventos/min vs normal bajo)"
+
+#             # Caso 2: Lugar Concurrido (Promedio > 10 eventos/min)
+#             elif promedio_actividad > 10:
+#                 # Si la actividad se triplica (Fiesta/Multitud)
+#                 if actividad_actual > (promedio_actividad * 3):
+#                     return True, f"Pico de Tráfico ({int(actividad_actual)} eventos vs media {int(promedio_actividad)})"
+#                 # Si la actividad cae a 0 de golpe (Fallo de sensor o cierre inesperado)
+#                 # Solo si es 0 absoluto en el último minuto
+#                 if actividad_actual == 0:
+#                     return True, "Caída de Actividad (0 eventos detectados)"
+            
+#             # Caso 3: Intermedio (Regla general 3x)
+#             else:
+#                 if actividad_actual > (max(promedio_actividad, 2) * 3):
+#                     return True, f"Alta Actividad ({int(actividad_actual)} eventos)"
+            
+#             return False, None
+
+#         # --- RAMA B: ANÁLISIS NUMÉRICO (Z-SCORE) ---
+#         else:
+#             # Tomamos solo los últimos 60 para Z-Score (5 min) para que sea sensible
+#             datos_z = rows[:60]
+#             historial = [float(r['valor']) for r in datos_z]
+            
+#             ventana_reciente = historial[:3] 
+#             valor_suavizado = sum(ventana_reciente) / len(ventana_reciente)
+            
+#             linea_base = historial[3:]
+#             if not linea_base: return False, None
+
+#             media_base = sum(linea_base) / len(linea_base)
+#             varianza = sum([((x - media_base) ** 2) for x in linea_base]) / len(linea_base)
+#             desviacion = math.sqrt(varianza)
+
+#             if desviacion < 0.1: desviacion = 0.1
+
+#             z_score = (valor_suavizado - media_base) / desviacion
+#             UMBRAL = 3.0 
+
+#             if abs(z_score) > UMBRAL:
+#                 tipo_pico = "ALTO" if z_score > 0 else "BAJO"
+#                 return True, f"Pico {tipo_pico} anómalo ({valor_suavizado:.1f})"
+            
+#             return False, None
+
+#     except Exception as e:
+#         print(f"⚠️ Error análisis realtime: {e}")
+#         return False, None
+#     finally:
+#         if conn: conn.close()
 async def detectar_anomalia_individual(campo_id: int, valor_actual: float) -> tuple[bool, Optional[str]]:
     """
-    Detecta anomalías comparando con la historia reciente.
-    MEJORA: Lógica adaptativa basada en el promedio histórico del propio sensor.
+    Detecta anomalías usando un enfoque adaptativo según el tipo de dato.
+    Para Movimiento: Compara la actividad reciente contra el PROMEDIO HISTÓRICO del lugar.
     """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
-        # 1. Contexto histórico (Traemos más datos para establecer un perfil base)
-        # 300 registros ~ 25 minutos (a 5s/dato). Suficiente para ver la tendencia reciente.
+        # 1. Contexto histórico ampliado (300 registros ~ 25 minutos)
+        # Necesitamos suficiente historia para saber "qué es normal" en este lugar.
         sql = """
         SELECT v.valor, cs.nombre, cs.tipo_valor 
         FROM valores v 
@@ -88,67 +191,74 @@ async def detectar_anomalia_individual(campo_id: int, valor_actual: float) -> tu
         rows = cursor.fetchall()
         
         if not rows or len(rows) < 20:
-            return False, None # Insuficientes datos para aprender el patrón
+            return False, None 
 
-        # Detección de Tipo
+        # Detectar Tipo
         tipo = (rows[0].get('tipo_valor') or '').lower()
         nombre = (rows[0].get('nombre') or '').lower()
         es_movimiento = 'bool' in tipo or 'movimiento' in nombre or 'estado' in nombre
 
-        # --- RAMA A: ANÁLISIS DE MOVIMIENTO (FRECUENCIA ADAPTATIVA) ---
+        # --- RAMA A: ANÁLISIS DE MOVIMIENTO (FACTOR DINÁMICO) ---
         if es_movimiento:
-            # Ventana "Ahora" (Último minuto ~ 12 registros)
+            # Ventana "Ahora" (Último minuto ~ 12 registros si polling=5s)
             ventana_reciente = rows[:12]
             actividad_actual = sum(float(r['valor']) for r in ventana_reciente) # Suma de 1s
             
             # Ventana "Base" (Los 24 minutos anteriores)
             historia_base = rows[12:]
             
-            # Calculamos el promedio de actividad por minuto en el pasado
-            # Agrupamos en bloques de 12 (1 min)
+            # Calculamos el "Factor de Movimiento Normal" (Eventos por minuto promedio)
+            # Dividimos la historia en bloques de 1 minuto (12 registros)
             bloques = [historia_base[i:i + 12] for i in range(0, len(historia_base), 12)]
             sumas_bloques = [sum(float(r['valor']) for r in b) for b in bloques]
             
-            # Promedio histórico de eventos por minuto
-            promedio_actividad = sum(sumas_bloques) / len(sumas_bloques) if sumas_bloques else 0
+            # El promedio nos dice si este es un lugar "Quieto" (ej. 0.5) o "Movido" (ej. 20)
+            factor_normal = sum(sumas_bloques) / len(sumas_bloques) if sumas_bloques else 0
             
-            # --- REGLAS DINÁMICAS ---
-            
-            # Caso 1: Lugar Tranquilo (Promedio < 2 eventos/min)
-            if promedio_actividad < 2:
-                # Si de repente hay mucha actividad (> 8 eventos/min), es anomalía clara.
-                if actividad_actual > 8:
-                    return True, f"Actividad Inusual ({int(actividad_actual)} eventos/min vs normal bajo)"
+            # --- REGLAS ADAPTATIVAS ---
+            es_pico = False
+            mensaje = ""
 
-            # Caso 2: Lugar Concurrido (Promedio > 10 eventos/min)
-            elif promedio_actividad > 10:
-                # Si la actividad se triplica (Fiesta/Multitud)
-                if actividad_actual > (promedio_actividad * 3):
-                    return True, f"Pico de Tráfico ({int(actividad_actual)} eventos vs media {int(promedio_actividad)})"
-                # Si la actividad cae a 0 de golpe (Fallo de sensor o cierre inesperado)
-                # Solo si es 0 absoluto en el último minuto
+            # Escenario 1: Lugar Tranquilo (Factor < 2)
+            # Aquí cualquier ráfaga es sospechosa.
+            if factor_normal < 2:
+                if actividad_actual >= 5: # Si de repente hay 5 eventos o más
+                    es_pico = True
+                    mensaje = f"Actividad Inusual ({int(actividad_actual)}/min vs normal bajo)"
+
+            # Escenario 2: Lugar Concurrido (Factor > 10)
+            # Aquí se necesita MUCHA actividad para que sea "pico".
+            elif factor_normal > 10:
+                if actividad_actual > (factor_normal * 2.5): # 2.5 veces lo normal
+                    es_pico = True
+                    mensaje = f"Pico de Tráfico ({int(actividad_actual)} vs media {int(factor_normal)})"
+                
+                # Detección de "Muerte Súbita" (Caída a 0 en lugar concurrido)
                 if actividad_actual == 0:
-                    return True, "Caída de Actividad (0 eventos detectados)"
+                    es_pico = True
+                    mensaje = "Caída de Actividad (0 eventos)"
             
-            # Caso 3: Intermedio (Regla general 3x)
+            # Escenario 3: Lugar Promedio
             else:
-                if actividad_actual > (max(promedio_actividad, 2) * 3):
-                    return True, f"Alta Actividad ({int(actividad_actual)} eventos)"
+                if actividad_actual > (max(factor_normal, 2) * 3): # Regla general 3x
+                    es_pico = True
+                    mensaje = f"Alta Actividad ({int(actividad_actual)} eventos)"
+
+            if es_pico:
+                return True, mensaje
             
             return False, None
 
         # --- RAMA B: ANÁLISIS NUMÉRICO (Z-SCORE) ---
+        # (Se mantiene igual para temperatura, voltaje, etc.)
         else:
-            # Tomamos solo los últimos 60 para Z-Score (5 min) para que sea sensible
-            datos_z = rows[:60]
+            datos_z = rows[:60] # Usamos 5 minutos para Z-Score
             historial = [float(r['valor']) for r in datos_z]
             
             ventana_reciente = historial[:3] 
             valor_suavizado = sum(ventana_reciente) / len(ventana_reciente)
             
             linea_base = historial[3:]
-            if not linea_base: return False, None
-
             media_base = sum(linea_base) / len(linea_base)
             varianza = sum([((x - media_base) ** 2) for x in linea_base]) / len(linea_base)
             desviacion = math.sqrt(varianza)
@@ -172,39 +282,37 @@ async def detectar_anomalia_individual(campo_id: int, valor_actual: float) -> tu
 
 
 # -----------------------------------------------------------------------------
-# 🧠 MOTOR DE ANÁLISIS 2: POR LOTES (Carga Inicial / Ventana)
+# 🧠 MOTOR DE ANÁLISIS 2: POR LOTES (Para Histórico/Carga Inicial)
 # -----------------------------------------------------------------------------
 def aplicar_analisis_anomalias(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Procesa un lote completo de datos (ej. las últimas 24h) para marcar picos pasados.
-    """
     if not datos or len(datos) < 10: return datos
 
-    # Detectar tipo basado en el primer registro
     es_movimiento = False
     if datos[0].get('nombre_campo'):
         nombre = datos[0]['nombre_campo'].lower()
         es_movimiento = 'movimiento' in nombre or 'estado' in nombre or 'puerta' in nombre
 
     if es_movimiento:
-        # Lógica para Movimiento en Lotes (Barras)
+        # Análisis Adaptativo para Lotes
         valores = [float(d['valor']) for d in datos]
         media_total = sum(valores) / len(valores)
         
-        # Si el promedio general es muy bajo (poca actividad), cualquier ráfaga es anomalía.
-        umbral_actividad = max(media_total * 3, 5) # Mínimo 5 eventos para considerar alerta
+        # Definir umbral dinámico basado en la propia historia del lote
+        if media_total < 1: 
+            umbral_alto = 5 # Lugar tranquilo -> Pico bajo dispara alerta
+        else:
+            umbral_alto = media_total * 2.5 # Lugar activo -> Requiere pico más alto
 
         for d in datos:
             val = float(d['valor'])
             d['anomalia'] = False
             d['mensaje_alerta'] = None
             
-            if val > umbral_actividad: 
+            if val > umbral_alto: 
                 d['anomalia'] = True
                 d['mensaje_alerta'] = f"Pico de Actividad ({int(val)} eventos)"
-
     else:
-        # Lógica Z-Score Estándar (Temperatura, etc.)
+        # Z-Score Estándar
         valores = [float(d['valor']) for d in datos]
         media = sum(valores) / len(valores)
         varianza = sum([((x - media) ** 2) for x in valores]) / len(valores)
@@ -224,6 +332,58 @@ def aplicar_analisis_anomalias(datos: List[Dict[str, Any]]) -> List[Dict[str, An
                 d['mensaje_alerta'] = f"Valor atípico: {val}"
     
     return datos
+
+
+# def aplicar_analisis_anomalias(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+#     """
+#     Procesa un lote completo de datos (ej. las últimas 24h) para marcar picos pasados.
+#     """
+#     if not datos or len(datos) < 10: return datos
+
+#     # Detectar tipo basado en el primer registro
+#     es_movimiento = False
+#     if datos[0].get('nombre_campo'):
+#         nombre = datos[0]['nombre_campo'].lower()
+#         es_movimiento = 'movimiento' in nombre or 'estado' in nombre or 'puerta' in nombre
+
+#     if es_movimiento:
+#         # Lógica para Movimiento en Lotes (Barras)
+#         valores = [float(d['valor']) for d in datos]
+#         media_total = sum(valores) / len(valores)
+        
+#         # Si el promedio general es muy bajo (poca actividad), cualquier ráfaga es anomalía.
+#         umbral_actividad = max(media_total * 3, 5) # Mínimo 5 eventos para considerar alerta
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+            
+#             if val > umbral_actividad: 
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Pico de Actividad ({int(val)} eventos)"
+
+#     else:
+#         # Lógica Z-Score Estándar (Temperatura, etc.)
+#         valores = [float(d['valor']) for d in datos]
+#         media = sum(valores) / len(valores)
+#         varianza = sum([((x - media) ** 2) for x in valores]) / len(valores)
+#         desviacion_std = math.sqrt(varianza)
+        
+#         if desviacion_std < 0.01: desviacion_std = 0.01
+#         UMBRAL_Z = 2.8 
+
+#         for d in datos:
+#             val = float(d['valor'])
+#             z_score = (val - media) / desviacion_std
+#             d['anomalia'] = False
+#             d['mensaje_alerta'] = None
+
+#             if abs(z_score) > UMBRAL_Z:
+#                 d['anomalia'] = True
+#                 d['mensaje_alerta'] = f"Valor atípico: {val}"
+    
+#     return datos
 
 # -----------------------------------------------------------------------------
 # 2. VENTANA DE TIEMPO (Ancla en último dato)
@@ -276,6 +436,126 @@ async def obtener_valores_ventana_db(campo_id: int, minutos: int) -> List[Dict[s
     finally:
         if conn: conn.close()
 
+
+def aplicar_analisis_historico(datos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Analiza datos históricos. 
+    - Temperatura/Humedad: Usa rangos fijos de confort (20-26°C, 30-60%).
+    - Resto: Usa Ventana Deslizante (Z-Score Local) para detectar picos inusuales.
+    """
+    if not datos or len(datos) < 5: return datos
+
+    # 1. Normalización de Identificadores (A prueba de balas)
+    nombre_raw = str(datos[0].get('nombre_campo') or '').lower()
+    tipo_raw = str(datos[0].get('magnitud_tipo') or '').lower()
+    
+    # Banderas de identificación (Detecta cualquier variante)
+    es_movimiento = 'movimiento' in nombre_raw or 'estado' in nombre_raw or 'puerta' in nombre_raw
+    
+    es_temperatura = ('temperatura' in nombre_raw or 'temp' in tipo_raw or 'cel' in tipo_raw or 'grad' in tipo_raw)
+    es_humedad = ('humedad' in nombre_raw or 'hum' in tipo_raw)
+    
+    # -------------------------------------------------------------------------
+    # CASO A: MOVIMIENTO (Densidad / Ráfagas)
+    # -------------------------------------------------------------------------
+    if es_movimiento:
+        valores_float = [float(d['valor']) for d in datos]
+        n = len(valores_float)
+        media_total = sum(valores_float) / n
+        
+        # Umbral Adaptativo:
+        # Si es puro (agrupado por minuto), el valor puede ser 12. 
+        # Si es optimizado (hora), puede ser 60.
+        # La media nos dice la escala.
+        umbral = max(5.0, media_total * 3.0) 
+
+        for d in datos:
+            val = float(d['valor'])
+            d['anomalia'] = False
+            d['mensaje_alerta'] = None
+            
+            if val > umbral: 
+                d['anomalia'] = True
+                d['mensaje_alerta'] = f"Ráfaga de Actividad ({int(val)})"
+
+    # -------------------------------------------------------------------------
+    # CASO B: TEMPERATURA Y HUMEDAD (Reglas Fijas de Confort)
+    # -------------------------------------------------------------------------
+    elif es_temperatura or es_humedad:
+        # Definición de límites según el tipo
+        if es_temperatura:
+            MIN_LIMITE = 20.0
+            MAX_LIMITE = 26.0
+            unidad = "°C"
+        else: # Humedad
+            MIN_LIMITE = 30.0
+            MAX_LIMITE = 60.0
+            unidad = "%"
+
+        for d in datos:
+            val = float(d['valor'])
+            d['anomalia'] = False
+            d['mensaje_alerta'] = None
+
+            # IMPORTANTE: Si es 0.0 exacto en temperatura/humedad, suele ser error de sensor
+            if val == 0.0:
+                d['anomalia'] = True
+                d['mensaje_alerta'] = "Posible Error de Sensor (0.0)"
+                continue
+
+            if val > MAX_LIMITE:
+                d['anomalia'] = True
+                d['mensaje_alerta'] = f"Alto: {val:.1f}{unidad} (Límite: {MAX_LIMITE}{unidad})"
+            
+            elif val < MIN_LIMITE:
+                d['anomalia'] = True
+                d['mensaje_alerta'] = f"Bajo: {val:.1f}{unidad} (Límite: {MIN_LIMITE}{unidad})"
+
+    # -------------------------------------------------------------------------
+    # CASO C: GENÉRICOS (Energía, Potencia, Corriente, Luminosidad...)
+    # -------------------------------------------------------------------------
+    else:
+        valores_float = [float(d['valor']) for d in datos]
+        n = len(valores_float)
+        RADIO = 3 
+
+        for i in range(n):
+            d = datos[i]
+            val = valores_float[i]
+            d['anomalia'] = False
+            d['mensaje_alerta'] = None
+
+            # 1. Definir vecindario
+            start = max(0, i - RADIO)
+            end = min(n, i + RADIO + 1)
+            vecinos = valores_float[start:end]
+            
+            # 2. Estadística local
+            vecinos_limpios = [v for v in vecinos if v != val]
+            if not vecinos_limpios: vecinos_limpios = vecinos
+
+            media_local = sum(vecinos_limpios) / len(vecinos_limpios)
+            varianza = sum([((x - media_local) ** 2) for x in vecinos_limpios]) / len(vecinos_limpios)
+            std_local = math.sqrt(varianza)
+            
+            # Ajuste de Sensibilidad:
+            # Si el valor es pequeño (< 10), la desviación mínima permitida es pequeña (0.1)
+            # Si el valor es grande (> 100), la desviación mínima aumenta (5.0)
+            min_std = 0.1 if val < 10 else 2.0
+            if std_local < min_std: std_local = min_std
+
+            # 3. Z-Score Local
+            z_score = (val - media_local) / std_local
+            
+            if abs(z_score) > 3.5:
+                d['anomalia'] = True
+                if val > media_local:
+                    d['mensaje_alerta'] = f"Pico: {val:.2f} (Contexto: {media_local:.2f})"
+                else:
+                    d['mensaje_alerta'] = f"Caída: {val:.2f} (Contexto: {media_local:.2f})"
+
+    return datos
+
 # -----------------------------------------------------------------------------
 # 3. HISTÓRICO (OPTIMIZADO)
 # -----------------------------------------------------------------------------
@@ -286,24 +566,81 @@ async def obtener_historico_campo_db(
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        rango_dias = (fecha_fin - fecha_inicio).days
         
-        if metodo_carga == 'puro' or rango_dias < 1:
-            sql = """
-            SELECT * FROM (
-                SELECT v.valor, v.fecha_hora_lectura, um.magnitud_tipo, um.simbolo AS simbolo_unidad
-                FROM valores v JOIN campos_sensores cs ON v.campo_id = cs.id
+        if metodo_carga == 'puro':
+            print(f"⚡ [DB] Modo: PURO (Analizando tipo de dato...)")
+            
+            # A. Identificar si es Movimiento
+            cursor.execute("SELECT nombre, unidad_medida_id FROM campos_sensores WHERE id = %s", (campo_id,))
+            info_campo = cursor.fetchone()
+            
+            # Limpieza preventiva del cursor
+            # cursor.fetchall() 
+            
+            nombre_c = info_campo['nombre'].lower() if info_campo else ''
+            es_movimiento = 'movimiento' in nombre_c or 'estado' in nombre_c or 'puerta' in nombre_c
+
+            if es_movimiento:
+                # 🟢 ESTRATEGIA: MOVIMIENTO (Smart Raw - Agrupado por Minuto)
+                # En lugar de 0s y 1s, obtenemos la "Intensidad" del movimiento por minuto.
+                # SUM(v.valor) cuenta cuántas veces el sensor dijo "1" en ese minuto.
+                print(f"   -> Detectado Movimiento: Agrupando por MINUTO (Densidad).")
+                
+                sql = """
+                SELECT 
+                    -- Formateamos la fecha hasta el minuto (YYYY-MM-DD HH:MM:00)
+                    DATE_FORMAT(v.fecha_hora_lectura, '%%Y-%%m-%%d %%H:%%i:00') as fecha_hora_lectura,
+                    
+                    -- SUMAMOS los 1s. Si hubo 12 registros de '1', el valor será 12.
+                    SUM(v.valor) as valor, 
+                    
+                    MAX(cs.nombre) as nombre_campo,
+                    MAX(um.magnitud_tipo) as magnitud_tipo, 
+                    MAX(um.simbolo) as simbolo_unidad
+                FROM valores v 
+                JOIN campos_sensores cs ON v.campo_id = cs.id
                 LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
-                WHERE v.campo_id = %s AND v.fecha_hora_lectura BETWEEN %s AND %s
-                ORDER BY v.fecha_hora_lectura DESC LIMIT 15000 
-            ) AS sub ORDER BY sub.fecha_hora_lectura ASC;
-            """
-            cursor.execute(sql, (campo_id, fecha_inicio, fecha_fin))
-            return cursor.fetchall()
+                WHERE v.campo_id = %s 
+                  AND v.fecha_hora_lectura BETWEEN %s AND %s
+                -- Agrupamos por el string de fecha para compatibilidad total SQL
+                GROUP BY fecha_hora_lectura
+                ORDER BY fecha_hora_lectura ASC;
+                """
+                cursor.execute(sql, (campo_id, fecha_inicio, fecha_fin))
+                return cursor.fetchall()
+
+            else:
+                # 🟢 ESTRATEGIA: ANALÓGICOS (Temperatura, Voltaje, etc.)
+                # Aquí sí queremos cada milímetro de variación, traemos todo crudo.
+                print(f"   -> Sensor Analógico: Trayendo datos 100% crudos.")
+                
+                sql = """
+                SELECT * FROM (
+                    SELECT v.valor, v.fecha_hora_lectura, 
+                           cs.nombre AS nombre_campo, 
+                           um.magnitud_tipo, um.simbolo AS simbolo_unidad
+                    FROM valores v 
+                    JOIN campos_sensores cs ON v.campo_id = cs.id
+                    LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+                    WHERE v.campo_id = %s AND v.fecha_hora_lectura BETWEEN %s AND %s
+                    ORDER BY v.fecha_hora_lectura DESC  
+                ) AS sub ORDER BY sub.fecha_hora_lectura ASC;
+                """
+                cursor.execute(sql, (campo_id, fecha_inicio, fecha_fin))
+                return cursor.fetchall()
+
         else:
+            # ---------------------------------------------------------
+            # ESTRATEGIA B: OPTIMIZADO (PROMEDIOS POR HORA)
+            # ---------------------------------------------------------
+            print(f"📊 [DB] Modo: OPTIMIZADO (Solicitado explícitamente o Default)")
+            
+            # 1. Tabla pre-agregada
+            # 🟢 CORRECCIÓN: Agregado cs.nombre AS nombre_campo
             sql_agregada = """
             SELECT TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) as fecha_hora_lectura,
                 CASE WHEN cs.nombre LIKE '%%Movimiento%%' THEN va.valor_sum ELSE va.valor_avg END as valor,
+                cs.nombre AS nombre_campo,
                 um.magnitud_tipo, um.simbolo AS simbolo_unidad
             FROM valores_agregados va JOIN campos_sensores cs ON va.campo_id = cs.id
             LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
@@ -312,9 +649,13 @@ async def obtener_historico_campo_db(
             """
             cursor.execute(sql_agregada, (campo_id, fecha_inicio.date(), fecha_fin.date()))
             resultados = cursor.fetchall()
+            
             if resultados: return resultados
             
-            print(f"⚠️ [DB] Sin datos pre-agregados. Ejecutando agregación AL VUELO.")
+            # 2. Fallback: Agregación al vuelo
+            print(f"⚠️ [DB] Sin pre-agregación. Calculando promedios al vuelo.")
+            
+            # 🟢 CORRECCIÓN: Usamos MAX(cs.nombre) para sacarlo del GROUP BY
             sql_on_the_fly = """
             SELECT 
                 DATE_FORMAT(MIN(v.fecha_hora_lectura), '%%Y-%%m-%%d %%H:00:00') as fecha_hora_lectura,
@@ -322,6 +663,7 @@ async def obtener_historico_campo_db(
                     WHEN MAX(cs.nombre) LIKE '%%Movimiento%%' THEN SUM(v.valor)
                     ELSE AVG(v.valor) 
                 END as valor,
+                MAX(cs.nombre) as nombre_campo,
                 MAX(um.magnitud_tipo) as magnitud_tipo,
                 MAX(um.simbolo) AS simbolo_unidad
             FROM valores v
@@ -340,6 +682,86 @@ async def obtener_historico_campo_db(
         raise e
     finally:
         if conn: conn.close()
+
+# async def obtener_historico_campo_db(
+#     campo_id: int, fecha_inicio: datetime, fecha_fin: datetime, metodo_carga: str = 'optimizado'
+# ) -> List[Dict[str, Any]]:
+#     conn = None
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+#         # 🟢 CAMBIO CRÍTICO: Eliminamos la lógica de "rango_dias < 1"
+#         # Ahora la decisión es ESTRICTAMENTE basada en lo que pide el frontend.
+        
+#         if metodo_carga == 'puro':
+#             # ---------------------------------------------------------
+#             # ESTRATEGIA A: DATOS PUROS (RAW)
+#             # Trae cada lectura individual. Útil para zoom profundo o auditoría exacta.
+#             # ---------------------------------------------------------
+#             print(f"⚡ [DB] Modo: PURO (Solicitado explícitamente)")
+#             sql = """
+#             SELECT * FROM (
+#                 SELECT v.valor, v.fecha_hora_lectura, um.magnitud_tipo, um.simbolo AS simbolo_unidad
+#                 FROM valores v JOIN campos_sensores cs ON v.campo_id = cs.id
+#                 LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+#                 WHERE v.campo_id = %s AND v.fecha_hora_lectura BETWEEN %s AND %s
+#                 ORDER BY v.fecha_hora_lectura DESC  
+#             ) AS sub ORDER BY sub.fecha_hora_lectura ASC;
+#             """
+#             cursor.execute(sql, (campo_id, fecha_inicio, fecha_fin))
+#             return cursor.fetchall()
+
+#         else:
+#             # ---------------------------------------------------------
+#             # ESTRATEGIA B: OPTIMIZADO (PROMEDIOS POR HORA)
+#             # Default para gráficas generales, reportes mensuales/anuales.
+#             # ---------------------------------------------------------
+#             print(f"📊 [DB] Modo: OPTIMIZADO (Solicitado explícitamente o Default)")
+            
+#             # 1. Intentar buscar en tabla pre-agregada (Rendimiento extremo)
+#             sql_agregada = """
+#             SELECT TIMESTAMP(va.fecha, MAKETIME(va.hora, 0, 0)) as fecha_hora_lectura,
+#                 CASE WHEN cs.nombre LIKE '%%Movimiento%%' THEN va.valor_sum ELSE va.valor_avg END as valor,
+#                 um.magnitud_tipo, um.simbolo AS simbolo_unidad
+#             FROM valores_agregados va JOIN campos_sensores cs ON va.campo_id = cs.id
+#             LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+#             WHERE va.campo_id = %s AND va.fecha BETWEEN %s AND %s
+#             ORDER BY va.fecha ASC, va.hora ASC;
+#             """
+#             cursor.execute(sql_agregada, (campo_id, fecha_inicio.date(), fecha_fin.date()))
+#             resultados = cursor.fetchall()
+            
+#             if resultados: return resultados
+            
+#             # 2. Fallback: Si no hay tabla agregada, calculamos promedios al vuelo
+#             # Esto reduce 10,000 puntos a 24 puntos (si es un día) o 720 puntos (si es un mes)
+#             print(f"⚠️ [DB] Sin pre-agregación. Calculando promedios al vuelo.")
+#             sql_on_the_fly = """
+#             SELECT 
+#                 DATE_FORMAT(MIN(v.fecha_hora_lectura), '%%Y-%%m-%%d %%H:00:00') as fecha_hora_lectura,
+#                 CASE 
+#                     WHEN MAX(cs.nombre) LIKE '%%Movimiento%%' THEN SUM(v.valor)
+#                     ELSE AVG(v.valor) 
+#                 END as valor,
+#                 MAX(um.magnitud_tipo) as magnitud_tipo,
+#                 MAX(um.simbolo) AS simbolo_unidad
+#             FROM valores v
+#             JOIN campos_sensores cs ON v.campo_id = cs.id
+#             LEFT JOIN unidades_medida um ON cs.unidad_medida_id = um.id
+#             WHERE v.campo_id = %s 
+#               AND v.fecha_hora_lectura BETWEEN %s AND %s
+#             GROUP BY DATE(v.fecha_hora_lectura), HOUR(v.fecha_hora_lectura)
+#             ORDER BY fecha_hora_lectura ASC;
+#             """
+#             cursor.execute(sql_on_the_fly, (campo_id, fecha_inicio, fecha_fin))
+#             return cursor.fetchall()
+
+#     except Exception as e:
+#         print(f"❌ [DB Error] historico: {e}")
+#         raise e
+#     finally:
+#         if conn: conn.close()
 
 # -----------------------------------------------------------------------------
 # 4. RANGO DE FECHAS

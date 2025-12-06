@@ -18,7 +18,6 @@ from app.configuracion import configuracion # Solo necesitamos la instancia de c
 
 # --- Función de conexión a la base de datos (INTERNA a este módulo) ---
 def get_db_connection():
-    """Retorna un objeto de conexión a la base de datos usando la configuración global."""
     try:
         return pymysql.connect(
            host=configuracion.DB_HOST,

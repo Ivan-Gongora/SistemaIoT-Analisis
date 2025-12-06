@@ -315,7 +315,6 @@ async def set_dispositivo(datos: DispositivoCrear, usuario_id: int) -> List[Dict
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # Validar existencia del proyecto Y OBTENER SU NOMBRE
-        # 4. SELECCIONA EL NOMBRE DEL PROYECTO PARA EL LOG
         cursor.execute("SELECT id, nombre FROM proyectos WHERE id = %s", (datos.proyecto_id,))
         proyecto_row = cursor.fetchone()
         

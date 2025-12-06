@@ -69,6 +69,10 @@ class GeneradorEscenarios:
                 logger.error("GeneradorEscenarios: No hay datos históricos válidos para la simulación.")
                 return {"error": "No hay datos históricos válidos para la simulación con los lotes especificados."}
             
+            # 🚨 NUEVO: Convertir los datos históricos usados a formato JSON para el frontend
+            # Usamos 'records' para obtener una lista de diccionarios (ideal para Vue/JS)
+            datos_historicos_json = df_historico_filtrado.to_dict('records')
+            
             # 2. Entrenar el predictor con el DataFrame filtrado
             entrenamiento_result = await self.predictor.train(df_historico_filtrado)
             
@@ -159,9 +163,11 @@ class GeneradorEscenarios:
                         "tasa_crecimiento_consumo": payload.tasa_crecimiento_consumo,
                         "mejora_eficiencia_consumo": payload.mejora_eficiencia_consumo
                     },
-                    "lotes_simulados": self.predictor.lotes_del_entrenamiento # Usar el registro de lotes del predictor
+                    "lotes_simulados": self.predictor.lotes_del_entrenamiento
                 },
                 "predicciones_escenario": resultados_escenario,
+                # 👈 NUEVO CAMPO SOLICITADO
+                "datos_historicos_usados": datos_historicos_json, 
             }
 
         except Exception as e:

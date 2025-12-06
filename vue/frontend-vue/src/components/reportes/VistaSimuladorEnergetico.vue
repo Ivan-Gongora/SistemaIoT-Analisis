@@ -31,7 +31,7 @@
 
             <div class="control-grupo">
               <label for="meses">
-                Horizonte (Meses): <span class="valor-resaltado">{{ meses }}</span>
+                Horizontes (Meses): <span class="valor-resaltado">{{ meses }}</span>
               </label>
               <input type="range" id="meses" min="12" max="120" step="12" v-model.number="meses"/>
             </div>
@@ -69,34 +69,33 @@
             <div class="resumen-costos-grid">
               
               <div class="tarjeta-resumen tarjeta-base" 
-                   title="Costo total proyectado de la energía si no se realizan cambios ni optimizaciones en el consumo o tarifas. Es el punto de referencia para comparar con el escenario simulado.">
-                <span class="titulo-resumen">Costo Base ({{ meses }} m)</span>
-                <p class="valor-grande">{{ formatCurrency(simulacionResultado.total_costo_base_mxn) }}</p>
+                   title="Consumo total proyectado de energía si no se realizan cambios ni optimizaciones. Es el punto de referencia base.">
+                <span class="titulo-resumen">Consumo Base ({{ meses }} m)</span>
+                <p class="valor-grande">{{ formatKWH(simulacionResultado.total_consumo_base_kwh) }}</p>
               </div>
 
               <div class="tarjeta-resumen tarjeta-simulado" 
-                   title="Costo total proyectado de la energía considerando la inflación, el crecimiento del consumo y las mejoras de eficiencia que has configurado en los parámetros.">
-                <span class="titulo-resumen">Costo Simulado ({{ meses }} m)</span>
-                <p class="valor-grande">{{ formatCurrency(simulacionResultado.total_costo_simulado_mxn) }}</p>
+                   title="Consumo total proyectado de energía considerando el crecimiento y las mejoras de eficiencia que has configurado.">
+                <span class="titulo-resumen">Consumo Simulado ({{ meses }} m)</span>
+                <p class="valor-grande">{{ formatKWH(simulacionResultado.total_consumo_simulado_kwh) }}</p>
               </div>
 
               <div class="tarjeta-resumen tarjeta-variacion" 
-                   :class="simulacionResultado.variacion_costo_total_mxn <= 0 ? 'variacion-negativa' : 'variacion-positiva'"
-                   :title="simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro total estimado al comparar el costo simulado con el costo base. Un valor negativo es un ahorro, uno positivo es un gasto adicional.' : 'Gasto extra total estimado al comparar el costo simulado con el costo base. Un valor positivo es un gasto adicional, uno negativo es un ahorro.'">
-                <span class="titulo-resumen">Variación vs. Base</span>
+                   :class="simulacionResultado.variacion_consumo_total_kwh <= 0 ? 'variacion-negativa' : 'variacion-positiva'"
+                   title="Variación total de Consumo (kWh) estimada entre el escenario simulado y el escenario base.">
+                <span class="titulo-resumen">Variación vs. Base (kWh)</span>
                 <p class="valor-grande">
-                    {{ formatCurrency(simulacionResultado.variacion_costo_total_mxn) }}
+                    {{ formatKWH(simulacionResultado.variacion_consumo_total_kwh) }}
                 </p>
                 <span class="leyenda-variacion">
-                    ({{ simulacionResultado.variacion_costo_total_mxn <= 0 ? 'Ahorro' : 'Gasto Extra' }})
+                    ({{ simulacionResultado.variacion_consumo_total_kwh <= 0 ? 'Reducción' : 'Aumento' }})
                 </span>
               </div>
             </div>
             
             <div class="grafica-simulador-contenedor">
               <h3 class="panel-titulo">
-                  Proyección de Costos: Escenario Base vs. Simulado
-                  
+                  Proyección de Consumo (kWh): Histórico y Simulado
                     <i class="bi bi-info-circle-fill info-icon"
                       data-bs-toggle="popover"
                       data-bs-trigger="hover focus"
@@ -108,8 +107,8 @@
               </h3>
               
               <GraficoSimulacionECharts
-                v-if="chartData && chartData.labels && chartData.labels.length > 0"
-                :chart-data="chartData"
+                v-if="fullChartData && fullChartData.datos_historicos_usados && fullChartData.predicciones_escenario"
+                :chart-data="fullChartData"
                 :is-dark="isDark"
               />
               <div v-else class="mensaje-placeholder">
@@ -134,8 +133,8 @@ import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
 import GraficoSimulacionECharts from '../graficos/GraficoSimulacionECharts.vue';
 import * as bootstrap from 'bootstrap';
-// // 🎯 Asumimos que API_BASE_URL se inyecta globalmente o se importa desde config
-// import { API_BASE_URL } from '@/config/apiConfig'; 
+
+// Asume que 'bootstrap' y 'API_BASE_URL' están disponibles globalmente.
 
 export default {
   name: 'VistaSimuladorEnergetico',
@@ -149,44 +148,50 @@ export default {
       isDark: false,
       isSidebarOpen: true,
       
-      lotesCargados: [], // Lotes recibidos de la URL (STRINGS)
+      lotesCargados: [], 
       
-      meses: 24, // Valor inicial del slider
+      meses: 24, 
       simulacionParams: {
         tasa_inflacion_energetica: 0.08,
         tasa_crecimiento_consumo: 0.05,
         mejora_eficiencia_consumo: 0.10
       },
       isLoading: false,
-      simulacionResultado: { // Inicializar con valores nulos para evitar errores
+      simulacionResultado: { 
+        // KPIs de Costo (para el resumen detallado o futuro uso)
         total_meses_simulados: 0,
         total_costo_base_mxn: 0,
         total_costo_simulado_mxn: 0,
         variacion_costo_total_mxn: 0,
         porcentaje_variacion: 0,
+        // KPIs de Consumo (usados en el template)
+        total_consumo_base_kwh: 0,
+        total_consumo_simulado_kwh: 0,
+        variacion_consumo_total_kwh: 0,
+        
         parametros_escenario: {},
         lotes_simulados: [],
       },
-      chartData: { labels: [], datasets: [] }, // Datos para la gráfica
+      fullChartData: null, 
       errorApi: null,
       
       _themeMediaQuery: null,
-       popoverTitle: "Análisis de Proyección",
+      popoverTitle: "Análisis de Proyección de Consumo",
       popoverContent: `
-        <p>Esta gráfica ilustra la evolución mensual de tus costos energéticos.</p>
-        <p>La línea <strong>"Costo Base (Sin cambios)"</strong> (generalmente punteada) muestra lo que pagarías si no aplicaras ninguna estrategia de optimización o ajuste a los parámetros.</p>
-        <p>La línea <strong>"Costo Simulado"</strong> (generalmente sólida) te presenta tus costos esperados al aplicar los parámetros de simulación (inflación, crecimiento de consumo, reducción por eficiencia).</p>
-        <p>Observa la diferencia entre ambas líneas: un espacio por debajo de la línea base indica ahorro, mientras que un espacio por encima muestra un gasto adicional proyectado.</p>
+        <p>Esta gráfica ilustra la evolución mensual de tu consumo energético (kWh) en un horizonte de tiempo.</p>
+        <p>La línea <strong>Consumo Base</strong> (línea discontinua) muestra el consumo histórico **real** y su proyección futura sin aplicar mejoras.</p>
+        <p>La línea <strong>Consumo Simulado</strong> (línea sólida) muestra el consumo esperado aplicando la reducción por eficiencia configurada.</p>
+        <p>Una diferencia visible a la baja en la línea simulada respecto a la base indica una reducción efectiva del consumo proyectado.</p>
       `
     };
   },
   mounted() {
     this.initPopovers();
-    this.detectarTemaSistema();
-    this.cargarLotesDesdeUrl(); // Solo carga los lotes, no ejecuta la simulación
+    this.detectarTemaSistema(); 
+    this.cargarLotesDesdeUrl(); 
     if (window.matchMedia) {
       this._themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      this._themeMediaQuery.addEventListener('change', this.handleThemeChange);
+      this._themeMediaQuery.addEventListener('change', this.handleThemeChange); 
     }
   },
   beforeUnmount() {
@@ -197,12 +202,10 @@ export default {
   methods: {
     // --- Métodos de Layout y Carga Inicial ---
     initPopovers() {
-        // Selecciona todos los elementos que tienen data-bs-toggle="popover"
         const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
         
-        // Itera sobre ellos y crea una nueva instancia de Popover para cada uno
+        // El operador spread ([...]) y map funcionan bien para inicializar Bootstrap Popovers
         [...popoverTriggerList].map(popoverTriggerEl => {
-            // Asegúrate de destruir cualquier instancia anterior para evitar duplicados si el componente se remonta
             if (bootstrap.Popover.getInstance(popoverTriggerEl)) {
                 bootstrap.Popover.getInstance(popoverTriggerEl).dispose();
             }
@@ -210,10 +213,17 @@ export default {
         });
     },
     toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
+    
+    // Método para manejar el cambio de tema del sistema
     handleThemeChange(event) { 
-      this.isDark = event.matches; // <-- Actualiza isDark cuando cambia el tema del sistema
-      this.formatearDatosGraficaConEstadoActual(); 
+      this.isDark = event.matches; 
+      // Forzar actualización de la gráfica si hay datos
+      if(this.fullChartData) {
+          this.fullChartData = { ...this.fullChartData };
+      }
     },
+    
+    // Método para detectar el tema inicial
     detectarTemaSistema() {
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { 
           this.isDark = true; 
@@ -222,15 +232,14 @@ export default {
         }
     },
     
+    // Método para cargar lotes desde la URL (query parameter)
     cargarLotesDesdeUrl() {
       const lotesQuery = this.$route.query.lotes;
       if (lotesQuery) {
+        // Asegura que lotesCargados sea un array
         this.lotesCargados = Array.isArray(lotesQuery) ? lotesQuery : [lotesQuery];
-        // NOTA: La simulación ya NO se ejecuta automáticamente aquí.
-        // Se ejecuta solo al presionar el botón.
       } else {
-        this.lotesCargados = []; // Vacío si no hay lotes
-        // No mostrar error aquí, el mensaje "No se han seleccionado lotes..." lo maneja.
+        this.lotesCargados = []; 
       }
     },
     
@@ -241,22 +250,29 @@ export default {
         const absValue = Math.abs(value);
         return `${value < 0 ? '-' : ''}${absValue.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 })}`;
     },
+    // Formato para kWh
+    formatKWH(value) {
+        if (value === null || value === undefined) return '0 kWh';
+        const absValue = Math.abs(value);
+        const formatted = absValue.toLocaleString('es-MX', { maximumFractionDigits: 0 });
+        return `${value < 0 ? '-' : ''}${formatted} kWh`;
+    },
     
     // --- Lógica de Simulación ---
     async ejecutarSimulacion() {
       if (!this.lotesCargados || this.lotesCargados.length === 0) {
-        this.errorApi = "Por favor, seleccione al menos un lote de datos en la vista 'Gestión de Datos Energéticos' para simular.";
+        this.errorApi = "Seleccione al menos un lote de datos para simular.";
         return;
       }
       
       this.isLoading = true;
       this.errorApi = null;
-      this.chartData = { labels: [], datasets: [] }; // Limpiar gráfica al iniciar simulación
+      this.fullChartData = null; 
 
       const token = localStorage.getItem('accessToken');
       if (!token) { this.errorApi = "Error de autenticación. Inicia sesión."; this.isLoading = false; this.$router.push('/'); return; }
 
-      const API_URL = `${API_BASE_URL}/api/energetico/simular/escenario_personalizado`;
+      const API_URL = `${API_BASE_URL}/api/energetico/simular/escenario_personalizado`; 
       
       try {
         const payload = {
@@ -282,11 +298,31 @@ export default {
         
         const data = resultado.data;
 
-        // 1. Actualizar Resumen KPI
-        this.simulacionResultado = data.resumen_simulacion; 
+        // --- CÁLCULO DE CONSUMOS TOTALES ---
+        const historico = data.datos_historicos_usados || [];
+        const proyeccion = data.predicciones_escenario || [];
+        
+        const totalConsumoReal = historico.reduce((sum, item) => sum + item.consumo_total_kwh, 0);
+        const totalConsumoBaseProyectado = proyeccion.reduce((sum, item) => sum + item.consumo_base_kwh, 0);
+        const totalConsumoSimuladoProyectado = proyeccion.reduce((sum, item) => sum + item.consumo_escenario_kwh, 0);
+        
+        const totalBase = totalConsumoReal + totalConsumoBaseProyectado;
+        const totalSimulado = totalConsumoReal + totalConsumoSimuladoProyectado; 
 
-        // 2. Formatear para Gráfica
-        this.formatearDatosGrafica(data.predicciones_escenario); 
+        // 1. Actualizar Resumen KPI
+        this.simulacionResultado = {
+            ...data.resumen_simulacion,
+            total_costo_base_mxn: data.resumen_simulacion.total_costo_base_mxn,
+            total_costo_simulado_mxn: data.resumen_simulacion.total_costo_simulado_mxn,
+            variacion_costo_total_mxn: data.resumen_simulacion.variacion_costo_total_mxn,
+            
+            total_consumo_base_kwh: totalBase,
+            total_consumo_simulado_kwh: totalSimulado,
+            variacion_consumo_total_kwh: totalSimulado - totalBase,
+        }; 
+
+        // 2. Asignar el objeto 'data' completo al prop de la gráfica
+        this.fullChartData = data;
 
       } catch (error) {
         console.error("Error en la simulación:", error);
@@ -294,27 +330,6 @@ export default {
       } finally {
         this.isLoading = false;
       }
-    },
-    
-    formatearDatosGrafica(predicciones) {
-      const labels = predicciones.map(item => item.periodo);
-      const datosCostoBase = predicciones.map(item => item.costo_base_mxn);
-      const datosCostoSimulado = predicciones.map(item => item.costo_escenario_mxn);
-
-      this.chartData = {
-        labels: labels,
-        datasets: [
-          { label: 'Costo Base (Sin cambios)', data: datosCostoBase },
-          { label: 'Costo Simulado', data: datosCostoSimulado }
-        ]
-      };
-    },
-
-    // Asegura que la gráfica se re-renderice con los colores correctos al cambiar el tema
-    formatearDatosGraficaConEstadoActual() {
-      if (!this.chartData || !this.chartData.labels || this.chartData.labels.length === 0) return;
-      // Recrear los datos con los mismos valores para forzar la actualización de ECharts
-      this.chartData = { ...this.chartData };
     },
   },
 };
@@ -326,16 +341,14 @@ export default {
 
 /* -----------------------------------------------------------------
  * DEFINICIÓN DE VARIABLES CSS DEL TEMA (CRÍTICO PARA MODO OSCURO)
- * Este bloque es necesario para que las variables CSS como --card-bg
- * tengan un valor dependiendo de la clase de tema aplicada.
  * ----------------------------------------------------------------- */
 
 // Estilos base para el layout principal, incluyendo el color de fondo del body.
 .plataforma-layout {
   display: flex;
   min-height: 100vh;
-  transition: background-color 0.3s ease; // Transición suave para el color de fondo
-  background-color: $WHITE-SOFT; // Fondo por defecto para el tema claro
+  transition: background-color 0.3s ease; 
+  background-color: $WHITE-SOFT; 
 
   &.theme-dark {
     /* Variables CSS personalizadas para el modo oscuro */
@@ -343,9 +356,9 @@ export default {
     --card-border: #{$DARK-BORDER};
     --text-color-primary: #{$LIGHT-TEXT};
     --text-color-secondary: #{$GRAY-COLD};
-    --color-heading: #{$LIGHT-TEXT}; /* Para títulos grandes en modo oscuro */
-    --input-bg: #{$DARK-INPUT-BG}; /* Fondo del track del slider en modo oscuro */
-    background-color: $DARK-BG-CONTRAST; // Fondo del body en modo oscuro
+    --color-heading: #{$LIGHT-TEXT}; 
+    --input-bg: #{$DARK-INPUT-BG}; 
+    background-color: $DARK-BG-CONTRAST; 
   }
 
   &.theme-light {
@@ -354,60 +367,29 @@ export default {
     --card-border: #{$LIGHT-BORDER};
     --text-color-primary: #{$DARK-TEXT};
     --text-color-secondary: #{$GRAY-COLD};
-    --color-heading: #{$DARK-TEXT}; /* Para títulos grandes en modo claro */
-    --input-bg: #{$LIGHT-INPUT-BG}; /* Fondo del track del slider en modo claro */
-    background-color: $WHITE-SOFT; // Fondo del body en modo claro (redundante pero explícito)
+    --color-heading: #{$DARK-TEXT}; 
+    --input-bg: #{$LIGHT-INPUT-BG}; 
+    background-color: $WHITE-SOFT; 
   }
 }
 
-// Asegurar que el contenido principal también adapte su fondo
 .simulador-principal-contenido {
     padding: 2rem;
-    max-width: 1600px; /* Aumentar ancho máximo para más espacio */
+    max-width: 1600px; 
     margin: 0 auto;
-
-    // Estos estilos de fondo serán sobrescritos por el .plataforma-layout general
-    // o pueden ser redundantes si el body ya tiene el color correcto.
-    // Sin embargo, si hay un fondo intermedio, esto asegura la consistencia.
-    // Puedes comentar o eliminar si el fondo principal ya cubre todo bien.
-    .theme-dark & {
-        background-color: $DARK-BG-CONTRAST; // Asegura que el área de contenido sea oscura
-    }
-    .theme-light & {
-        background-color: $WHITE-SOFT; // Asegura que el área de contenido sea clara
-    }
 }
 
-.grafica-explicacion {
-  background-color: var(--card-bg); // Usará el color de la tarjeta
-  border: 1px solid var(--card-border); // Usará el borde de la tarjeta
-  border-left: 4px solid $PRIMARY-PURPLE; // Una barra de color para destacarlo
-  border-radius: $border-radius-sm;
-  padding: 1rem 1.2rem;
-  margin-bottom: 1.5rem; // Espacio antes de la gráfica
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--text-color-secondary); // Texto secundario
 
-  p {
-    margin: 0; // Quitar margen por defecto del párrafo
-  }
-  
-  strong {
-    color: var(--text-color-primary); // Para resaltar el texto importante
-  }
-}
 /* ------------------------------------
  * LAYOUT GENERAL DE LA VISTA
  * ------------------------------------ */
-// Nota: .plataforma-layout y .simulador-principal-contenido son las clases raíz
-// que manejan el fondo general.
 
 .simulador-grid {
+  /* MEJORA: Controles más estrechos para dar más espacio a la gráfica (350px) */
   display: grid;
-  grid-template-columns: 380px 1fr; /* Controles un poco más anchos (380px) */
+  grid-template-columns: 350px 1fr; 
   gap: 2rem;
-  margin-top: 1.5rem; // Espacio entre lotes seleccionados y la rejilla principal
+  margin-top: 1.5rem; 
 }
 
 /* ------------------------------------
@@ -417,14 +399,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background-color: var(--card-bg); /* Usa la variable de tema */
-  border: 1px solid var(--card-border); /* Usa la variable de tema */
+  background-color: var(--card-bg); 
+  border: 1px solid var(--card-border); 
   border-radius: $border-radius;
   padding: 1rem 1.5rem;
   box-shadow: $box-shadow-sm;
-  color: var(--text-color-primary); /* Usa la variable de tema */
+  color: var(--text-color-primary); 
   font-size: 1.05rem;
-  margin-bottom: 1rem; /* Espacio antes de la cuadrícula principal */
+  margin-bottom: 1rem; 
 
   &.no-lotes {
       background-color: rgba($WARNING-COLOR, 0.1);
@@ -444,7 +426,7 @@ export default {
   }
   .lotes-lista {
     font-weight: 400;
-    color: var(--text-color-secondary); /* Usa la variable de tema */
+    color: var(--text-color-secondary); 
   }
 }
 .boton-ir-gestion {
@@ -466,8 +448,8 @@ export default {
  * PANELES Y CONTROLES
  * ------------------------------------ */
 .gestion-panel {
-  background-color: var(--card-bg); /* Usa la variable de tema */
-  border: 1px solid var(--card-border); /* Usa la variable de tema */
+  background-color: var(--card-bg); 
+  border: 1px solid var(--card-border); 
   border-radius: $border-radius;
   box-shadow: $box-shadow-sm;
   padding: 1.5rem;
@@ -475,10 +457,10 @@ export default {
 }
 
 .panel-controles .panel-titulo {
-  color: var(--text-color-primary); /* Usa la variable de tema */
+  color: var(--text-color-primary); 
   font-size: 1.3rem;
   font-weight: 600;
-  border-bottom: 1px solid var(--card-border); /* Usa la variable de tema */
+  border-bottom: 1px solid var(--card-border); 
   padding-bottom: 0.75rem;
   margin-bottom: 1.5rem;
   display: flex;
@@ -494,17 +476,17 @@ export default {
 .control-grupo {
   margin-bottom: 1.5rem;
   label {
-    display: flex; /* Para alinear el texto y el valor resaltado */
+    display: flex; 
     justify-content: space-between;
     font-weight: 500;
     margin-bottom: 0.5rem;
-    color: var(--text-color-primary); /* Usa la variable de tema */
+    color: var(--text-color-primary); 
     font-size: 0.95rem;
   }
   input[type="range"] {
     width: 100%;
-    height: 8px; // Altura del slider
-    background: var(--input-bg); // Fondo del track del slider, usa la variable de tema
+    height: 8px; 
+    background: var(--input-bg); 
     border-radius: 4px;
     outline: none;
     transition: background 0.2s ease-in-out;
@@ -541,7 +523,7 @@ export default {
 .valor-resaltado {
   font-weight: 700;
   color: $PRIMARY-PURPLE;
-  font-variant-numeric: tabular-nums; /* Para alinear números en ancho fijo */
+  font-variant-numeric: tabular-nums; 
 }
 
 .boton-simular {
@@ -549,7 +531,7 @@ export default {
   padding: 0.8rem 1rem;
   font-weight: 700;
   color: white;
-  background-image: $PURPLE-GRADIENT; /* Usar el gradiente */
+  background-image: $PURPLE-GRADIENT; 
   border-radius: $border-radius-sm;
   border: none;
   transition: all 0.2s;
@@ -557,15 +539,15 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem; /* Más espacio entre icono y texto */
+  gap: 0.75rem; 
   font-size: 1.1rem;
 
   &:hover:not(:disabled) {
     box-shadow: 0 4px 10px rgba($PRIMARY-PURPLE, 0.4);
-    transform: translateY(-3px); /* Efecto 3D sutil */
+    transform: translateY(-3px); 
   }
   &:disabled {
-    background-image: none; /* Quitar gradiente cuando deshabilitado */
+    background-image: none; 
     background-color: $GRAY-COLD;
     cursor: not-allowed;
     opacity: 0.7;
@@ -591,55 +573,55 @@ export default {
 
 .resumen-costos-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr; /* 3 columnas: Base | Simulado | Variación */
-  gap: 1.5rem; /* Más espacio entre tarjetas */
+  grid-template-columns: 1fr 1fr 1.2fr; 
+  gap: 1.5rem; 
 }
 
 .tarjeta-resumen {
-  background-color: var(--card-bg); /* Usa la variable de tema */
+  background-color: var(--card-bg); 
   border-radius: $border-radius;
-  padding: 1.2rem; /* Más padding */
+  padding: 1.2rem; 
   box-shadow: $box-shadow-sm;
   text-align: left;
   transition: background-color 0.3s;
-  border: 1px solid var(--card-border); /* Usa la variable de tema */
-  position: relative; // Para los tooltips
+  border: 1px solid var(--card-border); 
+  position: relative; 
 
   .titulo-resumen {
     font-size: 0.95rem;
-    color: var(--text-color-secondary); /* Usa la variable de tema */
+    color: var(--text-color-secondary); 
     font-weight: 500;
     display: block;
     margin-bottom: 0.4rem;
   }
   .valor-grande {
-    font-size: 2rem; /* Más grande */
+    font-size: 2rem; 
     font-weight: 700;
-    color: var(--color-heading); /* Usa la variable de tema */
+    color: var(--color-heading); 
     line-height: 1.1;
   }
   .leyenda-variacion {
     font-size: 0.85rem;
-    color: var(--text-color-secondary); /* Usa la variable de tema */
-    display: block; // Asegura que esté en su propia línea si hay espacio
+    color: var(--text-color-secondary); 
+    display: block; 
     margin-top: 0.25rem;
   }
 
-  // Estilos de Variación
+  // Estilos de Variación (Negativo = Reducción, Positivo = Aumento)
   &.tarjeta-variacion {
     .valor-grande {
-      font-size: 2.2rem; // Aún más grande para la variación
+      font-size: 2.2rem; 
     }
     
-    &.variacion-negativa { /* Ahorro (Verde) */
-      background-color: rgba($SUCCESS-COLOR, 0.15); /* Menos opaco */
+    &.variacion-negativa { /* Reducción (Verde/Éxito) */
+      background-color: rgba($SUCCESS-COLOR, 0.15); 
       border-color: $SUCCESS-COLOR;
       .valor-grande {
         color: $SUCCESS-COLOR;
       }
     }
-    &.variacion-positiva { /* Gasto Extra (Rojo/Naranja) */
-      background-color: rgba($DANGER-COLOR, 0.15); /* Menos opaco */
+    &.variacion-positiva { /* Aumento (Rojo/Peligro) */
+      background-color: rgba($DANGER-COLOR, 0.15); 
       border-color: $DANGER-COLOR;
       .valor-grande {
         color: $DANGER-COLOR;
@@ -657,44 +639,44 @@ export default {
 }
 
 .grafica-simulador-contenedor {
-  background-color: var(--card-bg); /* Usa la variable de tema */
-  border: 1px solid var(--card-border); /* Usa la variable de tema */
+  background-color: var(--card-bg); 
+  border: 1px solid var(--card-border); 
   border-radius: $border-radius;
   box-shadow: $box-shadow-sm;
   padding: 1.5rem;
     .panel-titulo {
-        color: var(--text-color-primary); /* Usa la variable de tema */
-        font-size: 1.2rem;
-        font-weight: 600;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+      color: var(--text-color-primary); 
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     
-        .info-icon {
+      .info-icon {
         color: $PRIMARY-PURPLE;
         font-size: 1.3rem;
         cursor: pointer;
-        }
+      }
     }
 }
 
 .mensaje-placeholder {
   text-align: center;
-  color: var(--text-color-secondary); /* Usa la variable de tema */
+  color: var(--text-color-secondary); 
   padding: 100px 0;
   font-size: 1.1rem;
 
   i {
     display: block;
-    font-size: 2.5rem; // Ícono más grande
+    font-size: 2.5rem; 
     margin-bottom: 15px;
     color: $GRAY-COLD;
   }
 }
 
 .alerta-error {
-  background-color: rgba($DANGER-COLOR, 0.15); /* Menos opaco */
+  background-color: rgba($DANGER-COLOR, 0.15); 
   color: $DANGER-COLOR;
   border: 1px solid $DANGER-COLOR;
   padding: 1rem 1.5rem;
@@ -723,7 +705,7 @@ export default {
 
 @media (max-width: 768px) {
     .resumen-costos-grid {
-        grid-template-columns: 1fr; /* Una columna en pantallas pequeñas */
+        grid-template-columns: 1fr; 
     }
     .lotes-seleccionados-display {
         flex-direction: column;

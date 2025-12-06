@@ -66,8 +66,7 @@
 </template>
 
 <script>
-// 🚨 Asumo que API_BASE_URL está definida globalmente (main.js)
-// const API_BASE_URL = 'http://127.0.0.1:8001';
+
 
 export default {
   name: 'TarjetasPlataforma',
