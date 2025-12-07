@@ -264,55 +264,39 @@ export default {
       return annualData;
     },
 
-    datosEvolucionPorLote() {
-      if (!this.lotesCargados || this.lotesCargados.length === 0 || !this.tendenciasMensuales || this.tendenciasMensuales.length === 0) {
-        return { labels: [], series: [] };
-      }
+datosEvolucionPorLote() {
+  // Validaciones previas
+  if (!this.tendenciasMensuales || this.tendenciasMensuales.length === 0) {
+    return { labels: [], series: [] };
+  }
 
-      const allPeriodsSet = new Set(); 
-      const seriesDataByLote = {}; 
+  // Extraemos todos los periodos del backend (eje X)
+  const labels = this.tendenciasMensuales.map(item => item.periodo);
 
-      this.lotesCargados.forEach(loteNombre => {
-        seriesDataByLote[loteNombre] = {};
-      });
+  // Mapeamos los valores de la métrica actual
+  const dataValues = this.tendenciasMensuales.map(item => {
+    const valor = item[this.metricaSeleccionada];
+    return (valor !== undefined && valor !== null) ? valor : 0;
+  });
 
-      this.tendenciasMensuales.forEach(item => {
-        const period = item.periodo; 
-        const year = period.substring(0, 4);
-        const relevantLoteName = this.lotesCargados.find(lote => lote.includes(year));
-
-        if (relevantLoteName && seriesDataByLote[relevantLoteName]) {
-          seriesDataByLote[relevantLoteName][period] = {
-            consumo_total_kwh: item.consumo_total_kwh || 0,
-            costo_total: item.costo_total || 0,
-          };
-        }
-        allPeriodsSet.add(period); 
-      });
-
-      const sortedLabels = Array.from(allPeriodsSet).sort();
-
-      const finalEchartsSeries = this.lotesCargados.map(loteName => {
-        const dataForThisLote = sortedLabels.map(periodo => {
-          const dataPoint = seriesDataByLote[loteName]?.[periodo];
-          return dataPoint ? (dataPoint[this.metricaSeleccionada] || 0) : 0; 
-        });
-
-        return {
-          name: `Lote ${loteName}`,
-          data: dataForThisLote,
-          type: 'line',
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 4,
-        };
-      });
-
-      return {
-        labels: sortedLabels,
-        series: finalEchartsSeries,
-      };
-    },
+  // Serie consolidada representando el total de los lotes enviados al backend
+  return {
+    labels: labels,
+    series: [
+      {
+        name: this.lotesCargados.length > 1
+          ? 'Total Seleccionado'
+          : `Lote ${this.lotesCargados[0]}`,
+        data: dataValues,
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+      },
+    ],
+  };
+}
+,
   },
   
   async mounted() {

@@ -4,7 +4,7 @@
       <div class="titles">
         <h5 class="card-title">{{ titulo }}</h5>
         <span class="metric-badge" v-if="metricaSeleccionada">
-          <i class="bi bi-activity"></i> {{ getMetricaTitulo(metricaSeleccionada) }}
+          <i class="bi bi-bar-chart-fill"></i> {{ getMetricaTitulo(metricaSeleccionada) }}
         </span>
       </div>
       <button class="btn-download" @click="descargarGrafico" title="Descargar imagen HD">
@@ -27,7 +27,7 @@
 <script>
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart } from 'echarts/charts';
+import { BarChart } from 'echarts/charts';
 import {
   GridComponent,
   TooltipComponent,
@@ -37,13 +37,11 @@ import {
   MarkPointComponent,
   ToolboxComponent
 } from 'echarts/components';
-import * as echarts from 'echarts/core';
 import VChart from 'vue-echarts';
 
-// Registro de componentes necesarios de ECharts
 use([
   CanvasRenderer,
-  LineChart,
+  BarChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -95,26 +93,9 @@ export default {
       return units[key] || '';
     },
 
-    // Utilidad para generar colores con transparencia para los gradientes
-    hexToRgba(hex, alpha) {
-        let r = 0, g = 0, b = 0;
-        // Soporte para hex corto (#FFF) y largo (#FFFFFF)
-        if (hex.length === 4) {
-            r = parseInt("0x" + hex[1] + hex[1]);
-            g = parseInt("0x" + hex[2] + hex[2]);
-            b = parseInt("0x" + hex[3] + hex[3]);
-        } else if (hex.length === 7) {
-            r = parseInt("0x" + hex[1] + hex[2]);
-            g = parseInt("0x" + hex[3] + hex[4]);
-            b = parseInt("0x" + hex[5] + hex[6]);
-        }
-        return `rgba(${r},${g},${b},${alpha})`;
-    },
-
     crearChartOption() {
       const { labels, series } = this.datosEvolucion;
 
-      // Validación básica de datos
       if (!labels || labels.length === 0 || !series || series.length === 0) {
         this.chartOption = {
           title: {
@@ -129,50 +110,46 @@ export default {
 
       const unit = this.getMetricaUnidad(this.metricaSeleccionada);
       const metricTitle = this.getMetricaTitulo(this.metricaSeleccionada);
-      
-      // Configuración de colores según el tema (Claro/Oscuro)
       const textColor = this.isDark ? '#E4E6EB' : '#333333';
       const axisColor = this.isDark ? '#A0A0A0' : '#666666';
       const splitLineColor = this.isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
-      // Paleta de colores distintivos para las series
+      // 🟢 1. Definimos una paleta de colores vibrantes
       const colores = [
         '#8A2BE2', '#00E676', '#FFD600', '#2979FF', 
-        '#FF1744', '#AA00FF', '#00B0FF', '#F50057'
+        '#FF1744', '#AA00FF', '#00B0FF', '#F50057',
+        '#00BCD4', '#FF9800'
       ];
 
       this.chartOption = {
         backgroundColor: 'transparent',
-        color: colores,
-
-        // Tooltip avanzado
+        
         tooltip: {
           trigger: 'axis',
+          axisPointer: { type: 'shadow' },
           backgroundColor: this.isDark ? 'rgba(30, 30, 40, 0.95)' : 'rgba(255, 255, 255, 0.95)',
           borderColor: this.isDark ? '#444' : '#DDD',
           textStyle: { color: textColor },
           formatter: (params) => {
-            let tooltip = `<div style="font-weight:bold; margin-bottom:5px; border-bottom:1px solid ${axisColor}; padding-bottom:3px;">${params[0].name}</div>`;
-            params.forEach(item => {
-              // Solo mostrar en tooltip si el valor es válido (no null)
-              if (item.value !== null && item.value !== undefined) {
-                let val = Number(item.value).toLocaleString('es-MX', { maximumFractionDigits: 2 });
-                tooltip += `<div style="display:flex; justify-content:space-between; gap:15px; align-items:center;">
-                  <span>${item.marker} ${item.seriesName}</span>
-                  <span style="font-weight:bold">${val}${unit}</span>
-                </div>`;
-              }
-            });
-            return tooltip;
+            // params[0] es el primer (y único) punto de dato en esa posición X
+            const p = params[0];
+            const name = p.name; // Ej: "2022-01"
+            const val = Number(p.value).toLocaleString('es-MX', { maximumFractionDigits: 2 });
+            // El color del punto viene dinámico
+            const colorDot = `<span style="display:inline-block;margin-right:5px;width:10px;height:10px;background-color:${p.color};border-radius:2px;"></span>`;
+            
+            return `
+              <div style="font-weight:bold; margin-bottom:5px; border-bottom:1px solid ${axisColor}; padding-bottom:3px;">${name}</div>
+              <div style="display:flex; justify-content:space-between; gap:15px; align-items:center;">
+                 <span>${colorDot} ${p.seriesName}</span>
+                 <span style="font-weight:bold">${val}${unit}</span>
+              </div>
+            `;
           }
         },
 
         legend: {
-          data: series.map(s => s.name),
-          top: 0,
-          type: 'scroll', // Permite scroll si hay muchas series
-          icon: 'roundRect',
-          textStyle: { color: textColor }
+          show: false, // Ocultamos leyenda estándar porque los colores varían por barra, no por serie
         },
 
         grid: {
@@ -181,7 +158,6 @@ export default {
 
         xAxis: {
           type: 'category',
-          boundaryGap: false, // Las líneas empiezan en el borde
           data: labels,
           axisLabel: { color: textColor, fontWeight: 'bold' },
           axisLine: { lineStyle: { color: axisColor } }
@@ -197,52 +173,67 @@ export default {
         },
 
         dataZoom: [
-          { type: 'inside', start: 0, end: 100 }, // Zoom con rueda del mouse
-          { type: 'slider', show: true, bottom: 5, height: 15, borderColor: 'transparent', handleStyle: { color: '#8A2BE2' } }
+          { type: 'inside', start: 0, end: 100 },
+          { 
+            type: 'slider', 
+            show: true, 
+            bottom: 5, 
+            height: 15, 
+            borderColor: 'transparent', 
+            handleStyle: { color: '#8A2BE2' },
+            textStyle: { color: axisColor } 
+          }
         ],
 
-        // Configuración de las series
-        series: series.map((s, index) => {
-            const colorBase = colores[index % colores.length];
-            
-            // TRANSFORMACIÓN CRÍTICA: Convertir 0 a null
-            // Esto evita que la gráfica dibuje una línea cayendo a cero cuando no hay datos.
+        series: series.map((s) => {
             const dataLimpia = s.data.map(v => (v === 0 || v === '0') ? null : v);
 
             return {
                 name: s.name,
-                type: 'line',
+                type: 'bar',
                 data: dataLimpia,
+                barMaxWidth: 60,
                 
-                connectNulls: false, // IMPORTANTE: No conectar puntos a través de nulls
-                smooth: 0.4, // Suavizado de línea para estética moderna
-                symbol: 'circle',
-                symbolSize: 6,
-                showSymbol: false, // Solo muestra puntos al pasar el mouse
-                
-                lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5 },
-                
-                // Área con degradado
-                areaStyle: {
-                    opacity: 0.3,
-                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                        { offset: 0, color: this.hexToRgba(colorBase, 0.5) },
-                        { offset: 1, color: this.hexToRgba(colorBase, 0.0) }
-                    ])
+                // 🟢 2. Lógica de Colores Dinámicos
+                itemStyle: {
+                    borderRadius: [4, 4, 0, 0],
+                    // Función que asigna color basado en el AÑO del label
+                    color: (params) => {
+                        // params.name es "2022-01", "2025-05", etc.
+                        if (!params.name) return colores[0];
+                        
+                        // Extraemos el año (primeros 4 caracteres)
+                        const year = params.name.substring(0, 4);
+                        
+                        // Convertimos el año a número para obtener un índice
+                        const yearNum = parseInt(year);
+                        
+                        // Usamos módulo para ciclar colores si hay muchos años
+                        // Esto garantiza que todo "2022" sea de un color y todo "2025" de otro
+                        if (!isNaN(yearNum)) {
+                           // Truco para asignar índices fijos: 
+                           // 2022 -> index X, 2025 -> index Y
+                           return colores[yearNum % colores.length];
+                        }
+                        return colores[0];
+                    }
                 },
 
-                // Marcador automático para el valor MÁXIMO
                 markPoint: {
                     data: [
-                        { type: 'max', name: 'Máx', label: { color: '#fff', fontSize: 10 } }
+                        { type: 'max', name: 'Máx', label: { color: '#fff', fontSize: 10, offset: [0, -2] } }
                     ],
-                    itemStyle: { color: colorBase }
+                    symbolSize: 35,
+                    symbolOffset: [0, -15]
                 },
 
-                // Efecto de enfoque: apaga las otras series al hacer hover
                 emphasis: {
                     focus: 'series',
-                    scale: true
+                    itemStyle: {
+                        // Al hacer hover, oscurecemos ligeramente
+                        shadowBlur: 10,
+                        shadowColor: 'rgba(0,0,0,0.3)'
+                    }
                 }
             };
         })
@@ -253,18 +244,14 @@ export default {
       const chartInstance = this.$refs.evolutionChart;
       if (!chartInstance) return;
 
-      // Fondo sólido según el tema para que la imagen exportada sea visible
       const bgColor = this.isDark ? '#2B2B40' : '#FFFFFF';
-
       const url = chartInstance.getDataURL({
-        type: 'png', 
-        pixelRatio: 2, // Alta resolución
-        backgroundColor: bgColor
+        type: 'png', pixelRatio: 2, backgroundColor: bgColor
       });
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Evolucion_Lotes_${new Date().toISOString().slice(0,10)}.png`;
+      link.download = `Evolucion_Barras_Lotes_${new Date().toISOString().slice(0,10)}.png`;
       link.click();
     }
   },
@@ -308,7 +295,6 @@ export default {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      
       i { color: #8A2BE2; }
     }
   }
@@ -332,7 +318,6 @@ export default {
       background-color: rgba(138, 43, 226, 0.05);
       transform: translateY(-2px);
     }
-    
     i { font-size: 1rem; }
   }
 }
