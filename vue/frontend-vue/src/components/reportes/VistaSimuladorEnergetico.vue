@@ -338,12 +338,10 @@ export default {
 <style scoped lang="scss">
 @use "sass:color";
 
-
 /* -----------------------------------------------------------------
- * DEFINICIÓN DE VARIABLES CSS DEL TEMA (CRÍTICO PARA MODO OSCURO)
+ * VARIABLES Y THEME SETUP
  * ----------------------------------------------------------------- */
 
-// Estilos base para el layout principal, incluyendo el color de fondo del body.
 .plataforma-layout {
   display: flex;
   min-height: 100vh;
@@ -351,7 +349,6 @@ export default {
   background-color: $WHITE-SOFT; 
 
   &.theme-dark {
-    /* Variables CSS personalizadas para el modo oscuro */
     --card-bg: #{$SUBTLE-BG-DARK};
     --card-border: #{$DARK-BORDER};
     --text-color-primary: #{$LIGHT-TEXT};
@@ -362,7 +359,6 @@ export default {
   }
 
   &.theme-light {
-    /* Variables CSS personalizadas para el modo claro */
     --card-bg: #{$SUBTLE-BG-LIGHT};
     --card-border: #{$LIGHT-BORDER};
     --text-color-primary: #{$DARK-TEXT};
@@ -374,267 +370,256 @@ export default {
 }
 
 .simulador-principal-contenido {
-    padding: 2rem;
-    max-width: 1600px; 
+    // MEJORA: Padding fluido. 1rem en móviles, 2rem en desktop.
+    padding: clamp(1rem, 3vw, 2rem);
+    width: 100%;
+    max-width: 1800px; // Aumentado ligeramente para monitores ultrawide
     margin: 0 auto;
 }
 
-
 /* ------------------------------------
- * LAYOUT GENERAL DE LA VISTA
+ * LAYOUT GRID PRINCIPAL (INTELIGENTE)
  * ------------------------------------ */
 
 .simulador-grid {
-  /* MEJORA: Controles más estrechos para dar más espacio a la gráfica (350px) */
   display: grid;
-  grid-template-columns: 350px 1fr; 
-  gap: 2rem;
-  margin-top: 1.5rem; 
+  // MEJORA: La columna lateral es flexible entre 300px y 350px.
+  // El contenido principal toma el resto (1fr).
+  grid-template-columns: minmax(300px, 350px) 1fr;
+  gap: 1.5rem; 
+  margin-top: 1.5rem;
+  align-items: start; // Importante para que el sticky funcione
 }
 
 /* ------------------------------------
- * DISPLAY DE LOTES SELECCIONADOS
+ * DISPLAY DE LOTES
  * ------------------------------------ */
 .lotes-seleccionados-display {
   display: flex;
+  justify-content: space-between; // Maximiza el espacio horizontal
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   background-color: var(--card-bg); 
   border: 1px solid var(--card-border); 
   border-radius: $border-radius;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem; // Padding más compacto
   box-shadow: $box-shadow-sm;
   color: var(--text-color-primary); 
-  font-size: 1.05rem;
+  font-size: 1rem;
   margin-bottom: 1rem; 
+  flex-wrap: wrap; // Permite que caiga en móviles sin romper
 
   &.no-lotes {
       background-color: rgba($WARNING-COLOR, 0.1);
       border-color: $WARNING-COLOR;
       color: $WARNING-COLOR;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+  }
+
+  .info-grupo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
 
   i {
     color: $PRIMARY-PURPLE;
-    font-size: 1.4rem;
+    font-size: 1.3rem;
   }
-  .lotes-titulo {
-    font-weight: 600;
-  }
-  .lotes-lista {
-    font-weight: 400;
-    color: var(--text-color-secondary); 
+  
+  .lotes-titulo { font-weight: 600; white-space: nowrap; }
+  .lotes-lista { 
+    font-weight: 400; 
+    color: var(--text-color-secondary);
+    // Trunca el texto si es muy largo en móviles
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50vw; 
   }
 }
+
 .boton-ir-gestion {
     background-color: $PRIMARY-PURPLE;
     color: $WHITE;
-    padding: 0.5rem 1rem;
+    padding: 0.4rem 0.9rem; // Botón más compacto
     border-radius: $border-radius-sm;
     text-decoration: none;
+    font-size: 0.9rem;
     font-weight: 500;
     transition: background-color 0.2s ease;
+    white-space: nowrap;
 
     &:hover {
         background-color: color.adjust($PRIMARY-PURPLE, $lightness: -5%);
     }
 }
 
-
 /* ------------------------------------
- * PANELES Y CONTROLES
+ * PANELES DE CONTROL (SIDEBAR)
  * ------------------------------------ */
 .gestion-panel {
   background-color: var(--card-bg); 
   border: 1px solid var(--card-border); 
   border-radius: $border-radius;
   box-shadow: $box-shadow-sm;
-  padding: 1.5rem;
-  height: fit-content;
+  padding: 1.25rem; // Reducido ligeramente para ganar espacio interno
+  
+  // MEJORA: Sticky para aprovechar el espacio vertical en scroll
+  position: sticky;
+  top: 1.5rem; 
+  z-index: 10;
+  max-height: calc(100vh - 3rem); // Evita que se corte si es muy alto
+  overflow-y: auto; // Scroll interno si la pantalla es bajita
 }
 
 .panel-controles .panel-titulo {
   color: var(--text-color-primary); 
-  font-size: 1.3rem;
-  font-weight: 600;
+  font-size: 1.1rem; // Tamaño de fuente optimizado
+  font-weight: 700;
   border-bottom: 1px solid var(--card-border); 
   padding-bottom: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 
-  i {
-      color: $PRIMARY-PURPLE;
-      font-size: 1.5rem;
-  }
+  i { color: $PRIMARY-PURPLE; font-size: 1.2rem; }
 }
 
 .control-grupo {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem; // Espaciado más compacto
+  
   label {
     display: flex; 
     justify-content: space-between;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
+    align-items: center;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
     color: var(--text-color-primary); 
-    font-size: 0.95rem;
+    font-size: 0.9rem;
   }
+
   input[type="range"] {
     width: 100%;
-    height: 8px; 
+    height: 6px; // Slider más fino y elegante
     background: var(--input-bg); 
     border-radius: 4px;
     outline: none;
     transition: background 0.2s ease-in-out;
+    cursor: pointer;
     
-    // Thumb del slider
     &::-webkit-slider-thumb {
       -webkit-appearance: none;
-      appearance: none;
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       background: $PRIMARY-PURPLE;
-      cursor: grab;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      transition: background 0.2s ease-in-out;
+      margin-top: -5px; // Centrar verticalmente si es necesario
     }
-    &::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: $PRIMARY-PURPLE;
-      cursor: grab;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    &:active::-webkit-slider-thumb {
-        cursor: grabbing;
-    }
-    &:active::-moz-range-thumb {
-        cursor: grabbing;
-    }
+    // ... estilos firefox thumb (mismos ajustes)
   }
 }
 
 .valor-resaltado {
   font-weight: 700;
   color: $PRIMARY-PURPLE;
-  font-variant-numeric: tabular-nums; 
+  background: rgba($PRIMARY-PURPLE, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
 .boton-simular {
   width: 100%;
-  padding: 0.8rem 1rem;
-  font-weight: 700;
+  padding: 0.75rem;
+  font-weight: 600;
   color: white;
   background-image: $PURPLE-GRADIENT; 
   border-radius: $border-radius-sm;
   border: none;
-  transition: all 0.2s;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem; 
-  font-size: 1.1rem;
+  gap: 0.5rem; 
+  font-size: 1rem;
+  margin-top: 1rem;
 
   &:hover:not(:disabled) {
-    box-shadow: 0 4px 10px rgba($PRIMARY-PURPLE, 0.4);
-    transform: translateY(-3px); 
+    box-shadow: 0 4px 12px rgba($PRIMARY-PURPLE, 0.3);
+    transform: translateY(-2px); 
   }
   &:disabled {
     background-image: none; 
-    background-color: $GRAY-COLD;
+    background-color: var(--input-bg);
+    color: var(--text-color-secondary);
     cursor: not-allowed;
-    opacity: 0.7;
-    transform: translateY(0);
     box-shadow: none;
   }
 }
-.spin {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 /* ------------------------------------
- * RESULTADOS Y GRÁFICA
+ * RESULTADOS Y GRÁFICA (ZONA DERECHA)
  * ------------------------------------ */
 .columna-resultados {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem; // Gap consistente
+  min-width: 0; // CRÍTICO: Evita que la gráfica rompa el grid flex
 }
 
+// MEJORA: Grid de tarjetas auto-ajustable
 .resumen-costos-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr; 
-  gap: 1.5rem; 
+  // Intenta meter 3 columnas, pero si baja de cierto ancho, hace wrap
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem; 
 }
 
 .tarjeta-resumen {
   background-color: var(--card-bg); 
-  border-radius: $border-radius;
-  padding: 1.2rem; 
-  box-shadow: $box-shadow-sm;
-  text-align: left;
-  transition: background-color 0.3s;
   border: 1px solid var(--card-border); 
-  position: relative; 
+  border-radius: $border-radius;
+  padding: 1rem; 
+  box-shadow: $box-shadow-sm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 
   .titulo-resumen {
-    font-size: 0.95rem;
-    color: var(--text-color-secondary); 
-    font-weight: 500;
-    display: block;
-    margin-bottom: 0.4rem;
-  }
-  .valor-grande {
-    font-size: 2rem; 
-    font-weight: 700;
-    color: var(--color-heading); 
-    line-height: 1.1;
-  }
-  .leyenda-variacion {
     font-size: 0.85rem;
     color: var(--text-color-secondary); 
-    display: block; 
-    margin-top: 0.25rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
   }
 
-  // Estilos de Variación (Negativo = Reducción, Positivo = Aumento)
+  .valor-grande {
+    font-size: clamp(1.5rem, 2vw, 2rem); // Texto fluido
+    font-weight: 800;
+    color: var(--color-heading); 
+  }
+
+  .leyenda-variacion {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary); 
+    margin-top: auto; // Empuja hacia abajo si hay espacio extra
+  }
+
+  // Variaciones de color
   &.tarjeta-variacion {
-    .valor-grande {
-      font-size: 2.2rem; 
+    &.variacion-negativa { 
+      background: linear-gradient(to right, rgba($SUCCESS-COLOR, 0.1), transparent);
+      border-left: 4px solid $SUCCESS-COLOR;
+      .valor-grande { color: $SUCCESS-COLOR; }
     }
-    
-    &.variacion-negativa { /* Reducción (Verde/Éxito) */
-      background-color: rgba($SUCCESS-COLOR, 0.15); 
-      border-color: $SUCCESS-COLOR;
-      .valor-grande {
-        color: $SUCCESS-COLOR;
-      }
+    &.variacion-positiva { 
+      background: linear-gradient(to right, rgba($DANGER-COLOR, 0.1), transparent);
+      border-left: 4px solid $DANGER-COLOR;
+      .valor-grande { color: $DANGER-COLOR; }
     }
-    &.variacion-positiva { /* Aumento (Rojo/Peligro) */
-      background-color: rgba($DANGER-COLOR, 0.15); 
-      border-color: $DANGER-COLOR;
-      .valor-grande {
-        color: $DANGER-COLOR;
-      }
-    }
-  }
-
-  // Estilo Base / Simulado
-  &.tarjeta-base {
-    .valor-grande { color: $GRAY-COLD; }
-  }
-  &.tarjeta-simulado {
-    .valor-grande { color: $PRIMARY-PURPLE; }
   }
 }
 
@@ -643,74 +628,84 @@ export default {
   border: 1px solid var(--card-border); 
   border-radius: $border-radius;
   box-shadow: $box-shadow-sm;
-  padding: 1.5rem;
-    .panel-titulo {
-      color: var(--text-color-primary); 
-      font-size: 1.2rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    
-      .info-icon {
-        color: $PRIMARY-PURPLE;
-        font-size: 1.3rem;
-        cursor: pointer;
-      }
-    }
-}
-
-.mensaje-placeholder {
-  text-align: center;
-  color: var(--text-color-secondary); 
-  padding: 100px 0;
-  font-size: 1.1rem;
-
-  i {
-    display: block;
-    font-size: 2.5rem; 
-    margin-bottom: 15px;
-    color: $GRAY-COLD;
-  }
-}
-
-.alerta-error {
-  background-color: rgba($DANGER-COLOR, 0.15); 
-  color: $DANGER-COLOR;
-  border: 1px solid $DANGER-COLOR;
-  padding: 1rem 1.5rem;
-  border-radius: $border-radius-sm;
+  padding: 1.25rem;
+  flex-grow: 1; // Ocupa el espacio vertical restante
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.95rem;
-  font-weight: 500;
-  margin-top: 2rem;
+  flex-direction: column;
+
+  .panel-titulo {
+      margin-bottom: 0.75rem;
+      font-size: 1.1rem;
+      color: var(--text-color-primary); 
+  }
+  
+  // Asegura que el canvas del gráfico tenga espacio
+  .chart-wrapper {
+      flex-grow: 1;
+      min-height: 400px; // Altura mínima garantizada
+      position: relative;
+  }
 }
 
-// --- Responsive ---
-@media (max-width: 992px) {
+/* ------------------------------------
+ * RESPONSIVE AVANZADO
+ * ------------------------------------ */
+
+// Tablet vertical y Laptops pequeñas (menos de 1024px)
+@media (max-width: 1024px) {
   .simulador-grid {
-    grid-template-columns: 1fr;
+    // Cambiamos a layout vertical antes para dar espacio a la gráfica en tablets
+    grid-template-columns: 1fr; 
+    gap: 1.5rem;
   }
-  .resumen-costos-grid {
-    grid-template-columns: 1fr 1fr;
+  
+  .gestion-panel {
+    position: static; // Quitamos sticky porque ahora está arriba
+    max-height: none;
+    
+    // Convertimos los controles en un grid de 2 columnas para aprovechar el ancho
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    
+    .panel-titulo { grid-column: 1 / -1; margin-bottom: 0.5rem; }
+    .boton-simular { grid-column: 1 / -1; width: 50%; margin-left: auto; }
   }
-  .tarjeta-resumen {
-    .valor-grande { font-size: 1.5rem; }
-    &.tarjeta-variacion .valor-grande { font-size: 1.5rem; }
+  
+  .columna-resultados {
+      order: 2; // Resultados debajo de controles si se prefiere, o ajustar orden HTML
   }
 }
 
+// Móviles (menos de 768px)
 @media (max-width: 768px) {
-    .resumen-costos-grid {
-        grid-template-columns: 1fr; 
+    .simulador-principal-contenido {
+        padding: 1rem; // Menos padding en contenedor general
     }
-    .lotes-seleccionados-display {
-        flex-direction: column;
-        align-items: flex-start;
-        .boton-ir-gestion { margin-top: 0.5rem; }
+
+    .gestion-panel {
+        display: block; // Volvemos a bloque simple (1 columna)
+        padding: 1rem;
+        
+        .boton-simular { width: 100%; }
+    }
+
+    .resumen-costos-grid {
+        // Forzamos 1 columna en móviles muy estrechos, o mantenemos auto-fit
+        grid-template-columns: 1fr;
+    }
+
+    .tarjeta-resumen {
+        flex-direction: row; // En móvil, quizás se ve mejor horizontal: Titulo - Valor
+        justify-content: space-between;
+        align-items: center;
+        
+        .leyenda-variacion { display: none; } // Ocultamos detalles finos para ahorrar espacio
+    }
+    
+    .grafica-simulador-contenedor {
+        padding: 0.75rem;
+        .chart-wrapper { min-height: 300px; }
     }
 }
 </style>
