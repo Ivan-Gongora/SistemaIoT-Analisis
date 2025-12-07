@@ -1,8 +1,25 @@
 <template>
-  <div class="card chart-card mt-4" :class="{ 'theme-dark': isDark }">
-    <div class="card-body">
-      <h5 class="card-title">{{ titulo }}</h5>
-      <v-chart class="chart" :option="chartOption" autoresize />
+  <div class="chart-card" :class="{ 'theme-dark': isDark }">
+    <div class="card-header-actions">
+      <div class="titles">
+        <h5 class="card-title">{{ titulo }}</h5>
+        <span class="metric-badge" v-if="metricaSeleccionada">
+          <i class="bi bi-activity"></i> {{ getMetricaTitulo(metricaSeleccionada) }}
+        </span>
+      </div>
+      <button class="btn-download" @click="descargarGrafico" title="Descargar imagen HD">
+        <i class="bi bi-camera"></i>
+      </button>
+    </div>
+    
+    <div class="chart-container">
+      <v-chart 
+        ref="evolutionChart" 
+        class="chart" 
+        :option="chartOption" 
+        autoresize 
+        :style="{ height: '100%', minHeight: '450px' }"
+      />
     </div>
   </div>
 </template>
@@ -12,27 +29,43 @@ import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import {
-  GridComponent, TooltipComponent, LegendComponent, DataZoomComponent,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+  MarkPointComponent,
+  ToolboxComponent
 } from 'echarts/components';
+import * as echarts from 'echarts/core';
 import VChart from 'vue-echarts';
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent]);
+// Registro de componentes necesarios de ECharts
+use([
+  CanvasRenderer,
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+  MarkPointComponent,
+  ToolboxComponent
+]);
 
 export default {
   name: 'GraficoEvolucionSeries',
   components: { VChart },
   props: {
-    titulo: String,
-    // La estructura de datos esperada de `datosEvolucionPorLote`
-    datosEvolucion: { 
-      type: Object, // { labels: string[], series: EChartsSeriesOption[] }
-      required: true,
-    },
-    metricaSeleccionada: String, // Para personalizar el eje Y y tooltips
-    isDark: Boolean,
+    titulo: { type: String, default: 'Evolución Histórica' },
+    datosEvolucion: { type: Object, required: true },
+    metricaSeleccionada: { type: String, default: 'consumo_total_kwh' },
+    isDark: { type: Boolean, default: false },
   },
   data() {
-    return { chartOption: {} };
+    return {
+      chartOption: {},
+    };
   },
   watch: {
     datosEvolucion: { handler: 'crearChartOption', deep: true },
@@ -50,7 +83,7 @@ export default {
         'demanda_maxima_kw': 'Demanda Máxima',
         'factor_potencia': 'Factor de Potencia',
       };
-      return titles[key] || key;
+      return titles[key] || 'Valor';
     },
     getMetricaUnidad(key) {
       const units = {
@@ -61,104 +94,252 @@ export default {
       };
       return units[key] || '';
     },
-    
+
+    // Utilidad para generar colores con transparencia para los gradientes
+    hexToRgba(hex, alpha) {
+        let r = 0, g = 0, b = 0;
+        // Soporte para hex corto (#FFF) y largo (#FFFFFF)
+        if (hex.length === 4) {
+            r = parseInt("0x" + hex[1] + hex[1]);
+            g = parseInt("0x" + hex[2] + hex[2]);
+            b = parseInt("0x" + hex[3] + hex[3]);
+        } else if (hex.length === 7) {
+            r = parseInt("0x" + hex[1] + hex[2]);
+            g = parseInt("0x" + hex[3] + hex[4]);
+            b = parseInt("0x" + hex[5] + hex[6]);
+        }
+        return `rgba(${r},${g},${b},${alpha})`;
+    },
+
     crearChartOption() {
       const { labels, series } = this.datosEvolucion;
-      
-      // Manejo de casos sin datos o con pocos datos
-      if (!labels || labels.length < 1) {
-        this.chartOption = { title: { text: 'Seleccione lotes para ver la evolución.', left: 'center', top: 'center' } };
+
+      // Validación básica de datos
+      if (!labels || labels.length === 0 || !series || series.length === 0) {
+        this.chartOption = {
+          title: {
+            text: 'Sin datos disponibles para visualizar',
+            left: 'center',
+            top: 'center',
+            textStyle: { color: this.isDark ? '#AAA' : '#999', fontSize: 14 }
+          }
+        };
         return;
       }
 
       const unit = this.getMetricaUnidad(this.metricaSeleccionada);
       const metricTitle = this.getMetricaTitulo(this.metricaSeleccionada);
+      
+      // Configuración de colores según el tema (Claro/Oscuro)
       const textColor = this.isDark ? '#E4E6EB' : '#333333';
-      const axisColor = this.isDark ? '#99A2AD' : '#555555';
-      const gridLineColor = this.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+      const axisColor = this.isDark ? '#A0A0A0' : '#666666';
+      const splitLineColor = this.isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+
+      // Paleta de colores distintivos para las series
+      const colores = [
+        '#8A2BE2', '#00E676', '#FFD600', '#2979FF', 
+        '#FF1744', '#AA00FF', '#00B0FF', '#F50057'
+      ];
 
       this.chartOption = {
-        color: ['#8A2BE2', '#1ABC9C', '#FFC107', '#E74C3C', '#3498DB', '#9B59B6', '#F1C40F', '#2ECC71'], // Paleta de colores para múltiples series
+        backgroundColor: 'transparent',
+        color: colores,
+
+        // Tooltip avanzado
         tooltip: {
           trigger: 'axis',
-          formatter: (params) => {
-            let tooltipContent = `<b>Periodo: ${params[0].name}</b><br/>`;
-            params.forEach(item => {
-              // Asumimos que el `item.value` de la serie es la `metricaSeleccionada`
-              tooltipContent += `${item.marker} ${item.seriesName}: <b>${item.value.toLocaleString('es-MX', { maximumFractionDigits: 2 })}${unit}</b><br/>`;
-            });
-            return tooltipContent;
-          },
-          backgroundColor: this.isDark ? 'rgba(43,43,64,0.85)' : 'rgba(255,255,255,0.85)',
-          borderColor: this.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          backgroundColor: this.isDark ? 'rgba(30, 30, 40, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          borderColor: this.isDark ? '#444' : '#DDD',
           textStyle: { color: textColor },
+          formatter: (params) => {
+            let tooltip = `<div style="font-weight:bold; margin-bottom:5px; border-bottom:1px solid ${axisColor}; padding-bottom:3px;">${params[0].name}</div>`;
+            params.forEach(item => {
+              // Solo mostrar en tooltip si el valor es válido (no null)
+              if (item.value !== null && item.value !== undefined) {
+                let val = Number(item.value).toLocaleString('es-MX', { maximumFractionDigits: 2 });
+                tooltip += `<div style="display:flex; justify-content:space-between; gap:15px; align-items:center;">
+                  <span>${item.marker} ${item.seriesName}</span>
+                  <span style="font-weight:bold">${val}${unit}</span>
+                </div>`;
+              }
+            });
+            return tooltip;
+          }
         },
+
         legend: {
           data: series.map(s => s.name),
-          textStyle: { color: textColor },
-          top: 30, // Leyenda en la parte superior del gráfico
+          top: 0,
+          type: 'scroll', // Permite scroll si hay muchas series
+          icon: 'roundRect',
+          textStyle: { color: textColor }
         },
+
         grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '15%',
-          top: '20%',
-          containLabel: true,
+          left: '2%', right: '4%', bottom: '10%', top: '15%', containLabel: true
         },
+
         xAxis: {
           type: 'category',
+          boundaryGap: false, // Las líneas empiezan en el borde
           data: labels,
-          boundaryGap: false,
-          axisLabel: { color: axisColor },
-          axisLine: { lineStyle: { color: axisColor } },
-          splitLine: { show: false },
+          axisLabel: { color: textColor, fontWeight: 'bold' },
+          axisLine: { lineStyle: { color: axisColor } }
         },
+
         yAxis: {
           type: 'value',
-          name: `${metricTitle} (${unit.trim()})`,
-          axisLabel: {
-            formatter: `{value}${unit}`,
-            color: axisColor,
-          },
-          axisLine: { lineStyle: { color: axisColor } },
-          splitLine: { lineStyle: { color: gridLineColor } },
+          name: metricTitle,
+          nameTextStyle: { color: axisColor, padding: [0, 0, 0, 20] },
+          axisLabel: { formatter: `{value}`, color: axisColor },
+          axisLine: { show: false },
+          splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
         },
-        series: series, // ECharts recibe directamente el array de series
-        backgroundColor: 'transparent',
+
         dataZoom: [
-          { 
-            type: 'slider', 
-            xAxisIndex: 0, 
-            start: 0, 
-            end: 100, // Inicialmente muestra todo
-            textStyle: { color: axisColor } 
-          },
-          { 
-            type: 'inside', 
-            xAxisIndex: 0, 
-            start: 0, 
-            end: 100 
-          },
+          { type: 'inside', start: 0, end: 100 }, // Zoom con rueda del mouse
+          { type: 'slider', show: true, bottom: 5, height: 15, borderColor: 'transparent', handleStyle: { color: '#8A2BE2' } }
         ],
+
+        // Configuración de las series
+        series: series.map((s, index) => {
+            const colorBase = colores[index % colores.length];
+            
+            // TRANSFORMACIÓN CRÍTICA: Convertir 0 a null
+            // Esto evita que la gráfica dibuje una línea cayendo a cero cuando no hay datos.
+            const dataLimpia = s.data.map(v => (v === 0 || v === '0') ? null : v);
+
+            return {
+                name: s.name,
+                type: 'line',
+                data: dataLimpia,
+                
+                connectNulls: false, // IMPORTANTE: No conectar puntos a través de nulls
+                smooth: 0.4, // Suavizado de línea para estética moderna
+                symbol: 'circle',
+                symbolSize: 6,
+                showSymbol: false, // Solo muestra puntos al pasar el mouse
+                
+                lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5 },
+                
+                // Área con degradado
+                areaStyle: {
+                    opacity: 0.3,
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: this.hexToRgba(colorBase, 0.5) },
+                        { offset: 1, color: this.hexToRgba(colorBase, 0.0) }
+                    ])
+                },
+
+                // Marcador automático para el valor MÁXIMO
+                markPoint: {
+                    data: [
+                        { type: 'max', name: 'Máx', label: { color: '#fff', fontSize: 10 } }
+                    ],
+                    itemStyle: { color: colorBase }
+                },
+
+                // Efecto de enfoque: apaga las otras series al hacer hover
+                emphasis: {
+                    focus: 'series',
+                    scale: true
+                }
+            };
+        })
       };
     },
+
+    descargarGrafico() {
+      const chartInstance = this.$refs.evolutionChart;
+      if (!chartInstance) return;
+
+      // Fondo sólido según el tema para que la imagen exportada sea visible
+      const bgColor = this.isDark ? '#2B2B40' : '#FFFFFF';
+
+      const url = chartInstance.getDataURL({
+        type: 'png', 
+        pixelRatio: 2, // Alta resolución
+        backgroundColor: bgColor
+      });
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Evolucion_Lotes_${new Date().toISOString().slice(0,10)}.png`;
+      link.click();
+    }
   },
 };
 </script>
 
-<style scoped>
-/* Estilos similares a los anteriores, si necesitas: */
+<style scoped lang="scss">
 .chart-card {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
-.chart-card .card-title {
-  text-align: left;
+
+.card-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(150, 150, 150, 0.1);
+
+  .titles {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+
+    .card-title {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: inherit;
+    }
+
+    .metric-badge {
+      font-size: 0.75rem;
+      color: #99A2AD;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      
+      i { color: #8A2BE2; }
+    }
+  }
+
+  .btn-download {
+    background: transparent;
+    border: 1px solid rgba(150, 150, 150, 0.2);
+    color: #99A2AD;
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      color: #8A2BE2;
+      border-color: #8A2BE2;
+      background-color: rgba(138, 43, 226, 0.05);
+      transform: translateY(-2px);
+    }
+    
+    i { font-size: 1rem; }
+  }
 }
-.chart {
+
+.chart-container {
   flex-grow: 1;
-  min-height: 350px; 
-  width: 100%;
+  min-height: 0;
+  position: relative;
 }
 </style>

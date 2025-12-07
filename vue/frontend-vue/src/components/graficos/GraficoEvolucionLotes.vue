@@ -1,9 +1,25 @@
 <template>
-  <div class="card chart-card mt-4" :class="{ 'theme-dark': isDark }">
-    <div class="card-body">
-      <h5 class="card-title">Evolución Histórica de {{ getMetricaTitulo(metricaSeleccionada) }} por Lote</h5>
-      <h6 class="card-subtitle mb-2 text-muted">Datos de {{ datosEvolucion.labels[0] }} a {{ datosEvolucion.labels[datosEvolucion.labels.length - 1] }}</h6>
-      <v-chart class="chart" :option="chartOption" autoresize />
+  <div class="chart-card" :class="{ 'theme-dark': isDark }">
+    <div class="card-header-actions">
+      <div class="titles">
+        <h5 class="card-title">{{ titulo }}</h5>
+        <span class="metric-badge" v-if="metricaSeleccionada">
+          <i class="bi bi-activity"></i> {{ getMetricaTitulo(metricaSeleccionada) }}
+        </span>
+      </div>
+      <button class="btn-download" @click="descargarGrafico" title="Descargar imagen HD">
+        <i class="bi bi-camera"></i>
+      </button>
+    </div>
+    
+    <div class="chart-container">
+      <v-chart 
+        ref="evolutionChart" 
+        class="chart" 
+        :option="chartOption" 
+        autoresize 
+        :style="{ height: '100%', minHeight: '450px' }"
+      />
     </div>
   </div>
 </template>
@@ -13,34 +29,37 @@ import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import {
-  GridComponent, TooltipComponent, LegendComponent, TitleComponent, DataZoomComponent,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent, // 🟢 Importante para el desplazamiento
+  MarkPointComponent,
+  ToolboxComponent
 } from 'echarts/components';
+import * as echarts from 'echarts/core';
 import VChart from 'vue-echarts';
 
-// Registrar los componentes de ECharts que se usarán
 use([
-  CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, DataZoomComponent
+  CanvasRenderer,
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent, // 🟢 Registrar el componente
+  MarkPointComponent,
+  ToolboxComponent
 ]);
 
 export default {
-  name: 'GraficoEvolucionLotes',
-  components: {
-    VChart,
-  },
+  name: 'GraficoEvolucionSeries',
+  components: { VChart },
   props: {
-    // 🎯 Recibe los datos ya preparados para ECharts
-    datosEvolucion: { 
-      type: Object, // { labels: string[], series: EChartsSeriesOption[] }
-      required: true,
-    },
-    metricaSeleccionada: {
-      type: String, // 'consumo_total_kwh', 'costo_total', etc.
-      required: true,
-    },
-    isDark: {
-      type: Boolean,
-      default: false,
-    },
+    titulo: { type: String, default: 'Evolución Histórica' },
+    datosEvolucion: { type: Object, required: true },
+    metricaSeleccionada: { type: String, default: 'consumo_total_kwh' },
+    isDark: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -48,24 +67,22 @@ export default {
     };
   },
   watch: {
-    datosEvolucion: { handler: 'updateChart', deep: true },
-    metricaSeleccionada: 'updateChart',
-    isDark: 'updateChart',
+    datosEvolucion: { handler: 'crearChartOption', deep: true },
+    metricaSeleccionada: 'crearChartOption',
+    isDark: 'crearChartOption',
   },
   mounted() {
-    this.updateChart();
+    this.crearChartOption();
   },
   methods: {
-    // Métodos auxiliares para obtener títulos y unidades
     getMetricaTitulo(key) {
       const titles = {
         'consumo_total_kwh': 'Consumo Eléctrico',
         'costo_total': 'Costo Total',
         'demanda_maxima_kw': 'Demanda Máxima',
         'factor_potencia': 'Factor de Potencia',
-        // Agrega más métricas si tienes
       };
-      return titles[key] || key;
+      return titles[key] || 'Valor';
     },
     getMetricaUnidad(key) {
       const units = {
@@ -73,148 +90,242 @@ export default {
         'costo_total': ' MXN',
         'demanda_maxima_kw': ' kW',
         'factor_potencia': '%',
-        // Agrega más unidades
       };
       return units[key] || '';
     },
 
-    updateChart() {
+    hexToRgba(hex, alpha) {
+        let r = 0, g = 0, b = 0;
+        if (hex.length === 4) {
+            r = parseInt("0x" + hex[1] + hex[1]);
+            g = parseInt("0x" + hex[2] + hex[2]);
+            b = parseInt("0x" + hex[3] + hex[3]);
+        } else if (hex.length === 7) {
+            r = parseInt("0x" + hex[1] + hex[2]);
+            g = parseInt("0x" + hex[3] + hex[4]);
+            b = parseInt("0x" + hex[5] + hex[6]);
+        }
+        return `rgba(${r},${g},${b},${alpha})`;
+    },
+
+    crearChartOption() {
       const { labels, series } = this.datosEvolucion;
-      
-      // Si no hay datos, muestra un gráfico vacío o un mensaje
-      if (!labels || labels.length === 0) {
-        this.chartOption = { title: { text: 'No hay datos para mostrar', left: 'center', top: 'center', textStyle: { color: this.isDark ? '#AAA' : '#555' } } };
+
+      if (!labels || labels.length === 0 || !series || series.length === 0) {
+        this.chartOption = {
+          title: {
+            text: 'Sin datos disponibles',
+            left: 'center',
+            top: 'center',
+            textStyle: { color: this.isDark ? '#AAA' : '#999' }
+          }
+        };
         return;
       }
 
       const unit = this.getMetricaUnidad(this.metricaSeleccionada);
-      const textColor = this.isDark ? '#E4E6EB' : '#333333'; // LIGHT-TEXT vs DARK-TEXT
-      const axisColor = this.isDark ? '#99A2AD' : '#555555'; // GRAY-COLD
-      const gridLineColor = this.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      
+      const metricTitle = this.getMetricaTitulo(this.metricaSeleccionada);
+      const textColor = this.isDark ? '#E4E6EB' : '#333333';
+      const axisColor = this.isDark ? '#A0A0A0' : '#666666';
+      const splitLineColor = this.isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+
+      const colores = [
+        '#8A2BE2', '#00E676', '#FFD600', '#2979FF', 
+        '#FF1744', '#AA00FF', '#00B0FF', '#F50057'
+      ];
+
       this.chartOption = {
-        title: {
-          show: false, // El título se maneja en el template Vue
-        },
+        backgroundColor: 'transparent',
+        color: colores,
+
         tooltip: {
           trigger: 'axis',
+          backgroundColor: this.isDark ? 'rgba(30, 30, 40, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          borderColor: this.isDark ? '#444' : '#DDD',
+          textStyle: { color: textColor },
           formatter: (params) => {
-            let tooltipContent = `${params[0].name}<br/>`; // Muestra la fecha (ej: 2021-01)
+            let tooltip = `<div style="font-weight:bold; margin-bottom:5px; border-bottom:1px solid ${axisColor}">${params[0].name}</div>`;
             params.forEach(item => {
-              tooltipContent += `${item.marker} ${item.seriesName}: ${item.value.toLocaleString('es-MX')}${unit}<br/>`;
+              if (item.value !== null && item.value !== undefined) {
+                let val = Number(item.value).toLocaleString('es-MX', { maximumFractionDigits: 2 });
+                tooltip += `<div style="display:flex; justify-content:space-between; gap:15px">
+                  <span>${item.marker} ${item.seriesName}</span>
+                  <span style="font-weight:bold">${val}${unit}</span>
+                </div>`;
+              }
             });
-            return tooltipContent;
-          },
-          backgroundColor: this.isDark ? 'rgba(43,43,64,0.85)' : 'rgba(255,255,255,0.85)',
-          borderColor: this.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-          textStyle: {
-            color: textColor,
-          },
+            return tooltip;
+          }
         },
+
         legend: {
           data: series.map(s => s.name),
-          textStyle: { color: textColor },
-          top: 'bottom',
-          padding: [10, 0, 0, 0], // Pequeño padding para no pegar al borde
+          top: 0,
+          type: 'scroll',
+          icon: 'roundRect',
+          textStyle: { color: textColor }
         },
+
         grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '15%', // Deja espacio para la leyenda y el dataZoom
-          containLabel: true,
+          left: '2%', right: '4%', bottom: '15%', top: '15%', containLabel: true
         },
+
         xAxis: {
           type: 'category',
-          data: labels, // Todas las fechas de la línea de tiempo
           boundaryGap: false,
-          axisLine: { lineStyle: { color: axisColor } },
-          axisLabel: { color: axisColor },
-          splitLine: { show: false }, // No mostrar líneas de división verticales
+          data: labels,
+          axisLabel: { color: textColor, fontWeight: 'bold' },
+          axisLine: { lineStyle: { color: axisColor } }
         },
+
         yAxis: {
           type: 'value',
-          name: `${this.getMetricaTitulo(this.metricaSeleccionada)} (${unit.trim()})`,
-          axisLine: { lineStyle: { color: axisColor } },
-          axisLabel: {
-            formatter: `{value}${unit}`,
-            color: axisColor,
-          },
-          splitLine: { lineStyle: { color: gridLineColor } }, // Líneas de división horizontales
+          name: metricTitle,
+          nameTextStyle: { color: axisColor, padding: [0, 0, 0, 20] },
+          axisLabel: { formatter: `{value}`, color: axisColor },
+          axisLine: { show: false },
+          splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
         },
-        series: series, // Aquí se pasan todas las series (una por lote)
-        backgroundColor: 'transparent',
-        // DataZoom para permitir navegación en la línea de tiempo larga
+
+        // 🟢 DATAZOOM AGREGADO AQUÍ
         dataZoom: [
           {
-            type: 'slider', // Barra de desplazamiento para zoom
-            xAxisIndex: 0,
-            filterMode: 'filter',
-            startValue: labels[labels.length - 12], // Muestra los últimos 12 meses por defecto
-            endValue: labels[labels.length - 1],
-            textStyle: { color: axisColor },
+            type: 'slider', // Barra inferior visible
+            show: true,
+            xAxisIndex: [0],
+            start: 0, // Porcentaje inicial (0 = principio)
+            end: 100, // Porcentaje final (100 = todo el rango)
+            bottom: 5,
+            height: 20,
+            borderColor: 'transparent',
+            handleStyle: { color: '#8A2BE2' },
+            textStyle: { color: axisColor }
           },
           {
-            type: 'inside', // Zoom con rueda del ratón
-            xAxisIndex: 0,
-            filterMode: 'filter',
-          },
+            type: 'inside', // Zoom con rueda del mouse
+            xAxisIndex: [0],
+            start: 0,
+            end: 100
+          }
         ],
+
+        series: series.map((s, index) => {
+            const colorBase = colores[index % colores.length];
+            const dataLimpia = s.data.map(v => (v === 0 || v === '0') ? null : v);
+
+            return {
+                name: s.name,
+                type: 'line',
+                data: dataLimpia,
+                connectNulls: true, // Conectar puntos lejanos
+                smooth: 0.4, 
+                symbol: 'circle',
+                symbolSize: 6,
+                showSymbol: false, 
+                lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5 },
+                areaStyle: {
+                    opacity: 0.3,
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: this.hexToRgba(colorBase, 0.5) },
+                        { offset: 1, color: this.hexToRgba(colorBase, 0.0) }
+                    ])
+                },
+                markPoint: {
+                    data: [ { type: 'max', name: 'Máx', label: { color: '#fff', fontSize: 10 } } ],
+                    itemStyle: { color: colorBase }
+                },
+                emphasis: {
+                    focus: 'series',
+                    scale: true
+                }
+            };
+        })
       };
     },
+
+    descargarGrafico() {
+      const chartInstance = this.$refs.evolutionChart;
+      if (!chartInstance) return;
+      const bgColor = this.isDark ? '#2B2B40' : '#FFFFFF';
+      const url = chartInstance.getDataURL({
+        type: 'png', pixelRatio: 2, backgroundColor: bgColor
+      });
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Evolucion_Lotes_${new Date().toISOString().slice(0,10)}.png`;
+      link.click();
+    }
   },
 };
 </script>
 
 <style scoped lang="scss">
-// @import '@/assets/styles/_variables.scss'; // Asegúrate de importar tus variables globales
-// // Si no tienes _variables.scss globales, define aquí las que necesites:
-// $PRIMARY-PURPLE: #8A2BE2;
-// $SUCCESS-COLOR: #1ABC9C;
-// $GRAY-COLD: #99A2AD;
-// $LIGHT-TEXT: #E4E6EB;
-// $DARK-TEXT: #333333;
-// $SUBTLE-BG-DARK: #2B2B40; 
-// $SUBTLE-BG-LIGHT: #FFFFFF;
-// $border-radius: 12px;
-// $spacer: 1rem;
-
 .chart-card {
-  background-color: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: $border-radius;
-  box-shadow: 0 4px 10px var(--shadow-color);
-  padding: $spacer * 1.5;
   height: 100%;
   display: flex;
   flex-direction: column;
-  transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+  position: relative;
 }
 
-.chart-card .card-body {
-  flex-grow: 1;
+.card-header-actions {
   display: flex;
-  flex-direction: column;
-  padding: 0; // El padding ya lo maneja el .chart-card
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(150, 150, 150, 0.1);
+
+  .titles {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+
+    .card-title {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: inherit;
+    }
+
+    .metric-badge {
+      font-size: 0.75rem;
+      color: #99A2AD;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      i { color: #8A2BE2; }
+    }
+  }
+
+  .btn-download {
+    background: transparent;
+    border: 1px solid rgba(150, 150, 150, 0.2);
+    color: #99A2AD;
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      color: #8A2BE2;
+      border-color: #8A2BE2;
+      background-color: rgba(138, 43, 226, 0.05);
+      transform: translateY(-2px);
+    }
+    i { font-size: 1rem; }
+  }
 }
 
-.chart-card .card-title {
-  color: var(--text-color-primary);
-  font-size: 1.35rem; 
-  margin-bottom: $spacer * 0.5;
-  text-align: left;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.chart-card .card-subtitle {
-  color: var(--text-color-secondary);
-  font-size: 0.95rem;
-  margin-bottom: $spacer * 1.5;
-  text-align: left;
-}
-
-.chart {
+.chart-container {
   flex-grow: 1;
-  min-height: 350px; // Altura mínima para el gráfico
-  width: 100%;
+  min-height: 0;
+  position: relative;
 }
 </style>

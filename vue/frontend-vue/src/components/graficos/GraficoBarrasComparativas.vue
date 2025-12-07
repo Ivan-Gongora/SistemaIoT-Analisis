@@ -1,7 +1,21 @@
 <template>
   <div class="chart-card" :class="{ 'theme-dark': isDark }">
-    <h5 class="card-title">{{ titulo }}</h5>
-    <v-chart class="chart" :option="chartOption" autoresize />
+    <div class="card-header-actions">
+      <h5 class="card-title">{{ titulo }}</h5>
+      <button class="btn-download" @click="descargarGrafico" title="Descargar imagen">
+        <i class="bi bi-download"></i>
+      </button>
+    </div>
+    
+    <div class="chart-container">
+      <v-chart 
+        ref="barChart" 
+        class="chart" 
+        :option="chartOption" 
+        autoresize 
+        :style="{ height: '100%', minHeight: '350px' }"
+      />
+    </div>
   </div>
 </template>
 
@@ -14,6 +28,7 @@ import {
   TooltipComponent,
   LegendComponent,
   TitleComponent,
+  ToolboxComponent // Necesario para algunas funciones internas
 } from 'echarts/components';
 import VChart from 'vue-echarts';
 
@@ -24,6 +39,7 @@ use([
   TooltipComponent,
   LegendComponent,
   TitleComponent,
+  ToolboxComponent
 ]);
 
 export default {
@@ -34,7 +50,7 @@ export default {
   props: {
     titulo: { type: String, default: 'Gráfico de Barras' },
     datosAnuales: {
-      type: Object, // { '2021': { consumo_total_kwh: X, costo_total: Y }, '2022': { ... } }
+      type: Object, 
       required: true,
     },
     isDark: {
@@ -56,107 +72,131 @@ export default {
   },
   methods: {
     crearChartOption() {
-      const anos = Object.keys(this.datosAnuales).sort(); // Ordenar años
+      // 1. Extraer años dinámicamente
+      const anos = Object.keys(this.datosAnuales).sort(); 
+      
+      if (anos.length === 0) {
+        this.chartOption = {}; // Limpiar si no hay datos
+        return;
+      }
+
       const consumoData = anos.map(year => this.datosAnuales[year].consumo_total_kwh || 0);
       const costoData = anos.map(year => this.datosAnuales[year].costo_total || 0);
 
-      const textColor = this.isDark ? '#FFF' : '#333';
-      const axisColor = this.isDark ? '#AAA' : '#555';
-      const lineColor = this.isDark ? '#444' : '#CCC';
-      const splitLineColor = this.isDark ? '#333' : '#EEE';
+      // Colores según tema
+      const textColor = this.isDark ? '#E0E0E0' : '#333333';
+      const axisColor = this.isDark ? '#A0A0A0' : '#666666';
+      const splitLineColor = this.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+      
+      // Colores de barras
+      const colorConsumo = '#8A2BE2'; // Morado
+      const colorCosto = '#00C853';   // Verde
 
       this.chartOption = {
-        color: ['#8A2BE2', '#00C853'], // Violeta y Verde, similar a la imagen
+        // Fondo transparente para la vista web, pero ECharts usará el del contenedor al exportar
+        backgroundColor: 'transparent',
+        
+        color: [colorConsumo, colorCosto],
+        
         tooltip: {
           trigger: 'axis',
           axisPointer: { type: 'shadow' },
-          formatter: function (params) {
-            let tooltip = `<b>${params[0].name}</b><br/>`; // Año
+          backgroundColor: this.isDark ? 'rgba(40, 40, 60, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: this.isDark ? '#444' : '#DDD',
+          textStyle: { color: textColor },
+          formatter: (params) => {
+            let tooltip = `<div style="margin-bottom: 5px; font-weight: bold">${params[0].name}</div>`;
             params.forEach(item => {
-              let value = item.value;
-              let unit = '';
-              if (item.seriesName === 'Consumo Total (kWh)') {
-                unit = ' kWh';
-              } else if (item.seriesName === 'Costo Total (MXN)') {
-                unit = ' MXN';
-              }
-              tooltip += `${item.marker} ${item.seriesName}: <b>${value.toLocaleString()}${unit}</b><br/>`;
+              let val = item.value.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+              let unit = item.seriesName.includes('Consumo') ? 'kWh' : 'MXN';
+              tooltip += `
+                <div style="display: flex; justify-content: space-between; gap: 15px; align-items: center">
+                  <span>${item.marker} ${item.seriesName}</span>
+                  <span style="font-weight: bold">${val} ${unit}</span>
+                </div>`;
             });
             return tooltip;
-          },
-          backgroundColor: this.isDark ? 'rgba(50,50,50,0.7)' : 'rgba(255,255,255,0.7)',
+          }
+        },
+        
+        legend: {
+          data: ['Consumo (kWh)', 'Costo (MXN)'],
+          bottom: 0,
           textStyle: { color: textColor }
         },
-        legend: {
-          data: ['Consumo Total (kWh)', 'Costo Total (MXN)'],
-          textStyle: { color: axisColor },
-          top: 'bottom',
+        
+        grid: {
+          left: '3%',
+          right: '3%',
+          bottom: '10%', // Espacio para leyenda
+          top: '15%',
+          containLabel: true
         },
+        
         xAxis: {
           type: 'category',
           data: anos,
-          axisLabel: { color: axisColor },
-          axisLine: { lineStyle: { color: lineColor } },
+          axisLine: { lineStyle: { color: axisColor } },
+          axisLabel: { color: textColor, fontWeight: 'bold' }
         },
+        
         yAxis: [
           {
             type: 'value',
-            name: 'Consumo (kWh)',
-            axisLabel: { formatter: '{value} kWh', color: axisColor },
-            axisLine: { lineStyle: { color: lineColor } },
-            splitLine: { lineStyle: { color: splitLineColor } },
-            nameTextStyle: { color: axisColor }
+            name: 'Consumo',
+            position: 'left',
+            axisLine: { show: true, lineStyle: { color: colorConsumo } },
+            axisLabel: { formatter: '{value} k', color: colorConsumo },
+            splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
           },
           {
             type: 'value',
-            name: 'Costo (MXN)',
-            axisLabel: { formatter: '{value} MXN', color: axisColor },
-            axisLine: { lineStyle: { color: lineColor } },
-            splitLine: { lineStyle: { color: splitLineColor } },
-            nameTextStyle: { color: axisColor }
+            name: 'Costo',
+            position: 'right',
+            axisLine: { show: true, lineStyle: { color: colorCosto } },
+            axisLabel: { formatter: '${value} k', color: colorCosto },
+            splitLine: { show: false }
           }
         ],
+        
         series: [
           {
-            name: 'Consumo Total (kWh)',
+            name: 'Consumo (kWh)',
             type: 'bar',
             data: consumoData,
             yAxisIndex: 0,
-            itemStyle: {
-              borderRadius: 5,
-            },
-            label: {
-              show: false, // Opcional, si quieres mostrar el valor encima de la barra
-              position: 'top',
-              formatter: '{c} kWh',
-              color: textColor
-            }
+            itemStyle: { borderRadius: [4, 4, 0, 0] },
+            barMaxWidth: 50 // Evita barras gigantes si hay pocos años
           },
           {
-            name: 'Costo Total (MXN)',
+            name: 'Costo (MXN)',
             type: 'bar',
             data: costoData,
             yAxisIndex: 1,
-            itemStyle: {
-              borderRadius: 5,
-            },
-            label: {
-              show: false, // Opcional
-              position: 'top',
-              formatter: '{c} MXN',
-              color: textColor
-            }
+            itemStyle: { borderRadius: [4, 4, 0, 0] },
+            barMaxWidth: 50
           }
-        ],
-        grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '10%',
-          containLabel: true
-        },
-        backgroundColor: 'transparent'
+        ]
       };
     },
+
+    descargarGrafico() {
+      const chartInstance = this.$refs.barChart;
+      if (!chartInstance) return;
+
+      // Obtener imagen en Base64
+      const url = chartInstance.getDataURL({
+        type: 'png',
+        pixelRatio: 2, // Alta resolución
+        backgroundColor: this.isDark ? '#2B2B40' : '#FFFFFF' // Fondo según tema
+      });
+
+      // Crear enlace temporal para descarga
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Comparativa_Anual_${new Date().toISOString().slice(0,10)}.png`;
+      link.click();
+    }
   },
 };
 </script>
@@ -166,9 +206,41 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
-.chart {
+
+.card-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+
+  .card-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: inherit; // Hereda del tema
+  }
+
+  .btn-download {
+    background: transparent;
+    border: none;
+    color: #99A2AD; // Gris suave
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+
+    &:hover {
+      color: #8A2BE2; // Morado
+      background-color: rgba(138, 43, 226, 0.1);
+    }
+  }
+}
+
+.chart-container {
   flex-grow: 1;
-  min-height: 300px; // Altura mínima para el gráfico
+  min-height: 0; // Fix para flexbox overflow
+  position: relative;
 }
 </style>

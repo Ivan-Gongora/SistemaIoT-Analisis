@@ -16,12 +16,14 @@
         
         <div class="gestion-grid">
           
+          <!-- PANEL IZQUIERDO: CARGA -->
           <div class="gestion-panel">
             <h2 class="panel-titulo">
               <i class="bi bi-cloud-upload-fill"></i>
               Cargar Lote de Datos (CSV)
             </h2>
 
+            <!-- Feedback de Carga -->
             <div v-if="mensajeCarga" :class="['mensaje-carga', tipoMensajeCarga === 'success' ? 'mensaje-exito' : 'mensaje-error']">
               <i :class="tipoMensajeCarga === 'success' ? 'bi bi-check-circle-fill' : 'bi bi-exclamation-triangle-fill'"></i>
               {{ mensajeCarga }}
@@ -59,6 +61,19 @@
             <p class="ayuda-texto-formato">
               Columnas requeridas: periodo, consumo_total_kwh, demanda_maxima_kw, costo_total, dias_facturados.
             </p>
+            
+            <!-- 🚨 NUEVO: SECCIÓN DE DESCARGAS (PLANTILLAS) -->
+            <div class="recursos-ayuda">
+                <p class="titulo-ayuda"><i class="bi bi-info-circle"></i> ¿Necesitas ayuda con el formato?</p>
+                <div class="botones-descarga">
+                    <a href="/documents/GuiaCrearCsvRecibos.txt" download="Guia_Formato_CSV.txt" class="btn-link-ayuda">
+                        <i class="bi bi-file-text"></i> Descargar Guía TXT
+                    </a>
+                    <a href="/documents/recibos.csv" download="Plantilla_Recibos.csv" class="btn-link-ayuda">
+                        <i class="bi bi-file-earmark-excel"></i> Descargar Plantilla CSV
+                    </a>
+                </div>
+            </div>
 
             <button @click="subirCSV" :disabled="!archivoSeleccionado || isLoadingCarga || !inputLoteNombre.trim()" class="boton-cargar">
               <i class="bi bi-arrow-up-circle-fill"></i>
@@ -66,6 +81,7 @@
             </button>
           </div>
 
+          <!-- PANEL DERECHO: SELECCIÓN -->
           <div class="columna-derecha">
             
             <div class="gestion-panel seleccion-lotes-panel">
@@ -125,7 +141,6 @@
               </div>
 
               <div class="botones-herramientas">
-                <!-- VistaSimuladorEnergetico -->
                 <router-link :to="{ name: 'VistaSimuladorEnergetico', query: { lotes: lotesSeleccionados } }" custom v-slot="{ navigate }">
                   <button @click="navigate" :disabled="!lotesSeleccionados.length" class="boton-herramienta boton-primario">
                     <i class="bi bi-graph-up"></i>
@@ -149,10 +164,8 @@
 </template>
 
 <script>
-// --- Imports ---
 import BarraLateralPlataforma from '../plataforma/BarraLateralPlataforma.vue';
 import EncabezadoPlataforma from '../plataforma/EncabezadoPlataforma.vue';
-
 
 
 export default {
@@ -163,23 +176,20 @@ export default {
   },
   data() {
     return {
-      // Estado Layout y Tema
       isDark: false,
       isSidebarOpen: true,
       _themeMediaQuery: null,
 
-      // Estado Carga CSV
       archivoSeleccionado: null,
       nombreArchivo: '',
       isLoadingCarga: false,
       mensajeCarga: '',
-      tipoMensajeCarga: '', // 'success' o 'error'
+      tipoMensajeCarga: '', 
       inputLoteNombre: '',
       loteNombreVacio: false,
 
-      // Estado para la selección de lotes
-      lotesDisponibles: [], // Array de STRINGS (e.g., ["historico_2021", "Deepseek2024"])
-      lotesSeleccionados: [], // Array de STRINGS seleccionados
+      lotesDisponibles: [], 
+      lotesSeleccionados: [], 
       isLoadingLotes: false,
       lotesError: null,
     };
@@ -190,7 +200,6 @@ export default {
     if (this._themeMediaQuery) {
       this._themeMediaQuery.addEventListener('change', this.handleThemeChange);
     }
-    // 🎯 Llamar al endpoint GET /lotes_disponibles
     this.obtenerLotesUsuario();
   },
   unmounted() {
@@ -199,7 +208,6 @@ export default {
     }
   },
   methods: {
-    // Métodos Layout y Tema
     toggleSidebar() { this.isSidebarOpen = !this.isSidebarOpen; },
     handleThemeChange(event) { this.isDark = event.matches; },
     detectarTemaSistema() {
@@ -210,7 +218,6 @@ export default {
       }
     },
     
-    // --- Métodos de Carga CSV (POST /cargar-csv) ---
     handleFileChange(event) {
       const file = event.target.files[0];
       if (file) {
@@ -255,10 +262,8 @@ export default {
       formData.append('file', this.archivoSeleccionado);
       formData.append('lote_nombre', this.inputLoteNombre.trim());
 
-      const API_URL = `${API_BASE_URL}/api/energetico/cargar-csv`; // 🎯 Endpoint de carga
-
       try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(`${API_BASE_URL}/api/energetico/cargar-csv`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
           body: formData
@@ -269,7 +274,7 @@ export default {
         if (response.ok) {
           this.mensajeCarga = resultado.message || "Datos cargados exitosamente.";
           this.tipoMensajeCarga = 'success';
-          await this.obtenerLotesUsuario(); // 🎯 Refrescar la lista de lotes (y recargar la selección)
+          await this.obtenerLotesUsuario(); 
           this.archivoSeleccionado = null;
           this.nombreArchivo = '';
           this.inputLoteNombre = '';
@@ -294,7 +299,6 @@ export default {
       }
     },
 
-    // --- Métodos de Lotes (GET /lotes_disponibles) ---
     async obtenerLotesUsuario() {
       this.isLoadingLotes = true;
       this.lotesDisponibles = [];
@@ -303,17 +307,15 @@ export default {
       const token = localStorage.getItem('accessToken');
       if (!token) { this.lotesError = "No autenticado."; this.isLoadingLotes = false; return; }
 
-      const API_URL = `${API_BASE_URL}/api/energetico/lotes_disponibles`; 
-
       try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(`${API_BASE_URL}/api/energetico/lotes_disponibles`, {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
           const data = await response.json(); 
-          this.lotesDisponibles = data; // 🎯 Asigna el ARRAY DE STRINGS
+          this.lotesDisponibles = data; 
           this.cargarSeleccionLotesDesdeLocalStorage();
         } else if (response.status === 401 || response.status === 403) {
           localStorage.removeItem('accessToken'); this.$router.push('/'); this.lotesError = "Sesión expirada.";
@@ -329,12 +331,12 @@ export default {
       }
     },
 
-    toggleLote(loteNombre) { // 🎯 Este método maneja el clic en el DIV
+    toggleLote(loteNombre) { 
       const index = this.lotesSeleccionados.indexOf(loteNombre);
       if (index > -1) {
-        this.lotesSeleccionados.splice(index, 1); // Quitar
+        this.lotesSeleccionados.splice(index, 1); 
       } else {
-        this.lotesSeleccionados.push(loteNombre); // Añadir
+        this.lotesSeleccionados.push(loteNombre); 
       }
     },
 
@@ -365,428 +367,428 @@ export default {
 };
 </script>
 
-
 <style scoped lang="scss">
 @use "sass:color";
 
-.plataforma-layout { display: flex; min-height: 100vh; background-color: $WHITE-SOFT; }
-.theme-dark .plataforma-layout { background-color: $DARK-BG-CONTRAST; }
-.plataforma-contenido {
-  margin-left: $WIDTH-CLOSED; flex-grow: 1;
-  transition: margin-left 0.3s ease-in-out;
-  background-color: $WHITE-SOFT;
-  &.shifted { margin-left: $WIDTH-SIDEBAR; }
-}
-.theme-dark .plataforma-contenido { background-color: $DARK-BG-CONTRAST; }
-
-/* Contenido de la Vista */
+// =============================================================================
+// 1. LAYOUT PRINCIPAL
+// =============================================================================
 .gestion-datos-contenido {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+    padding: 30px 40px;
+    max-width: 1600px;
+    margin: 0 auto;
+    animation: fadeIn 0.4s ease-out;
+
+    @media (max-width: 768px) {
+        padding: 20px;
+    }
 }
 
-/* 🎯 NUEVO: Grid de 2 columnas */
 .gestion-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr; // Dos columnas por defecto
+    gap: 30px;
 
-  @media (min-width: 992px) {
-    grid-template-columns: 4fr 6fr; /* 40% carga, 60% selección/herramientas */
-  }
+    @media (max-width: 1024px) {
+        grid-template-columns: 1fr; // Una columna en tablets/móviles
+    }
 }
 
-.columna-derecha {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-/* Panel Base (Reutilizado) */
+// -----------------------------------
+// 2. PANELES (TARJETAS)
+// -----------------------------------
 .gestion-panel {
-  background-color: $SUBTLE-BG-LIGHT;
-  padding: 1.5rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid $GRAY-LIGHT;
-  transition: background-color 0.3s, border-color 0.3s;
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: $shadow-soft; // Variable Global
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    transition: all 0.3s ease;
+    border: 1px solid transparent; // Preparado para hover/temas
 }
 
 .panel-titulo {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: $DARK-TEXT;
-  border-bottom: 1px solid $GRAY-LIGHT;
-  padding-bottom: 1rem;
-  margin-bottom: 1.5rem;
-  transition: color 0.3s, border-color 0.3s;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-
-  i {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     color: $PRIMARY-PURPLE;
-  }
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    
+    i { font-size: 1.2rem; }
 }
 
-/* Estilos Carga CSV */
+// -----------------------------------
+// 3. FORMULARIOS E INPUTS
+// -----------------------------------
 .campo-lote-nombre {
-  margin-bottom: 1.5rem;
-  label {
-    display: block;
-    font-size: 0.9rem;
-    color: $DARK-TEXT;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-  
-  .input-con-icono {
-    position: relative;
-    i {
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: $GRAY-COLD;
-    }
-    .input-lote {
-      padding-left: 2.5rem;
-    }
-  }
-
-  .input-lote {
-    width: 100%;
-    padding: 0.7rem 1rem;
-    border: 1px solid $GRAY-LIGHT;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    color: $DARK-TEXT;
-    background-color: $WHITE-SOFT;
-    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.3s;
-
-    &:focus {
-      border-color: $PRIMARY-PURPLE;
-      box-shadow: 0 0 0 3px rgba($PRIMARY-PURPLE, 0.2);
-      outline: none;
-    }
-    &::placeholder {
-      color: $GRAY-COLD;
-    }
-    &.input-error {
-      border-color: $DANGER-COLOR;
-      box-shadow: 0 0 0 3px rgba($DANGER-COLOR, 0.2);
-    }
-  }
-  .error-texto {
-    font-size: 0.75rem;
-    color: $DANGER-COLOR;
-    margin-top: 0.5rem;
-  }
-}
-
-.boton-seleccionar-archivo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background-color: $SUBTLE-BG-LIGHT;
-  color: $PRIMARY-PURPLE;
-  padding: 0.7rem 1.2rem;
-  border-radius: 8px;
-  border: 2px dashed $PRIMARY-PURPLE;
-  cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  text-align: center;
-  width: 100%;
-
-  i { font-size: 1.1rem; }
-  span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-  &:hover {
-    background-color: rgba($PRIMARY-PURPLE, 0.1);
-    border-style: solid;
-  }
-}
-
-.ayuda-texto-formato, .ayuda-texto-estado, .ayuda-texto {
-  font-size: 0.8rem;
-  color: $GRAY-COLD;
-  margin-top: 0.5rem;
-  margin-bottom: 1.5rem;
-  line-height: 1.5;
-  transition: color 0.3s;
-}
-
-.boton-cargar {
-  width: 100%;
-  padding: 0.8rem 1rem;
-  font-weight: 700;
-  font-size: 1rem;
-  color: white;
-  background: $GRADIENT-SUCCESS;
-  border-radius: 8px;
-  transition: all 0.2s;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 4px 10px rgba($SUCCESS-COLOR, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-
-  &:hover { 
-    opacity: 0.9;
-    box-shadow: 0 6px 12px rgba($SUCCESS-COLOR, 0.4);
-    transform: translateY(-2px);
-  }
-  &:disabled {
-    background: $GRAY-COLD;
-    cursor: not-allowed;
-    box-shadow: none;
-    opacity: 0.7;
-    transform: translateY(0);
-  }
-}
-
-.mensaje-carga {
-    padding: 0.8rem 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    font-weight: 500;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    &.mensaje-exito { background-color: rgba($SUCCESS-COLOR, 0.15); color: color.adjust($SUCCESS-COLOR, $lightness: -10%); }
-    &.mensaje-error { background-color: rgba($DANGER-COLOR, 0.15); color: color.adjust($DANGER-COLOR, $lightness: -10%); }
-}
-
-
-/* Estilos Panel Selección de Lotes */
-.seleccion-lotes-panel {
-  .cargando-lotes, .no-lotes {
-    text-align: center;
-    font-style: italic;
-    color: $GRAY-COLD;
-    padding: 1rem 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    .spinner { 
-      width: 1rem;
-      height: 1rem;
-      border: 2px solid $GRAY-COLD;
-      border-top-color: $PRIMARY-PURPLE;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-  }
-  .mensaje-error {
-    color: $DANGER-COLOR;
-    font-weight: 500;
-    text-align: center;
-  }
-
-  .lista-lotes {
-    margin-top: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    max-height: 200px;
+    gap: 8px;
+    
+    label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: $GRAY-COLD;
+    }
+}
+
+.input-con-icono {
+    position: relative;
+    
+    i {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: $GRAY-COLD;
+        font-size: 1rem;
+        transition: color 0.3s;
+    }
+    
+    .input-lote {
+        width: 100%;
+        padding: 12px 12px 12px 40px;
+        border-radius: 10px;
+        border: 1px solid transparent; // Color definido en temas
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        
+        &:focus {
+            border-color: $PRIMARY-PURPLE !important;
+            box-shadow: 0 0 0 4px rgba($PRIMARY-PURPLE, 0.1);
+            outline: none;
+            
+            & + i { color: $PRIMARY-PURPLE; } // Ilumina el icono al enfocar
+        }
+        
+        &.input-error {
+            border-color: $DANGER !important;
+            box-shadow: 0 0 0 4px rgba($DANGER, 0.1);
+        }
+    }
+}
+
+.error-texto {
+    color: $DANGER;
+    font-size: 0.8rem;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+}
+
+// -----------------------------------
+// 4. UPLOAD DE ARCHIVOS (DRAG & DROP STYLE)
+// -----------------------------------
+.boton-seleccionar-archivo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 30px;
+    border: 2px dashed $GRAY-LIGHT; // Borde suave por defecto
+    border-radius: 12px;
+    cursor: pointer;
+    color: $GRAY-COLD;
+    background-color: rgba($GRAY-COLD, 0.03);
+    transition: all 0.3s ease;
+    text-align: center;
+    
+    i { font-size: 2rem; margin-bottom: 5px; opacity: 0.7; }
+    span { font-size: 0.9rem; font-weight: 500; }
+
+    &:hover {
+        border-color: $PRIMARY-PURPLE;
+        color: $PRIMARY-PURPLE;
+        background-color: rgba($PRIMARY-PURPLE, 0.05);
+        transform: translateY(-2px);
+    }
+}
+
+// -----------------------------------
+// 5. RECURSOS DE AYUDA (BOX)
+// -----------------------------------
+.recursos-ayuda {
+    margin-top: 10px;
+    padding: 20px;
+    background-color: rgba($PRIMARY-PURPLE, 0.04);
+    border-radius: 12px;
+    border: 1px solid rgba($PRIMARY-PURPLE, 0.1);
+    
+    .titulo-ayuda {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: $PRIMARY-PURPLE;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .botones-descarga {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        
+        .btn-link-ayuda {
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: $GRAY-COLD; // Color base
+            background-color: transparent;
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid; // Color en temas
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            
+            &:hover {
+                border-color: $PRIMARY-PURPLE;
+                color: $PRIMARY-PURPLE;
+                background-color: $WHITE;
+                box-shadow: 0 4px 10px rgba($PRIMARY-PURPLE, 0.15);
+                transform: translateY(-2px);
+            }
+        }
+    }
+}
+
+// -----------------------------------
+// 6. BOTONES DE ACCIÓN (GRADIENTES)
+// -----------------------------------
+.boton-cargar {
+    width: 100%;
+    margin-top: 15px;
+    background: linear-gradient(135deg, $PRIMARY-PURPLE, color.adjust($PRIMARY-PURPLE, $lightness: -10%));
+    color: $WHITE;
+    border: none;
+    padding: 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba($PRIMARY-PURPLE, 0.3);
+    transition: all 0.3s ease;
+    
+    &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba($PRIMARY-PURPLE, 0.4);
+    }
+    
+    &:disabled {
+        background: $GRAY-LIGHT;
+        color: $GRAY-COLD;
+        box-shadow: none;
+        cursor: not-allowed;
+    }
+}
+
+// -----------------------------------
+// 7. LISTA DE LOTES (SELECCIÓN)
+// -----------------------------------
+.lista-lotes {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px; // Más espacio vertical
     overflow-y: auto;
+    padding-right: 5px; // Espacio para scrollbar
+
+    // Custom Scrollbar
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-thumb { background-color: $GRAY-LIGHT; border-radius: 3px; }
 
     .checkbox-lote {
-      display: flex;
-      align-items: center;
-      padding: 0.75rem 1rem;
-      border: 1px solid $GRAY-LIGHT;
-      border-radius: 8px;
-      background-color: $WHITE-SOFT;
-      transition: background-color 0.2s, border-color 0.2s;
-      cursor: pointer;
-
-      &:hover {
-        background-color: rgba($PRIMARY-PURPLE, 0.05);
-        border-color: rgba($PRIMARY-PURPLE, 0.5);
-      }
-      
-      &.seleccionado {
-        background-color: rgba($PRIMARY-PURPLE, 0.1);
-        border-color: $PRIMARY-PURPLE;
-        font-weight: 600;
-      }
-
-      i { 
-        font-size: 1.2rem;
-        margin-right: 0.75rem;
-        color: $GRAY-COLD;
-        transition: color 0.2s;
-      }
-      
-      &.seleccionado i {
-        color: $PRIMARY-PURPLE;
-      }
-      
-      input[type="checkbox"] { display: none; }
-
-      label {
-        flex-grow: 1;
-        font-size: 0.95rem;
-        color: $DARK-TEXT;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        border: 1px solid transparent; // Definido en temas
+        border-radius: 12px;
         cursor: pointer;
-        transition: color 0.3s;
-      }
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+        
+        // Icono de estado (círculo vacío o check)
+        i { 
+            font-size: 1.3rem; 
+            color: $GRAY-COLD; 
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        label { 
+            cursor: pointer; 
+            font-weight: 500; 
+            flex: 1; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+        
+        // Estado Seleccionado
+        &.seleccionado {
+            border-color: $SUCCESS;
+            background-color: rgba($SUCCESS, 0.08);
+            
+            i { 
+                color: $SUCCESS; 
+                transform: scale(1.1);
+            }
+            label { color: $SUCCESS; font-weight: 700; }
+        }
+        
+        &:hover:not(.seleccionado) {
+            transform: translateX(5px);
+        }
     }
-  }
 }
 
-
-/* Estilos Panel Herramientas */
-.ayuda-texto-estado {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  &.estado-ok {
-    color: $SUCCESS-COLOR;
-  }
-  &.estado-warn {
-    color: $WARNING-COLOR;
-  }
-}
-
+// -----------------------------------
+// 8. HERRAMIENTAS (BOTONES LATERALES)
+// -----------------------------------
 .botones-herramientas {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: auto; // Empuja hacia abajo si hay espacio
+
+    .boton-herramienta {
+        width: 100%;
+        padding: 16px;
+        border-radius: 12px;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        transition: all 0.3s ease;
+        
+        &.boton-primario {
+            background: linear-gradient(135deg, $SUCCESS, color.adjust($SUCCESS, $lightness: -10%));
+            color: $WHITE;
+            box-shadow: 0 4px 15px rgba($SUCCESS, 0.3);
+            
+            &:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba($SUCCESS, 0.4);
+            }
+        }
+        
+        &.boton-secundario {
+            background-color: transparent;
+            border: 2px solid $PRIMARY-PURPLE;
+            color: $PRIMARY-PURPLE;
+            
+            &:hover:not(:disabled) {
+                background-color: rgba($PRIMARY-PURPLE, 0.05);
+                transform: translateY(-2px);
+            }
+        }
+        
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+            box-shadow: none;
+        }
+    }
 }
 
-.boton-herramienta {
-  width: 100%;
-  padding: 0.8rem 1rem;
-  font-weight: 600;
-  color: white; /* Color primario para botones */
-  background-color: $PRIMARY-PURPLE; /* Color base */
-  border: 2px solid $PRIMARY-PURPLE;
-  border-radius: 8px;
-  transition: all 0.2s;
-  cursor: pointer;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
+// =============================================================================
+// 9. TEMAS (CLARO / OSCURO)
+// =============================================================================
 
-  i {
-    font-size: 1.1rem;
-  }
-  
-  // 🎯 BOTÓN PRIMARIO (Simulador)
-  &.boton-primario { 
-    background-color: $PRIMARY-PURPLE;
-    color: $WHITE;
-  }
+// --- TEMA CLARO ---
+.theme-light {
+    background-color: $WHITE-SOFT;
 
-  // 🎯 BOTÓN SECUNDARIO (Análisis Descriptivo)
-  &.boton-secundario {
-    background-color: $SUBTLE-BG-LIGHT;
-    color: $PRIMARY-PURPLE;
-    border: 2px solid $PRIMARY-PURPLE;
-  }
+    .gestion-panel {
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+    }
 
-  &:hover:not(:disabled) {
-    background-color: color.adjust($PRIMARY-PURPLE, $lightness: -5%);
-    box-shadow: 0 4px 10px rgba($PRIMARY-PURPLE, 0.3);
-    transform: translateY(-2px);
-  }
-
-  &:disabled {
-    border-color: $GRAY-COLD;
-    color: $GRAY-COLD;
-    background-color: $SUBTLE-BG-LIGHT;
-    cursor: not-allowed;
-    opacity: 0.6;
-     &:hover { transform: none; box-shadow: none; }
-  }
-}
-
-/* --- THEME DARK OVERRIDES --- */
-.theme-dark {
-  .gestion-panel {
-    background-color: $SUBTLE-BG-DARK;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-    border-color: $DARK-BORDER;
-  }
-  .panel-titulo { color: $LIGHT-TEXT; border-color: rgba($LIGHT-TEXT, 0.15); }
-  
-  .campo-lote-nombre {
-    label { color: $LIGHT-TEXT; }
-    .input-con-icono i { color: $GRAY-LIGHT; }
     .input-lote {
-      border-color: $DARK-BORDER;
-      color: $LIGHT-TEXT;
-      background-color: $DARK-INPUT-BG;
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+        color: $DARK-TEXT;
     }
-  }
 
-  .boton-seleccionar-archivo {
-    background-color: rgba($PRIMARY-PURPLE, 0.1);
-    color: color.adjust($PRIMARY-PURPLE, $lightness: 20%);
-    border-color: rgba(color.adjust($PRIMARY-PURPLE, $lightness: 20%), 0.5);
-     &:hover { background-color: rgba(color.adjust($PRIMARY-PURPLE, $lightness: 20%), 0.2); }
-  }
-
-  .ayuda-texto-formato, .ayuda-texto-estado, .ayuda-texto { color: $GRAY-COLD; }
-
-  .boton-cargar {
-    &:disabled { 
-       background: color.adjust($GRAY-COLD, $lightness: 10%); 
-       color: $LIGHT-TEXT;
+    .checkbox-lote {
+        background-color: $WHITE;
+        border-color: $LIGHT-BORDER;
+        label { color: $DARK-TEXT; }
+        &:hover:not(.seleccionado) { background-color: $WHITE-SOFT; }
     }
-  }
 
-  /* Lotes & Checkbox */
-  .seleccion-lotes-panel {
-    .cargando-lotes, .no-lotes { color: $GRAY-LIGHT; }
-    .lista-lotes .checkbox-lote {
-      border-color: $DARK-BORDER;
-      background-color: $DARK-INPUT-BG;
-      label { color: $LIGHT-TEXT; }
+    .recursos-ayuda .botones-descarga .btn-link-ayuda {
+        border-color: $LIGHT-BORDER;
+        background-color: $WHITE;
     }
-  }
-
-  .boton-herramienta {
-      &.boton-primario { /* Simulador */
-        background-color: color.adjust($PRIMARY-PURPLE, $lightness: 20%);
-        color: $DARK-BG-CONTRAST;
-      }
-      &.boton-secundario { /* Análisis Descriptivo */
-        background-color: transparent;
-        color: color.adjust($PRIMARY-PURPLE, $lightness: 20%);
-        border-color: color.adjust($PRIMARY-PURPLE, $lightness: 20%);
-      }
-       &:hover:not(:disabled) {
-          background-color: color.adjust($PRIMARY-PURPLE, $lightness: 25%);
-          color: $DARK-TEXT;
-       }
-  }
-  
-  .mensaje-carga {
-      &.mensaje-exito { background-color: rgba($SUCCESS-COLOR, 0.2); color: color.adjust($SUCCESS-COLOR, $lightness: 20%); }
-      &.mensaje-error { background-color: rgba($DANGER-COLOR, 0.2); color: color.adjust($DANGER-COLOR, $lightness: 20%); }
-  }
-
 }
 
-/* Animaciones */
-@keyframes spin {
-  to { transform: rotate(360deg); }
+// --- TEMA OSCURO ---
+.theme-dark {
+    background-color: $DARK-BG-CONTRAST; // Fondo general
+    color: $LIGHT-TEXT;
+
+    .gestion-panel {
+        background-color: $SUBTLE-BG-DARK; // Tarjeta
+        border-color: rgba($WHITE, 0.05);
+    }
+
+    .input-lote {
+        background-color: $DARK-INPUT-BG;
+        border-color: $DARK-BORDER;
+        color: $WHITE;
+    }
+
+    .boton-seleccionar-archivo {
+        border-color: $DARK-BORDER;
+        &:hover { border-color: $PRIMARY-PURPLE; background-color: rgba($PRIMARY-PURPLE, 0.1); }
+    }
+
+    .checkbox-lote {
+        background-color: $SUBTLE-BG-DARK;
+        border-color: $DARK-BORDER;
+        label { color: $GRAY-LIGHT; } // Texto legible
+        
+        &:hover:not(.seleccionado) { 
+            background-color: color.adjust($SUBTLE-BG-DARK, $lightness: 5%); 
+        }
+    }
+
+    .recursos-ayuda .botones-descarga .btn-link-ayuda {
+        background-color: $DARK-INPUT-BG;
+        border-color: $DARK-BORDER;
+        color: $GRAY-LIGHT;
+        
+        &:hover { 
+            border-color: $PRIMARY-PURPLE; 
+            color: $PRIMARY-PURPLE; 
+            background-color: color.adjust($DARK-INPUT-BG, $lightness: 5%);
+        }
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 </style>

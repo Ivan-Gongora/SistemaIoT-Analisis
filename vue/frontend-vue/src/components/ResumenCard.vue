@@ -28,7 +28,6 @@ export default {
 <style scoped lang="scss">
 @use "sass:color";
 
-
 $spacer: 1rem;
 $border-radius: 12px;
 $border-radius-sm: 8px;
@@ -36,15 +35,17 @@ $border-radius-sm: 8px;
 .resumen-card {
   display: flex;
   align-items: center;
-  gap: $spacer; /* Espacio entre icono y texto */
-  padding: $spacer; 
+  // Reduce el gap en pantallas pequeñas
+  gap: clamp(10px, 2vw, $spacer); 
+  padding: clamp(12px, 2vw, $spacer); 
   border-radius: $border-radius;
-  background-color: var(--card-bg); /* Fondo de la tarjeta */
+  background-color: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: var(--shadow-color);
   transition: all 0.2s ease-in-out;
   height: 100%; 
-  min-height: 80px; /* Altura mínima para asegurar que el contenido entre */
+  // Altura mínima fluida
+  min-height: clamp(70px, 10vh, 90px); 
 
   &:hover {
     transform: translateY(-2px);
@@ -52,15 +53,18 @@ $border-radius-sm: 8px;
   }
 
   .card-icon {
-    font-size: 1.5rem; /* Icono un poco más pequeño para caber */
+    // Icono escala con la pantalla
+    font-size: clamp(1.2rem, 3vw, 1.5rem); 
     color: $PRIMARY-PURPLE;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: $spacer * 0.5;
-    background-color: rgba($PRIMARY-PURPLE, 0.15); /* Fondo morado opaco */
+    padding: clamp(6px, 1vw, 8px);
+    background-color: rgba($PRIMARY-PURPLE, 0.15);
     border-radius: $border-radius-sm;
-    min-width: 50px; /* Ancho fijo para el icono */
+    // Ancho mínimo fluido para el contenedor del icono
+    min-width: clamp(40px, 10vw, 50px); 
+    height: clamp(40px, 10vw, 50px);
   }
 
   .card-content {
@@ -68,42 +72,39 @@ $border-radius-sm: 8px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-width: 1; 
+    min-width: 0; // CRÍTICO: Permite que el texto se corte con ellipsis
   }
 
   .card-title {
-    margin-bottom: $spacer * 0.1;
-    font-size: 0.85rem; /* Título pequeño y conciso */
+    margin-bottom: 2px;
+    font-size: clamp(0.75rem, 2vw, 0.85rem); 
     color: var(--text-color-secondary); 
     font-weight: 500;
-    line-height: 1.1;
-    /* 🎯 PERMITE EL AJUSTE DE PALABRA Y ELIPSIS */
-    white-space: normal; 
-    word-break: break-word; 
+    line-height: 1.2;
+    // Manejo robusto de texto largo
+    white-space: nowrap; 
     overflow: hidden;
     text-overflow: ellipsis; 
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
   }
 
   .card-value {
-    font-size: 1.3rem; /* Valor principal, prominente */
+    // El valor se hace grande en escritorio y legible en móvil
+    font-size: clamp(1.1rem, 4vw, 1.35rem); 
     font-weight: 700;
     color: var(--text-color-primary); 
     margin-bottom: 0;
-    white-space: nowrap; /* Mantiene el valor principal en una línea */
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.1;
   }
 
   /* ------------------- TEMA OSCURO ------------------- */
   &.theme-dark {
     .card-title {
-      /* Color blanco opaco para el título en modo oscuro */
       color: color.adjust($LIGHT-TEXT, $alpha: -0.3); 
     }
     .card-value {
-      /* Color blanco puro para el valor principal */
       color: $LIGHT-TEXT; 
     }
   }
