@@ -47,13 +47,30 @@
                 </div>
               </div>
 
-              <div class="mb-4">
-                <label class="input-label">CONTRASEÑA</label>
-                <div class="custom-input-group">
-                  <span class="input-icon"><i class="bi bi-lock"></i></span>
-                  <input type="password" class="clean-input" v-model="contrasena" placeholder="••••••••" required>
-                </div>
-              </div>
+<div class="mb-4">
+  <label class="input-label">CONTRASEÑA</label>
+  <div class="custom-input-group d-flex align-items-center"> <span class="input-icon"><i class="bi bi-lock"></i></span>
+    
+    <input 
+      :type="mostrarContrasena ? 'text' : 'password'" 
+      class="clean-input" 
+      v-model="contrasena" 
+      placeholder="••••••••" 
+      required
+    >
+    
+    <span 
+      class="input-icon toggle-password" 
+      @click="mostrarContrasena = !mostrarContrasena"
+      style="cursor: pointer; margin-left: 10px;"
+      title="Mostrar/Ocultar contraseña"
+    >
+      <i class="bi" :class="mostrarContrasena ? 'bi-eye-fill' : 'bi-eye-slash-fill'"></i>
+    </span>
+
+  </div>
+</div>
+
 
               <div v-if="error" class="alert alert-danger py-2 small mb-3">
                 {{ error }}
@@ -76,7 +93,7 @@
 // Ajusta tu lógica de script original aquí...
 export default {
   name: 'SeccionPrincipal',
-  data() { return { usuario: '', contrasena: '', error: '', loading: false }; },
+  data() { return { usuario: '', contrasena: '',mostrarContrasena: false, error: '', loading: false }; },
  methods: {
     async iniciarSesion() {
       this.error = '';
@@ -225,7 +242,11 @@ export default {
   border-radius: 24px;
   padding: 2.5rem;
   box-shadow: var(--card-shadow);
+  .toggle-password:hover {
+  color: #000;
 }
+}
+
 
 .avatar-glow {
   width: 60px; height: 60px;
